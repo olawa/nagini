@@ -319,7 +319,7 @@ pipeline_start_scripts/start_nagini.sh \
   --dry-run
 ```
 
-Barcode-ID:n kan anges som `01` eller `barcode01` och normaliseras till
+Barcode-ID:n kan anges som `01`, `bc01` eller `barcode01` och normaliseras till
 `barcode01`. Alla BAM-filer under ett barcode blir separata units för samma
 sample; Nagini slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
 att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en

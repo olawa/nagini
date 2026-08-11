@@ -75,10 +75,10 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 
 
 def normalize_barcode(value: object) -> str:
-    """Canonicalize barcode01, barcode1 and 01 to the same technical key."""
+    """Canonicalize barcode05, bc05, barcode5 and 05 to the same key."""
 
     barcode = str(value or "").strip().lower()
-    match = re.fullmatch(r"(?:barcode)?(\d+)", barcode)
+    match = re.fullmatch(r"(?:barcode|bc)?(\d+)", barcode)
     if match:
         return f"barcode{int(match.group(1)):02d}"
     return barcode
