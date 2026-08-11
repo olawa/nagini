@@ -39,7 +39,7 @@ rule nagini_excel_report:
     container:
         config.get("nagini_excel_report", {}).get("container", config["default_container"])
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: compile Excel report for {wildcards.sample}_{wildcards.type}"
     script:

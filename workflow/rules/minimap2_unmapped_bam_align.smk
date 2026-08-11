@@ -34,7 +34,7 @@ rule minimap2_unmapped_bam_align:
     container:
         config.get("minimap2_unmapped_bam_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: samtools fastq + minimap2 for {input.bam}"
     shell:

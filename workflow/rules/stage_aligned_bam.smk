@@ -30,7 +30,7 @@ rule stage_aligned_bam:
     container:
         config.get("stage_aligned_bam", {}).get("container", config["default_container"])
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: sort/index an existing aligned BAM; no realignment is performed"
     shell:

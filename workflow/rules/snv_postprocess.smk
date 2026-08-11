@@ -49,7 +49,7 @@ rule gatk_merge_mutect_stats:
     container:
         config.get("gatk_merge_mutect_stats", {}).get("container", config.get("gatk_mutect2", {}).get("container", config["default_container"]))
     conda:
-        "../envs/gatk.yaml"
+        "../../envs/gatk.yaml"
     message:
         "{rule}: merge Mutect2 statistics for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -90,7 +90,7 @@ rule gatk_filter_mutect_calls:
     container:
         config.get("gatk_filter_mutect_calls", {}).get("container", config.get("gatk_mutect2", {}).get("container", config["default_container"]))
     conda:
-        "../envs/gatk.yaml"
+        "../../envs/gatk.yaml"
     message:
         "{rule}: filter Mutect2 calls for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -135,7 +135,7 @@ rule bcftools_norm_mutect2:
     container:
         config.get("bcftools_norm_mutect2", {}).get("container", config["default_container"])
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: normalize filtered Mutect2 calls for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -181,7 +181,7 @@ rule vep_annotate_mutect2:
     container:
         config.get("vep", {}).get("container", config["default_container"])
     conda:
-        "../envs/vep.yaml"
+        "../../envs/vep.yaml"
     message:
         "{rule}: VEP annotate filtered Mutect2 calls for {wildcards.sample}_{wildcards.type}"
     shell:

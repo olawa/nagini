@@ -33,7 +33,7 @@ rule minimap2_fastq_align:
     container:
         config.get("minimap2_fastq_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: minimap2 {input.fastq1} against {input.target}"
     shell:

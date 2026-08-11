@@ -30,7 +30,7 @@ rule samtools_merge_bam:
     container:
         config.get("samtools_merge_bam", {}).get("container", config["default_container"])
     conda:
-        "../envs/nagini.yaml"
+        "../../envs/nagini.yaml"
     message:
         "{rule}: merge per-unit BAMs into {output.bam}"
     shell:
