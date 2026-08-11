@@ -195,3 +195,44 @@ snakemake --dry-run \
 Inputväxeln testas separat med `--config units=.tests/integration/units_aligned.tsv`
 respektive `units_unmapped.tsv`. För granskning av hela beroendegrafen finns
 `workflow/rulegraph.dot`.
+
+## Startscript och Hydra-input
+
+`pipeline_start_scripts/start_quicken.sh` följer samma mönster som CGU:s
+övriga `pipeline_start_scripts`: den tar en inbox, skapar eller återanvänder
+`samples.tsv` och `units.tsv` i analyskatalogen, skriver en körspecifik config
+och startar Snakemake med vald profil.
+
+För ONT-BAM anropas Hydra-Genetics `create-input-files`, som läser metadata ur
+BAM-read groups. Scriptet kompletterar därefter tabellen med Quickens
+`input_type` och oanvända FASTQ-kolumner. För FASTQ skapas samma Hydra-stil
+direkt; ange en regex som fångar sample-namnet om filnamnet inte följer
+standardmönstret.
+
+Exempel:
+
+```bash
+# Oalignerad ONT-BAM; metadata läses från BAM-headern
+pipeline_start_scripts/start_quicken.sh \
+  --inbox-path /data/run_001 \
+  --input-type unmapped_bam \
+  --analysis-dir /data/analysis/run_001
+
+# FASTQ; sample fångas från filnamnets första del före underscore
+pipeline_start_scripts/start_quicken.sh \
+  --inbox-path /data/fastq \
+  --input-type fastq \
+  --sample-regex '^(?P<sample>[^_]+)_' \
+  --analysis-dir /data/analysis/run_001
+
+# Bara kontrollera DAG:en
+pipeline_start_scripts/start_quicken.sh \
+  --inbox-path /data/run_001 \
+  --input-type unmapped_bam \
+  --dry-run
+```
+
+`--input-type aligned_bam` behåller befintlig mapping; `unmapped_bam` gör
+realignering; `fastq` kör minimap2-alignering. Befintliga tabeller återanvänds
+om inte `--force-inputs` anges. Scriptet skriver `config.quicken.yaml` och
+`run_metadata.yaml` i analyskatalogen.
