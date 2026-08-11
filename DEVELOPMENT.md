@@ -320,7 +320,8 @@ pipeline_start_scripts/start_nagini.sh \
 ```
 
 Barcode-ID:n kan anges som `01`, `bc01` eller `barcode01` och normaliseras till
-`barcode01`. Alla BAM-filer under ett barcode blir separata units för samma
+`barcode01`. I Hydra-tabellen används `BC` som tekniskt ONT-barcode och det
+ursprungliga Dorado-ID:t sparas i `barcode_name`. Alla BAM-filer under ett barcode blir separata units för samma
 sample; Nagini slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
 att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en
 sample-mappning.

@@ -16,7 +16,8 @@ Nagini accepts three kinds of sample input:
 
 Dorado `bam_pass/barcodeXX` directories are supported with a separate
 barcode-to-sample map. The map is used to create the Hydra-style input tables;
-the original BAM paths and barcode identifiers are retained.
+the original BAM paths and Dorado barcode identifiers are retained in the
+`barcode_name` column.
 
 The pipeline supports the hg38 and T2T/hs1 reference builds, configurable
 target regions, and sample- and unit-level metadata.

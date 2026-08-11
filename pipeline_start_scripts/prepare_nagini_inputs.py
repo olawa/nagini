@@ -29,6 +29,7 @@ BASE_UNIT_COLUMNS = [
     "machine",
     "processing_unit",
     "barcode",
+    "barcode_name",
     "input_type",
     "fastq1",
     "fastq2",
@@ -189,8 +190,13 @@ def make_bam_tables_from_barcode_map(
                     "type": assignment["type"],
                     "platform": "ONT",
                     "machine": "unknown",
-                    "processing_unit": f"{barcode}_{index:03d}",
-                    "barcode": barcode,
+                "processing_unit": f"{barcode}_{index:03d}",
+                # Hydra's ONT schema accepts flowcell-style values such as
+                # BC/NB but rejects Dorado's numeric barcode05 identifiers.
+                # Keep the original Dorado identifier in barcode_name and
+                # use a valid technical barcode value for Hydra.
+                "barcode": "BC",
+                "barcode_name": barcode,
                     "input_type": args.input_type,
                     "fastq1": "UNUSED",
                     "fastq2": "UNUSED",

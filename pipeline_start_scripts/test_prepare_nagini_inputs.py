@@ -99,7 +99,8 @@ class PrepareNaginiInputsTest(unittest.TestCase):
 
         self.assertEqual(samples, [{"sample": "SAMPLE_A"}, {"sample": "SAMPLE_B"}])
         self.assertEqual(len(units), 3)
-        self.assertEqual(units[0]["barcode"], "barcode01")
+        self.assertEqual(units[0]["barcode"], "BC")
+        self.assertEqual(units[0]["barcode_name"], "barcode01")
         self.assertEqual(units[0]["sample"], "SAMPLE_A")
         self.assertEqual(units[1]["sample"], "SAMPLE_B")
         self.assertEqual(units[1]["processing_unit"], "barcode02_001")
