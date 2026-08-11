@@ -1,0 +1,77 @@
+---
+# Local reference registry. Fill in checksums after installing the bundle.
+site: local
+reference_builds:
+  hg38:
+    fasta:
+      path: references/hg38/GRCh38.fa
+      type: file
+      url: file:references/hg38/GRCh38.fa
+      checksum: ""
+    fai:
+      path: references/hg38/GRCh38.fa.fai
+      type: file
+      url: file:references/hg38/GRCh38.fa.fai
+      checksum: ""
+    dict:
+      path: references/hg38/GRCh38.dict
+      type: file
+      url: file:references/hg38/GRCh38.dict
+      checksum: ""
+    minimap2_index:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+    design_bed:
+      path: references/hg38/targets.bed
+      type: file
+      url: file:references/hg38/targets.bed
+      checksum: ""
+    tandem_repeats:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+    clinvar:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+    cytoband:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+  hs1:
+    fasta:
+      path: references/hs1/chm13v2.0.fa
+      type: file
+      url: file:references/hs1/chm13v2.0.fa
+      checksum: ""
+    fai:
+      path: references/hs1/chm13v2.0.fa.fai
+      type: file
+      url: file:references/hs1/chm13v2.0.fa.fai
+      checksum: ""
+    dict:
+      path: references/hs1/chm13v2.0.dict
+      type: file
+      url: file:references/hs1/chm13v2.0.dict
+      checksum: ""
+    minimap2_index:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+    design_bed:
+      path: references/hs1/targets.bed
+      type: file
+      url: file:references/hs1/targets.bed
+      checksum: ""
+annotations:
+  vep_cache:
+    path: references/VEP
+    type: directory
+    url: file:references/VEP
+    checksum: ""

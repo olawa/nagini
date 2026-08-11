@@ -14,6 +14,10 @@ Quicken accepts three kinds of sample input:
 | Unmapped BAM | Reads are extracted, aligned, and normalized. |
 | Aligned BAM | Existing mapping is retained; the BAM is sorted and indexed for downstream analysis. |
 
+Dorado `bam_pass/barcodeXX` directories are supported with a separate
+barcode-to-sample map. The map is used to create the Hydra-style input tables;
+the original BAM paths and barcode identifiers are retained.
+
 The pipeline supports the hg38 and T2T/hs1 reference builds, configurable
 target regions, and sample- and unit-level metadata.
 
@@ -26,10 +30,10 @@ For each sample, Quicken can perform:
 - target-region coverage QC;
 - Mutect2 small-variant calling with merged statistics, filtering, and
   left-normalization;
-- optional VEP or SnpEff annotation of small variants;
+- optional VEP annotation with ClinVar fields, or SnpEff annotation of small variants;
 - Sniffles2 structural-variant calling;
-- structural-variant annotation and summaries, including translocations and
-  BND records; and
+- structural-variant annotation and summaries, including translocations, BND
+  records, and optional cytoband notation; and
 - aggregation of QC results with MultiQC.
 
 ## Results

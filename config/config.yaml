@@ -1,13 +1,54 @@
 ---
-# Generic Ubuntu/offline-oriented configuration. Run Snakemake from the
-# quicken repository root so these relative paths resolve as written.
-hydra_local_path: "vendor"
+# Shared pipeline configuration. Site-specific paths and runtime settings live
+# under config/site_configs/. The launcher merges the selected site file and
+# expands the {{VARIABLE}} values before Snakemake starts.
+SITE_ID: local
+HYDRA_LOCAL_PATH: "vendor"
+RESOURCES_FILE: "config/resources.yaml"
+DEFAULT_CONTAINER: "docker://hydragenetics/common:3.1.1"
+REFERENCE_ROOT: "references"
+CONTAINER_CACHE: "vendor/containers"
+
+# These defaults keep direct local Snakemake invocations useful. A site config
+# may replace any of them with absolute paths on a workstation or cluster.
+HG38_FASTA: "references/hg38/GRCh38.fa"
+HG38_FAI: "references/hg38/GRCh38.fa.fai"
+HG38_DICT: "references/hg38/GRCh38.dict"
+HG38_MMI: ""
+HG38_DESIGN_BED: "references/hg38/targets.bed"
+HG38_SV_ANNOTATION_BED: ""
+HG38_TANDEM_REPEATS: ""
+HG38_CLINVAR: ""
+HG38_CYTOBAND: ""
+HG38_GTF: ""
+HG38_ANNOTATIONS: ""
+HS1_FASTA: "references/hs1/chm13v2.0.fa"
+HS1_FAI: "references/hs1/chm13v2.0.fa.fai"
+HS1_DICT: "references/hs1/chm13v2.0.dict"
+HS1_MMI: ""
+HS1_DESIGN_BED: "references/hs1/targets.bed"
+HS1_SV_ANNOTATION_BED: ""
+HS1_TANDEM_REPEATS: ""
+HS1_CLINVAR: ""
+HS1_CYTOBAND: ""
+HS1_GTF: ""
+HS1_ANNOTATIONS: ""
+VEP_CACHE: ""
+SNPEFF_DB: ""
+SIMPLE_SV_PANEL: ""
+SIMPLE_SV_FUSION_PAIRS: ""
+
+site: "{{SITE_ID}}"
+hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
 
 samples: "config/samples.tsv"
 units: "config/units.tsv"
 output: "config/output_files.yaml"
-resources: "config/resources.yaml"
-default_container: "docker://hydragenetics/common:3.1.1"
+resources: "{{RESOURCES_FILE}}"
+default_container: "{{DEFAULT_CONTAINER}}"
+container_cache: "{{CONTAINER_CACHE}}"
+container_runtime: singularity
+singularity_binds: []
 
 modules:
   alignment: "v0.8.0"
@@ -21,22 +62,31 @@ modules:
 reference_build: "hg38"
 references:
   hg38:
-    # Replace these paths with the local reference bundle you have prepared.
-    fasta: "references/hg38/GRCh38.fa"
-    fai: "references/hg38/GRCh38.fa.fai"
-    dict: "references/hg38/GRCh38.dict"
-    design_bed: "references/hg38/targets.bed"
-    sv_annotation_bed: ""
+    fasta: "{{HG38_FASTA}}"
+    fai: "{{HG38_FAI}}"
+    dict: "{{HG38_DICT}}"
+    mmi: "{{HG38_MMI}}"
+    design_bed: "{{HG38_DESIGN_BED}}"
+    sv_annotation_bed: "{{HG38_SV_ANNOTATION_BED}}"
+    tandem_repeats: "{{HG38_TANDEM_REPEATS}}"
+    clinvar: "{{HG38_CLINVAR}}"
+    cytoband: "{{HG38_CYTOBAND}}"
+    gene_annotation: "{{HG38_GTF}}"
+    annotations: "{{HG38_ANNOTATIONS}}"
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
   hs1:
-    # No hs1/T2T path was present in the existing workspace configs; fill in
-    # this bundle before selecting reference_build: hs1.
-    fasta: "references/hs1/chm13v2.0.fa"
-    fai: "references/hs1/chm13v2.0.fa.fai"
-    dict: "references/hs1/chm13v2.0.dict"
-    design_bed: "references/hs1/targets.bed"
-    sv_annotation_bed: ""
+    fasta: "{{HS1_FASTA}}"
+    fai: "{{HS1_FAI}}"
+    dict: "{{HS1_DICT}}"
+    mmi: "{{HS1_MMI}}"
+    design_bed: "{{HS1_DESIGN_BED}}"
+    sv_annotation_bed: "{{HS1_SV_ANNOTATION_BED}}"
+    tandem_repeats: "{{HS1_TANDEM_REPEATS}}"
+    clinvar: "{{HS1_CLINVAR}}"
+    cytoband: "{{HS1_CYTOBAND}}"
+    gene_annotation: "{{HS1_GTF}}"
+    annotations: "{{HS1_ANNOTATIONS}}"
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
 
@@ -98,7 +148,8 @@ bcftools_norm_mutect2:
 annotate_small_variants_with_vep: false
 vep:
   container: "docker://hydragenetics/vep:111.0"
-  vep_cache: ""
+  vep_cache: "{{VEP_CACHE}}"
+  skip: false
   mode: "--offline --cache --merged"
   extra: "--assembly GRCh38 --check_existing --pick --variant_class --symbol --hgvs"
 
@@ -108,13 +159,13 @@ quicken_excel_report:
 
 snpeff:
   container: "docker://hydragenetics/snpeff:5.0"
-  db: ""
+  db: "{{SNPEFF_DB}}"
   extra: "-nodownload"
 
 simple_sv_annotation:
   container: "docker://hydragenetics/simple_sv_annotation:2019.02.18"
-  panel: ""
-  fusion_pairs: ""
+  panel: "{{SIMPLE_SV_PANEL}}"
+  fusion_pairs: "{{SIMPLE_SV_FUSION_PAIRS}}"
 
 annotate_small_variants: false
 annotate_svs: false

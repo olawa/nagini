@@ -3,6 +3,20 @@ __copyright__ = "Copyright 2026, Ola Wallerman"
 __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
+import os
+
+
+def get_vep_custom_annotations(wildcards):
+    """Add ClinVar as an optional, indexed VEP custom annotation."""
+
+    clinvar = get_clinvar_vcf(wildcards)
+    if not clinvar or not os.path.isfile(f"{clinvar}.tbi"):
+        return ""
+    return (
+        f"--custom {clinvar},short_name=ClinVar,format=vcf,type=exact,"
+        "fields=CLNSIG%CLNREVSTAT%CLNDN"
+    )
+
 
 rule gatk_merge_mutect_stats:
     """Merge the per-chromosome Mutect2 statistics required for filtering."""
@@ -148,6 +162,7 @@ rule vep_annotate_mutect2:
         stats="snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html",
     params:
         mode=config.get("vep", {}).get("mode", "--offline --cache"),
+        custom=get_vep_custom_annotations,
         extra=config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
     log:
         "logs/vep_annotate_mutect2/{sample}_{type}.log",
@@ -182,5 +197,6 @@ rule vep_annotate_mutect2:
             --fasta {input.fasta} \
             --fork {threads} \
             {params.mode} \
+            {params.custom} \
             {params.extra} &> {log}
         """

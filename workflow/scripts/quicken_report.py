@@ -5,6 +5,8 @@ available in the same offline runtime as the other pipeline helper scripts.
 """
 
 import argparse
+import bisect
+import collections
 import csv
 import gzip
 import os
@@ -29,6 +31,67 @@ def parse_info(value):
     return result
 
 
+class CytobandLookup:
+    """Lookup UCSC cytobands from plain or gzip-compressed BED-like files."""
+
+    def __init__(self, path=""):
+        self.bands = collections.defaultdict(list)
+        if path and os.path.isfile(path):
+            self._load(path)
+
+    def _load(self, path):
+        with open_text(path) as handle:
+            for line in handle:
+                if not line.strip() or line.startswith("#"):
+                    continue
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) < 4:
+                    continue
+                try:
+                    start, end = int(fields[1]), int(fields[2])
+                except ValueError:
+                    continue
+                self.bands[fields[0]].append((end, fields[3], start))
+        for chrom in self.bands:
+            self.bands[chrom].sort()
+
+    def get_band(self, chrom, position):
+        if not self.bands or not chrom or not position:
+            return ""
+        keys = (chrom, chrom.removeprefix("chr"), f"chr{chrom.removeprefix('chr')}")
+        entries = next((self.bands[key] for key in keys if key in self.bands), None)
+        if not entries:
+            return ""
+        position = int(position)
+        index = bisect.bisect_left(entries, (position, "", 0))
+        if index >= len(entries):
+            return ""
+        end, band, start = entries[index]
+        return band if start <= position <= end else ""
+
+
+def _first_annotation_value(annotation, *names):
+    for name in names:
+        value = annotation.get(name, "")
+        if value not in ("", "."):
+            return value
+    return ""
+
+
+def _first_annotation(raw_value, field_count):
+    """Extract one VEP annotation without splitting commas inside a field."""
+
+    if not raw_value:
+        return ""
+    separators = 0
+    for index, character in enumerate(str(raw_value)):
+        if character == "|":
+            separators += 1
+        elif character == "," and separators >= field_count - 1:
+            return str(raw_value)[:index]
+    return str(raw_value)
+
+
 def _annotation_fields(header_line, annotation_id):
     if f"ID={annotation_id}" not in header_line:
         return []
@@ -40,7 +103,8 @@ def parse_small_variant_vcf(path):
     columns = [
         "Chromosome", "Position", "Reference", "Alternate", "Filter", "Quality",
         "VAF", "Depth", "Allele depth", "Gene", "Consequence", "Impact",
-        "HGVSc", "HGVSp", "Existing variation",
+        "HGVSc", "HGVSp", "Existing variation", "ClinVar_Significance",
+        "ClinVar_Disease", "ClinVar_Review",
     ]
     records = []
     csq_fields = []
@@ -66,9 +130,23 @@ def parse_small_variant_vcf(path):
 
             annotation = {}
             if csq_fields and info.get("CSQ"):
-                annotation = dict(zip(csq_fields, str(info["CSQ"]).split(",", 1)[0].split("|")))
+                annotation = dict(
+                    zip(csq_fields, _first_annotation(info["CSQ"], len(csq_fields)).split("|"))
+                )
             elif ann_fields and info.get("ANN"):
-                annotation = dict(zip(ann_fields, str(info["ANN"]).split(",", 1)[0].split("|")))
+                annotation = dict(
+                    zip(ann_fields, _first_annotation(info["ANN"], len(ann_fields)).split("|"))
+                )
+
+            clinvar_significance = _first_annotation_value(
+                annotation, "ClinVar_CLNSIG", "CLIN_SIG", "CLNSIG"
+            ) or str(info.get("CLNSIG", ""))
+            clinvar_disease = _first_annotation_value(
+                annotation, "ClinVar_CLNDN", "CLNDN"
+            ) or str(info.get("CLNDN", ""))
+            clinvar_review = _first_annotation_value(
+                annotation, "ClinVar_CLNREVSTAT", "CLNREVSTAT"
+            ) or str(info.get("CLNREVSTAT", ""))
 
             records.append({
                 "Chromosome": chrom,
@@ -86,6 +164,9 @@ def parse_small_variant_vcf(path):
                 "HGVSc": annotation.get("HGVSc", annotation.get("HGVS.c", "")),
                 "HGVSp": annotation.get("HGVSp", annotation.get("HGVS.p", "")),
                 "Existing variation": annotation.get("Existing_variation", ""),
+                "ClinVar_Significance": clinvar_significance,
+                "ClinVar_Disease": clinvar_disease,
+                "ClinVar_Review": clinvar_review,
             })
     return columns, records
 
@@ -97,6 +178,57 @@ def parse_tsv(path):
         reader = csv.DictReader(handle, delimiter="\t")
         rows = list(reader)
         return list(reader.fieldnames or []), rows
+
+
+def _sv_position(value, default=0):
+    try:
+        return int(str(value).split(",", 1)[0])
+    except (TypeError, ValueError):
+        return default
+
+
+def annotate_sv_rows(columns, rows, cytobands):
+    """Add cytoband columns to SV summaries when a UCSC file is configured."""
+
+    if not cytobands.bands or not rows:
+        return columns, rows
+    columns = list(columns)
+    for name in ("Start_Band", "End_Band", "Cytogenetic_Notation"):
+        if name not in columns:
+            columns.append(name)
+    for row in rows:
+        chrom = row.get("chrom", row.get("Chr", ""))
+        chrom2 = row.get("chrom2", "")
+        pos = _sv_position(row.get("pos", row.get("Start", 0)))
+        end = _sv_position(row.get("end", row.get("End", pos)), pos)
+        band1 = row.get("Start_Band") or row.get("cytoband") or cytobands.get_band(chrom, pos)
+        band2 = row.get("End_Band") or row.get("cytoband2") or cytobands.get_band(chrom2 or chrom, end)
+        row["Start_Band"] = band1
+        row["End_Band"] = band2
+        svtype = row.get("svtype", row.get("SV_Type", "SV"))
+        if row.get("Cytogenetic_Notation") or row.get("cytogenetic_notation"):
+            row["Cytogenetic_Notation"] = row.get("Cytogenetic_Notation") or row.get("cytogenetic_notation")
+            continue
+        if chrom2 and chrom2 != chrom:
+            c1 = str(chrom).removeprefix("chr")
+            c2 = str(chrom2).removeprefix("chr")
+            row["Cytogenetic_Notation"] = (
+                f"t({c1};{c2})({band1};{band2})" if band1 and band2 else f"t({c1};{c2})"
+            )
+        elif str(svtype).upper() == "DEL" and band1 and band2:
+            row["Cytogenetic_Notation"] = (
+                f"del({str(chrom).removeprefix('chr')})({band1}{band2})"
+            )
+        else:
+            row["Cytogenetic_Notation"] = ""
+    return columns, rows
+
+
+def _is_pathogenic_clinvar(value):
+    normalized = re.sub(r"[\s-]+", "_", str(value or "").lower())
+    if "benign" in normalized or "not_pathogenic" in normalized:
+        return False
+    return bool(re.search(r"(?:^|[|&,;/_])(?:likely_)?pathogenic(?:$|[|&,;/_])", normalized))
 
 
 def parse_cramino(path):
@@ -266,15 +398,25 @@ def write_xlsx(path, sheets):
 
 
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
-                    sv_tsv, translocations_tsv, wgs_coverage, target_coverage, cramino):
+                    sv_tsv, translocations_tsv, wgs_coverage, target_coverage, cramino,
+                    cytoband=""):
     snv_columns, snvs = parse_small_variant_vcf(snv_vcf)
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
+    cytobands = CytobandLookup(cytoband)
+    sv_columns, svs = annotate_sv_rows(sv_columns, svs, cytobands)
+    translocation_columns, translocations = annotate_sv_rows(
+        translocation_columns, translocations, cytobands
+    )
     wgs_columns, wgs_rows = parse_tsv(wgs_coverage)
     target_columns, target_rows = parse_tsv(target_coverage)
     cramino_columns, cramino_rows = parse_cramino(cramino)
 
     pass_count = sum(record["Filter"] in {"PASS", "."} for record in snvs)
+    clinvar_pathogenic_count = sum(
+        _is_pathogenic_clinvar(record.get("ClinVar_Significance", ""))
+        for record in snvs
+    )
     overview = [
         ["Property", "Value"],
         ["Sample", sample],
@@ -284,6 +426,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         ["Small-variant annotation", annotation],
         ["Small variants (all records)", len(snvs)],
         ["Small variants (PASS)", pass_count],
+        ["ClinVar pathogenic / likely pathogenic SNVs", clinvar_pathogenic_count],
         ["Structural variants", len(svs)],
         ["Translocations / BNDs", len(translocations)],
         ["Interpretation", "Research-use summary; not clinically validated"],
@@ -313,6 +456,7 @@ def run_from_snakemake(snakemake):
         wgs_coverage=str(snakemake.input.wgs_coverage),
         target_coverage=str(snakemake.input.target_coverage),
         cramino=str(snakemake.input.cramino),
+        cytoband=str(snakemake.params.cytoband or ""),
     )
 
 
@@ -329,11 +473,12 @@ def main():
     parser.add_argument("--wgs-coverage", required=True)
     parser.add_argument("--target-coverage", required=True)
     parser.add_argument("--cramino", required=True)
+    parser.add_argument("--cytoband", default="")
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,
         args.snv_vcf, args.sv_tsv, args.translocations_tsv, args.wgs_coverage,
-        args.target_coverage, args.cramino,
+        args.target_coverage, args.cramino, args.cytoband,
     )
 
 

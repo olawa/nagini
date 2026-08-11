@@ -1,0 +1,5 @@
+cores: 4
+rerun-incomplete: true
+keep-going: true
+use-singularity: true
+singularity-args: "--cleanenv --bind /data"

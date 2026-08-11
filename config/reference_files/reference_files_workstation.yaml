@@ -1,0 +1,94 @@
+---
+# Workstation reference registry.  Checksums are intentionally left empty
+# until the installed bundle has been verified on the workstation.
+site: workstation
+reference_root: /data/references
+reference_builds:
+  hg38:
+    fasta:
+      path: /data/references/GRCh38_no_alt_analysis_set.fasta
+      type: file
+      url: file:/data/references/GRCh38_no_alt_analysis_set.fasta
+      checksum: ""
+    fai:
+      path: /data/references/GRCh38_no_alt_analysis_set.fasta.fai
+      type: file
+      url: file:/data/references/GRCh38_no_alt_analysis_set.fasta.fai
+      checksum: ""
+    dict:
+      path: /data/references/GRCh38_no_alt_analysis_set.dict
+      type: file
+      url: file:/data/references/GRCh38_no_alt_analysis_set.dict
+      checksum: ""
+    minimap2_index:
+      path: /data/references/GRCh38_no_alt_analysis_set.mmi
+      type: file
+      url: file:/data/references/GRCh38_no_alt_analysis_set.mmi
+      checksum: ""
+    design_bed:
+      path: /data/references/ReadUntil_Final_Extra_30kb_hg38_v5.bed
+      type: file
+      url: file:/data/references/ReadUntil_Final_Extra_30kb_hg38_v5.bed
+      checksum: ""
+    tandem_repeats:
+      path: /data/references/human_GRCh38_no_alt_analysis_set.trf.bed
+      type: file
+      url: file:/data/references/human_GRCh38_no_alt_analysis_set.trf.bed
+      checksum: ""
+    clinvar:
+      path: /data/references/clinvar.vcf.gz
+      type: file
+      url: file:/data/references/clinvar.vcf.gz
+      checksum: ""
+    clinvar_index:
+      path: /data/references/clinvar.vcf.gz.tbi
+      type: file
+      url: file:/data/references/clinvar.vcf.gz.tbi
+      checksum: ""
+    cytoband:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+    gene_annotation:
+      path: /data/references/gencode.v46.annotation.sorted.gtf
+      type: file
+      url: file:/data/references/gencode.v46.annotation.sorted.gtf
+      checksum: ""
+    annotations:
+      path: /data/references/annotations
+      type: file
+      url: file:/data/references/annotations
+      checksum: ""
+  hs1:
+    fasta:
+      path: /data/references/hs1.fa
+      type: file
+      url: file:/data/references/hs1.fa
+      checksum: ""
+    fai:
+      path: /data/references/hs1.fa.fai
+      type: file
+      url: file:/data/references/hs1.fa.fai
+      checksum: ""
+    dict:
+      path: /data/references/hs1.dict
+      type: file
+      url: file:/data/references/hs1.dict
+      checksum: ""
+    minimap2_index:
+      path: /data/references/hs1.mmi
+      type: file
+      url: file:/data/references/hs1.mmi
+      checksum: ""
+    design_bed:
+      path: ""
+      type: optional
+      url: ""
+      checksum: ""
+annotations:
+  vep_cache:
+    path: /data/references/vep_cache
+    type: directory
+    url: file:/data/references/vep_cache
+    checksum: ""

@@ -19,8 +19,9 @@ rule quicken_excel_report:
     params:
         reference_build=config["reference"]["build"],
         snv_annotation=(
-            "VEP" if config.get("annotate_small_variants_with_vep", False) else "none"
+            "VEP" if vep_enabled() else "none"
         ),
+        cytoband=get_cytoband_file,
     log:
         "logs/quicken_excel_report/{sample}_{type}.log",
     benchmark:

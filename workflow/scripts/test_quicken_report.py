@@ -21,12 +21,14 @@ class QuickenReportTest(unittest.TestCase):
                 handle.write("##fileformat=VCFv4.2\n")
                 handle.write(
                     '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations. '
-                    'Format: Allele|Consequence|IMPACT|SYMBOL|HGVSc|HGVSp|Existing_variation">\n'
+                    'Format: Allele|Consequence|IMPACT|SYMBOL|HGVSc|HGVSp|Existing_variation|'
+                    'ClinVar_CLNSIG|ClinVar_CLNREVSTAT|ClinVar_CLNDN">\n'
                 )
                 handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\texample\n")
                 handle.write(
                     "chr1\t10\t.\tA\tT\t60\tPASS\t"
-                    "CSQ=T|missense_variant|MODERATE|GENE1|c.10A>T|p.Lys4Met|rs1;DP=42\t"
+                    "CSQ=T|missense_variant|MODERATE|GENE1|c.10A>T|p.Lys4Met|rs1|"
+                    "Pathogenic|criteria_provided,_multiple_submitters|Disease_one;DP=42\t"
                     "GT:AF:DP:AD\t0/1:0.25:40:30,10\n"
                 )
 
@@ -34,6 +36,8 @@ class QuickenReportTest(unittest.TestCase):
             self.assertIn("Gene", columns)
             self.assertEqual(records[0]["Gene"], "GENE1")
             self.assertEqual(records[0]["VAF"], "0.25")
+            self.assertEqual(records[0]["ClinVar_Significance"], "Pathogenic")
+            self.assertEqual(records[0]["ClinVar_Disease"], "Disease_one")
 
             output = root / "report.xlsx"
             REPORT.write_xlsx(output, [("Overview", [["Property", "Value"], ["Sample", "example"]])])
@@ -58,15 +62,26 @@ class QuickenReportTest(unittest.TestCase):
             cramino = root / "cramino.txt"
             cramino.write_text("Reads\t10\nYield [Gb]: 0.01\n")
 
+            cytoband = root / "cytoBand.txt"
+            cytoband.write_text(
+                "chr1\t0\t100\tp36.33\tgneg\n"
+                "chr2\t0\t100\tp25.3\tgneg\n"
+            )
+
             full_output = root / "full_report.xlsx"
             REPORT.generate_report(
                 str(full_output), "example", "N", "hg38", "VEP", str(vcf),
                 str(sv), str(translocations), str(coverage), str(coverage), str(cramino),
+                str(cytoband),
             )
             with zipfile.ZipFile(full_output) as workbook:
                 workbook_xml = workbook.read("xl/workbook.xml").decode()
                 self.assertEqual(workbook_xml.count("<sheet "), 7)
                 self.assertIn("Translocations", workbook_xml)
+                overview = workbook.read("xl/worksheets/sheet1.xml").decode()
+                self.assertIn("ClinVar pathogenic / likely pathogenic SNVs", overview)
+                sv_sheet = workbook.read("xl/worksheets/sheet3.xml").decode()
+                self.assertIn("Cytogenetic_Notation", sv_sheet)
 
 
 if __name__ == "__main__":

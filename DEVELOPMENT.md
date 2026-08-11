@@ -83,8 +83,36 @@ kommentarerna. Ändra dessa parametrar när basecaller-/modbaseformatet kräver
 det och verifiera alltid MM/ML-taggarna i den färdiga BAM-filen.
 
 `reference_build` i config väljer mellan `references.hg38` och
-`references.hs1`. hs1-sökvägarna är avsiktligt placeholders: jag hittade ingen
-verifierbar T2T/hs1-sökväg i de befintliga arbetsytans konfigurationer.
+`references.hs1`. Den checkout-relativa local-configen innehåller placeholders,
+medan workstation-configen pekar på den installerade `hs1.fa`-bundlen.
+
+## Site-config och reference registry
+
+Den gemensamma [`config/config.yaml`](config/config.yaml) innehåller pipeline-
+logik och Pickett-liknande `{{VARIABLE}}`-placeholders. Miljöberoende värden
+ligger i:
+
+* [`config/site_configs/site_config_local.yaml`](config/site_configs/site_config_local.yaml)
+  för en checkout-relativ lokal körning;
+* [`config/site_configs/site_config_workstation.yaml`](config/site_configs/site_config_workstation.yaml)
+  för den delade `/data/references`-mappen på workstation;
+* [`config/site_configs/site_config_marvin.yaml`](config/site_configs/site_config_marvin.yaml)
+  för Marvin.
+
+De separata registren
+[`config/reference_files/reference_files_local.yaml`](config/reference_files/reference_files_local.yaml),
+[`config/reference_files/reference_files_workstation.yaml`](config/reference_files/reference_files_workstation.yaml)
+och
+[`config/reference_files/reference_files_marvin.yaml`](config/reference_files/reference_files_marvin.yaml)
+beskriver samma referenser med logiskt namn, path, källa och checksumfält.
+Registret är en reproducerbar provenance-snapshot; den aktiva Snakemake-
+konfigurationen är den körspecifika `config.quicken.yaml` som startscriptet
+skriver.
+
+Site-konfigurationen slås ihop med den gemensamma konfigurationen före start.
+Relativa paths löses mot pipeline-roten och placeholders expanderas innan
+Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
+äldre kompatibilitetsfil, men nya körningar bör använda `--site marvin`.
 
 ## Vad som produceras
 
@@ -103,11 +131,17 @@ verifierbar T2T/hs1-sökväg i de befintliga arbetsytans konfigurationer.
 
 VEP aktiveras med `annotate_small_variants_with_vep: true` och kräver att
 `vep.vep_cache` pekar på en offline-cache som är kompatibel med den valda
-referensen. Excelrapporten använder den VEP-annoterade VCF:en när grenen är
-aktiv och annars den filtrerade, normaliserade VCF:en. Den äldre SnpEff-grenen
-kan fortfarande aktiveras separat med `annotate_small_variants`; SV-annotering
-styrs av `annotate_svs`. `config/config_marvin.yaml` aktiverar VEP och
-SV-annotering med de referenssökvägar som används i Fluffy-miljön.
+referensen. Sätt `vep.skip: true` under tiden cachen byggs. Om den valda
+referensen dessutom har en läsbar, tabix-indexerad `clinvar.vcf.gz` skickas
+ClinVar-fälten `CLNSIG`, `CLNREVSTAT` och `CLNDN` som VEP-custom annotation och
+visas i Excelrapporten. Excelrapporten använder den VEP-annoterade VCF:en när
+grenen är aktiv och annars den filtrerade, normaliserade VCF:en.
+
+En referens kan även ha `tandem_repeats`, som skickas till Sniffles2. En
+valfri `cytoband`-fil (UCSC `cytoBand.txt` eller `.gz`) ger cytobandskolumner och
+ISCN-liknande notation i SV-sammanfattningen och rapporten. Den äldre
+SnpEff-grenen kan fortfarande aktiveras separat med
+`annotate_small_variants`; SV-annotering styrs av `annotate_svs`.
 
 ## Kör lokalt/offline
 
@@ -149,11 +183,56 @@ snakemake \
   --wrapper-prefix "${WRAPPER_PREFIX}"
 ```
 
+För en site-aware körning som samtidigt skapar Hydra-tabeller och sparar alla
+konfigurationsfiler i analyskatalogen:
+
+```bash
+pipeline_start_scripts/start_quicken.sh \
+  --site local \
+  --inbox-path /data/run_001 \
+  --input-type unmapped_bam \
+  --analysis-dir /data/analysis/run_001 \
+  --dry-run
+```
+
+På Linux-workstationen med den delade referensmappen används i stället
+`workstation`-site-configen. Den återanvänder det befintliga GRCh38-minimap2-
+indexet och kör första provet utan VEP medan cachen färdigställs:
+
+```bash
+pipeline_start_scripts/start_quicken.sh \
+  --site workstation \
+  --inbox-path /data/run_001 \
+  --input-type unmapped_bam \
+  --analysis-dir /data/analysis/run_001 \
+  --dry-run
+```
+
+När `/data/references/vep_cache` är komplett ändras
+`annotate_small_variants_with_vep` till `true` och `vep.skip` till `false` i
+`config/site_configs/site_config_workstation.yaml` för att aktivera VEP och
+ClinVar i samma körning.
+
 Om Ubuntu-installationen saknar Singularity/Apptainer kan samma conda-fallback
 användas med `--use-conda` och utan `profiles/local`; containrar är dock den
 rekommenderade reproducerbara vägen när de redan är förberedda.
 
 ## Marvin
+
+Site-aware launcher (rekommenderad):
+
+```bash
+pipeline_start_scripts/start_quicken.sh \
+  --site marvin \
+  --inbox-path /data/run_001 \
+  --input-type unmapped_bam \
+  --analysis-dir /projects/wp2/quicken/run_001 \
+  --dry-run
+```
+
+Detta använder gemensam `config/config.yaml`, Marvin-site-config,
+Marvin-reference registry och `profiles/marvin`. Den äldre direkta varianten
+med `config/config_marvin.yaml` fungerar fortfarande för kompatibilitet.
 
 ```bash
 WRAPPER_PREFIX="git+file://$(pwd)/vendor/snakemake-wrappers"
@@ -201,13 +280,50 @@ respektive `units_unmapped.tsv`. För granskning av hela beroendegrafen finns
 `pipeline_start_scripts/start_quicken.sh` följer samma mönster som CGU:s
 övriga `pipeline_start_scripts`: den tar en inbox, skapar eller återanvänder
 `samples.tsv` och `units.tsv` i analyskatalogen, skriver en körspecifik config
-och startar Snakemake med vald profil.
+och startar Snakemake med vald site-profil.
+
+`--site local`, `--site workstation` och `--site marvin` väljer automatiskt site-config,
+reference registry och Snakemake-profil. De kan ersättas individuellt med
+`--site-config`, `--reference-files` och `--profile`. `--library-root` kan
+anges för att dokumentera en fysisk `cgu/library`-rot i körmetadata medan
+library-migreringen fortfarande är valfri.
 
 För ONT-BAM anropas Hydra-Genetics `create-input-files`, som läser metadata ur
 BAM-read groups. Scriptet kompletterar därefter tabellen med Quickens
 `input_type` och oanvända FASTQ-kolumner. För FASTQ skapas samma Hydra-stil
 direkt; ange en regex som fångar sample-namnet om filnamnet inte följer
 standardmönstret.
+
+### Dorado `bam_pass` och barcode-mappning
+
+När Dorado redan har producerat `bam_pass/barcodeXX/*.bam` ska Quicken inte
+köra om basecalling eller demultiplexing. Ange i stället en CSV- eller TSV-fil
+med minst kolumnerna `barcode` och `sample`; `type` är valfri och använder
+`--sample-type` som standard:
+
+```text
+barcode,sample,type
+barcode01,SAMPLE_A,N
+barcode02,SAMPLE_B,N
+```
+
+Starta med:
+
+```bash
+pipeline_start_scripts/start_quicken.sh \
+  --site workstation \
+  --inbox-path /data/run_001/bam_pass \
+  --input-type unmapped_bam \
+  --barcode-map /data/run_001/barcode_map.csv \
+  --analysis-dir /data/analysis/run_001 \
+  --dry-run
+```
+
+Barcode-ID:n kan anges som `01` eller `barcode01` och normaliseras till
+`barcode01`. Alla BAM-filer under ett barcode blir separata units för samma
+sample; Quicken slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
+att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en
+sample-mappning.
 
 Exempel:
 
@@ -234,5 +350,7 @@ pipeline_start_scripts/start_quicken.sh \
 
 `--input-type aligned_bam` behåller befintlig mapping; `unmapped_bam` gör
 realignering; `fastq` kör minimap2-alignering. Befintliga tabeller återanvänds
-om inte `--force-inputs` anges. Scriptet skriver `config.quicken.yaml` och
-`run_metadata.yaml` i analyskatalogen.
+om inte `--force-inputs` anges. Scriptet skriver `config.quicken.yaml`,
+`site_config.yaml`, `reference_files.yaml` och `run_metadata.yaml` i
+analyskatalogen, så att en körning kan granskas eller startas om utan att
+förlita sig på den aktuella arbetskatalogen.

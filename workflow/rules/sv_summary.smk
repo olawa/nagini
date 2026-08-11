@@ -18,6 +18,7 @@ rule sv_summary:
             else "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
         ),
         annotation_bed=config.get("reference", {}).get("sv_annotation_bed", "") or [],
+        cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
         tsv="reports/sv_summary/{sample}_{type}.tsv",
         translocations="reports/sv_summary/{sample}_{type}.translocations.tsv",

@@ -51,6 +51,55 @@ min_version("7.8.0")
 if not workflow.overwrite_configfiles:
     sys.exit("Pass a config file with --configfile or --configfiles.")
 
+
+_config_template = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def _expand_config_templates(value, context):
+    if isinstance(value, dict):
+        return {key: _expand_config_templates(item, context) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_config_templates(item, context) for item in value]
+    if not isinstance(value, str):
+        return value
+    expanded = value
+    for _ in range(12):
+        updated = _config_template.sub(
+            lambda match: context.get(match.group(1), match.group(0)), expanded
+        )
+        if updated == expanded:
+            break
+        expanded = updated
+    return expanded
+
+
+_config_context = {
+    str(key): str(value)
+    for key, value in config.items()
+    if isinstance(value, (str, int, float, bool))
+}
+for _ in range(12):
+    _changed = False
+    for _key, _value in list(_config_context.items()):
+        _expanded = _expand_config_templates(_value, _config_context)
+        if _expanded != _value:
+            _config_context[_key] = _expanded
+            _changed = True
+    if not _changed:
+        break
+config = _expand_config_templates(config, _config_context)
+_unresolved_config_variables = sorted(
+    {
+        name
+        for match in _config_template.finditer(str(config))
+        for name in [match.group(1)]
+    }
+)
+if _unresolved_config_variables:
+    raise WorkflowError(
+        "Unresolved config variable(s): " + ", ".join(_unresolved_config_variables)
+    )
+
 try:
     validate(config, schema="../schemas/config.schema.yaml")
 except WorkflowError as error:
@@ -75,7 +124,16 @@ if reference_build not in references:
 config["reference"] = references[reference_build]
 config["reference"]["build"] = reference_build
 
-if config.get("annotate_small_variants_with_vep", False) and not config.get("vep", {}).get("vep_cache"):
+def vep_enabled():
+    """Whether the report should depend on the VEP-annotated VCF."""
+
+    return bool(
+        config.get("annotate_small_variants_with_vep", False)
+        and not config.get("vep", {}).get("skip", False)
+    )
+
+
+if vep_enabled() and not config.get("vep", {}).get("vep_cache"):
     raise WorkflowError(
         "annotate_small_variants_with_vep is true, but vep.vep_cache is empty. "
         "Configure a reference-compatible offline VEP cache or disable VEP annotation."
@@ -213,9 +271,40 @@ def get_unit_alignment_bams(wildcards):
 
 
 def get_reference_index():
+    configured_index = config["reference"].get("mmi", "")
+    if configured_index and os.path.isfile(configured_index):
+        # Reuse a site-managed index instead of rebuilding a multi-gigabyte
+        # minimap2 index in every analysis directory.
+        return configured_index
     fasta_name = os.path.basename(config["reference"]["fasta"])
     preset = config.get("minimap2_align", {}).get("preset", "map-ont")
     return "alignment/minimap2_index/{}.{}.mmi".format(fasta_name, preset)
+
+
+def _optional_reference_path(key):
+    """Return an optional selected-reference asset only when it is readable."""
+
+    value = str(config.get("reference", {}).get(key, "") or "").strip()
+    return value if value and os.path.isfile(value) else ""
+
+
+def get_clinvar_vcf(wildcards=None):
+    return _optional_reference_path("clinvar")
+
+
+def get_cytoband_file(wildcards=None):
+    return _optional_reference_path("cytoband")
+
+
+def get_tandem_repeats(wildcards=None):
+    return _optional_reference_path("tandem_repeats")
+
+
+# Hydra's cnv_sv module reads this setting when its rule is imported. Keep the
+# raw reference path in the config and let the module add the CLI flag itself.
+_tandem_repeats = get_tandem_repeats()
+if _tandem_repeats:
+    config.setdefault("sniffles2_call", {})["tandem_repeats"] = _tandem_repeats
 
 
 def get_minimap2_read_group(wildcards):
@@ -257,7 +346,7 @@ reference_chromosomes = get_reference_chromosomes()
 
 def get_small_variant_report_vcf(wildcards):
     """Return the normalized VCF, preferring VEP annotation when enabled."""
-    suffix = ".filtered.norm.vep.vcf.gz" if config.get("annotate_small_variants_with_vep", False) else ".filtered.norm.vcf.gz"
+    suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
     return f"snv_indels/mutect2_postprocess/{wildcards.sample}_{wildcards.type}{suffix}"
 
 
@@ -274,7 +363,8 @@ def compile_output_file_list(wildcards):
     output_files = []
     for file_definition in output_spec["files"]:
         condition = file_definition.get("when")
-        if condition and not config.get(condition, False):
+        enabled = vep_enabled() if condition == "annotate_small_variants_with_vep" else config.get(condition, False)
+        if condition and not enabled:
             continue
         allowed_types = file_definition.get("types")
         for sample in get_samples(samples):

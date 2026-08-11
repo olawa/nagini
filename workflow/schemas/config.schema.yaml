@@ -2,6 +2,9 @@ $schema: "http://json-schema.org/draft-07/schema#"
 description: Configuration for the quicken Nanopore pipeline
 type: object
 properties:
+  site:
+    type: string
+    description: Runtime site selected by the launcher, for example local or marvin.
   hydra_local_path:
     type: string
     description: Local root containing hydra-genetics/<module> checkouts for offline execution.
@@ -18,6 +21,23 @@ properties:
   default_container:
     type: string
     description: Default Docker/Singularity/Apptainer image.
+  container_cache:
+    type: string
+    description: Optional site-specific container cache or image directory.
+  container_runtime:
+    type: string
+    description: Container runtime recorded by the selected site config.
+  singularity_binds:
+    type: array
+    items:
+      type: string
+    description: Site paths that must be visible inside Singularity/Apptainer.
+  site_config_path:
+    type: string
+  reference_files_path:
+    type: string
+  library_root:
+    type: string
   reference_build:
     type: string
     enum: [hg38, hs1]
@@ -58,6 +78,8 @@ properties:
         type: string
       vep_cache:
         type: string
+      skip:
+        type: boolean
       mode:
         type: string
       extra:
@@ -107,10 +129,27 @@ definitions:
         type: string
       dict:
         type: string
+      mmi:
+        type: string
       design_bed:
         type: string
       sv_annotation_bed:
         type: string
+      tandem_repeats:
+        type: string
+        description: Optional tandem-repeat BED passed to Sniffles2.
+      clinvar:
+        type: string
+        description: Optional bgzipped, tabix-indexed ClinVar VCF for VEP custom annotation.
+      cytoband:
+        type: string
+        description: Optional UCSC cytoBand.txt or cytoBand.txt.gz file.
+      gene_annotation:
+        type: string
+        description: Optional GTF retained as reference provenance.
+      annotations:
+        type: string
+        description: Optional site-specific annotation manifest.
       chromosomes:
         type: array
         items:

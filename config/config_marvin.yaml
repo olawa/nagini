@@ -1,6 +1,10 @@
 ---
-# Marvin profile configuration. Paths below are taken from the existing
-# Fluffy/CGU Marvin configurations where they are applicable.
+# Backwards-compatible Marvin composite configuration.
+#
+# New runs should use config/config.yaml together with
+# config/site_configs/site_config_marvin.yaml (the start script does this
+# automatically with --site marvin). This file remains for older direct
+# Snakemake commands until they are migrated.
 hydra_local_path: "vendor"
 
 samples: "config/samples.tsv"
@@ -22,16 +26,28 @@ references:
     fasta: "/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta"
     fai: "/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai"
     dict: "/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict"
+    mmi: ""
     design_bed: "/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed"
     sv_annotation_bed: "/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz"
+    tandem_repeats: "/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz"
+    clinvar: ""
+    cytoband: ""
+    gene_annotation: ""
+    annotations: ""
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
   hs1:
     fasta: "references/hs1/chm13v2.0.fa"
     fai: "references/hs1/chm13v2.0.fa.fai"
     dict: "references/hs1/chm13v2.0.dict"
+    mmi: ""
     design_bed: "references/hs1/targets.bed"
     sv_annotation_bed: ""
+    tandem_repeats: ""
+    clinvar: ""
+    cytoband: ""
+    gene_annotation: ""
+    annotations: ""
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
 
@@ -72,6 +88,7 @@ annotate_small_variants_with_vep: true
 vep:
   container: "docker://hydragenetics/vep:111.0"
   vep_cache: "/data/ref_genomes/VEP/"
+  skip: false
   mode: "--offline --cache --merged"
   extra: "--assembly GRCh38 --check_existing --pick --variant_class --everything"
 quicken_excel_report:

@@ -7,6 +7,7 @@ responsibility of a reference- and panel-specific annotator.
 """
 
 import collections
+import bisect
 import gzip
 import json
 import os
@@ -35,6 +36,69 @@ def parse_info(value):
 def remote_chrom_from_alt(alt):
     match = re.search(r"[\[\]]([^:\[\]]+):\d+", alt or "")
     return match.group(1) if match else ""
+
+
+def remote_position_from_alt(alt):
+    match = re.search(r"[\[\]][^:\[\]]+:(\d+)", alt or "")
+    return int(match.group(1)) if match else 0
+
+
+class CytobandLookup:
+    """Lookup UCSC cytobands from a plain or gzip-compressed BED-like file."""
+
+    def __init__(self, path=""):
+        self.bands = collections.defaultdict(list)
+        if path and os.path.isfile(path):
+            self._load(path)
+
+    def _load(self, path):
+        with open_text(path) as handle:
+            for line in handle:
+                if not line.strip() or line.startswith("#"):
+                    continue
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) < 4:
+                    continue
+                try:
+                    start, end = int(fields[1]), int(fields[2])
+                except ValueError:
+                    continue
+                self.bands[fields[0]].append((end, fields[3], start))
+        for chrom in self.bands:
+            self.bands[chrom].sort()
+
+    def get_band(self, chrom, position):
+        if not self.bands or not chrom or not position:
+            return ""
+        keys = (chrom, chrom.removeprefix("chr"), f"chr{chrom.removeprefix('chr')}")
+        entries = next((self.bands[key] for key in keys if key in self.bands), None)
+        if not entries:
+            return ""
+        position = int(position)
+        index = bisect.bisect_left(entries, (position, "", 0))
+        if index >= len(entries):
+            return ""
+        end, band, start = entries[index]
+        return band if start <= position <= end else ""
+
+
+def cytogenetic_notation(svtype, chrom, position, end, chrom2, partner_position, lookup):
+    """Create a compact ISCN-style notation when cytobands are available."""
+
+    if not lookup.bands:
+        return ""
+    chrom1 = str(chrom).removeprefix("chr")
+    band1 = lookup.get_band(chrom, position)
+    if chrom2 and chrom2 != chrom:
+        band2 = lookup.get_band(chrom2, partner_position or end)
+        prefix = f"t({chrom1};{str(chrom2).removeprefix('chr')})"
+        return f"{prefix}({band1};{band2})" if band1 and band2 else prefix
+    band2 = lookup.get_band(chrom, end)
+    if not band1 or not band2:
+        return ""
+    if str(svtype).upper() == "DEL":
+        return f"del({chrom1})({band1}{band2})"
+    return f"{svtype}({chrom1})({band1};{band2})"
 
 
 def read_bed(path):
@@ -71,6 +135,9 @@ def main():
     annotation_bed_value = getattr(snakemake_input, "annotation_bed", "")
     annotation_bed = str(annotation_bed_value) if annotation_bed_value else ""
     bed_intervals = read_bed(annotation_bed)
+    cytoband_value = getattr(snakemake_input, "cytoband", "")
+    cytoband_path = str(cytoband_value) if cytoband_value else ""
+    cytobands = CytobandLookup(cytoband_path)
 
     records = []
     counts = collections.Counter()
@@ -99,8 +166,13 @@ def main():
             except ValueError:
                 svlen = 0
             chrom2 = str(info.get("CHR2", "")) or remote_chrom_from_alt(alt)
+            partner_position = remote_position_from_alt(alt)
             genes = overlapping_labels(bed_intervals, chrom, max(position - 1, 0), max(end, position))
             is_translocation = svtype in {"BND", "TRA"} or (chrom2 and chrom2 != chrom)
+            band = cytobands.get_band(chrom, position)
+            band2 = cytobands.get_band(
+                chrom2 or chrom, partner_position or end
+            )
             record = {
                 "sample": str(snakemake.wildcards.sample),
                 "type": str(snakemake.wildcards.type),
@@ -114,6 +186,17 @@ def main():
                 "filter": filt,
                 "genes": ";".join(genes) if genes else ".",
                 "translocation": bool(is_translocation),
+                "Start_Band": band,
+                "End_Band": band2,
+                "Cytogenetic_Notation": cytogenetic_notation(
+                    svtype,
+                    chrom,
+                    position,
+                    end,
+                    chrom2,
+                    partner_position,
+                    cytobands,
+                ),
             }
             records.append(record)
             counts[svtype] += 1
@@ -131,6 +214,9 @@ def main():
         "filter",
         "genes",
         "translocation",
+        "Start_Band",
+        "End_Band",
+        "Cytogenetic_Notation",
     ]
     os.makedirs(os.path.dirname(str(snakemake.output.tsv)), exist_ok=True)
     with open(snakemake.output.tsv, "w") as tsv_file:
@@ -152,9 +238,11 @@ def main():
         "svtype_counts": dict(sorted(counts.items())),
         "translocation_records": len(translocations),
         "annotation_bed": annotation_bed or None,
+        "cytoband": cytoband_path or None,
     }
     with open(snakemake.output.json, "w") as json_file:
         json.dump(summary, json_file, indent=2, sort_keys=True)
 
 
-main()
+if "snakemake" in globals():
+    main()
