@@ -62,6 +62,14 @@ else
   git -C "${wrapper_root}" fetch --depth 1 origin "${wrapper_commit}" >/dev/null
 fi
 git -C "${wrapper_root}" checkout --detach "${wrapper_commit}" >/dev/null
+# Snakemake wrapper rules reference version tags (for example v1.5.0 for
+# GATK Mutect2).  Fetch those tags explicitly; fetching only the pinned
+# commit leaves the wrapper files present but makes git show <tag>:<path>
+# fail during execution.
+for wrapper_tag in 0.80.2 v1.3.1 v1.5.0 v1.7.0 v1.25.0; do
+  git -C "${wrapper_root}" fetch --depth 1 origin \
+    "refs/tags/${wrapper_tag}:refs/tags/${wrapper_tag}" >/dev/null
+done
 echo "Using snakemake-wrappers@${wrapper_commit}"
 
 echo "Hydra modules and wrappers are available under vendor/."
