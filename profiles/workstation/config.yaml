@@ -3,3 +3,4 @@ rerun-incomplete: true
 keep-going: true
 use-singularity: true
 singularity-args: "--cleanenv --bind /data"
+singularity-prefix: ".snakemake/singularity"
