@@ -4,7 +4,7 @@ set -euo pipefail
 # Start Nagini from an ONT inbox while keeping Hydra-style samples.tsv and
 # units.tsv in the analysis directory. BAM input is inspected by Hydra's
 # create-input-files command; FASTQ input is converted to the same table
-# contract by prepare_quicken_inputs.py. Dorado bam_pass/barcodeXX input can
+# contract by prepare_nagini_inputs.py. Dorado bam_pass/barcodeXX input can
 # use --barcode-map to create the tables without calling Hydra's discovery.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -282,7 +282,7 @@ echo "Reference registry: $reference_files"
 [[ -n "$barcode_map" ]] && echo "Barcode map: $barcode_map"
 
 prepare_cmd=(
-    python3 "$pipeline_path/pipeline_start_scripts/prepare_quicken_inputs.py"
+    python3 "$pipeline_path/pipeline_start_scripts/prepare_nagini_inputs.py"
     --input-dir "$input_dir"
     --analysis-dir "$analysis_dir"
     --pipeline-root "$pipeline_path"
@@ -318,7 +318,7 @@ base_config: "$base_config"
 site_config: "$site_config"
 reference_files: "$reference_files"
 barcode_map: "${barcode_map:-}"
-runtime_config: "$analysis_dir/config.quicken.yaml"
+runtime_config: "$analysis_dir/config.nagini.yaml"
 profile: "$profile"
 library_root: "${library_root:-}"
 EOF
@@ -327,7 +327,7 @@ snakemake_cmd=(
     snakemake
     --profile "$profile"
     --snakefile "$pipeline_path/workflow/Snakefile"
-    --configfile "$analysis_dir/config.quicken.yaml"
+    --configfile "$analysis_dir/config.nagini.yaml"
     --wrapper-prefix "git+file://$pipeline_path/vendor/snakemake-wrappers"
 )
 [[ -n "$cores" ]] && snakemake_cmd+=(--cores "$cores")

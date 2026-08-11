@@ -10,8 +10,8 @@ rule minimap2_fastq_align:
         fastq1=lambda wildcards: get_unit_input(wildcards, "fastq1"),
         target=get_reference_index(),
     output:
-        bam="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam",
-        bai="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam.bai",
+        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam",
+        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam.bai",
     params:
         preset=config.get("minimap2_align", {}).get("preset", "map-ont"),
         extra=config.get("minimap2_align", {}).get("extra", ""),
@@ -33,7 +33,7 @@ rule minimap2_fastq_align:
     container:
         config.get("minimap2_fastq_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: minimap2 {input.fastq1} against {input.target}"
     shell:

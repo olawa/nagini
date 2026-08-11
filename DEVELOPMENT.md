@@ -106,7 +106,7 @@ och
 [`config/reference_files/reference_files_marvin.yaml`](config/reference_files/reference_files_marvin.yaml)
 beskriver samma referenser med logiskt namn, path, källa och checksumfält.
 Registret är en reproducerbar provenance-snapshot; den aktiva Snakemake-
-konfigurationen är den körspecifika `config.quicken.yaml` som startscriptet
+konfigurationen är den körspecifika `config.nagini.yaml` som startscriptet
 skriver.
 
 Site-konfigurationen slås ihop med den gemensamma konfigurationen före start.
@@ -116,7 +116,7 @@ Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
 
 ## Vad som produceras
 
-* `alignment/quicken_bam/`: en sammanslagen, sorterad BAM och `.bai` per sample/type.
+* `alignment/nagini_bam/`: en sammanslagen, sorterad BAM och `.bai` per sample/type.
 * `qc/cramino/`: läs-/sekvensmängd och read-statistik.
 * `qc/mosdepth/`: whole-genome coverage.
 * `qc/mosdepth_bed/`: coverage mot `reference.design_bed`, inklusive per-base BED.
@@ -125,7 +125,7 @@ Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
 * `snv_indels/bcftools_concat/`: sammanfogad, ofiltrerad per-kromosom Mutect2-VCF.
 * `snv_indels/mutect2_postprocess/`: FilterMutectCalls-resultat,
   filtreringsstatistik, normaliserad VCF och, när aktiverat, VEP-annoterad VCF.
-* `reports/{sample}_{type}.quicken_report.xlsx`: översikt, SNV/indel, SV/BND,
+* `reports/{sample}_{type}.nagini_report.xlsx`: översikt, SNV/indel, SV/BND,
   WGS-/target-coverage och Cramino-QC i separata blad.
 * `qc/multiqc/`: kombinerad QC-rapport.
 
@@ -156,7 +156,7 @@ Scriptet lägger de pinnade modulerna i `vendor/hydra-genetics/` och
 Snakemake-wrappers commit `d3e6a345acb4e03ac0662ade94d9970bb233bdab` i
 `vendor/snakemake-wrappers/`. Därefter kan Snakefile och
 moduler läsas lokalt. `snv_indels` får en lokal kompatibilitetstagg
-`v2.1.0-quicken`, som bygger på Hydra `v2.1.0` men inte inkluderar den
+`v2.1.0-nagini`, en lokal patch-tagg baserad på Hydra `v2.1.0` som inte inkluderar den
 oanvända DeepTrio-regeln som inte kan parsas av den här Snakemake-versionen.
 
 Referenser och containerimages laddas inte automatiskt av pipelinekörningen.
@@ -289,14 +289,14 @@ anges för att dokumentera en fysisk `cgu/library`-rot i körmetadata medan
 library-migreringen fortfarande är valfri.
 
 För ONT-BAM anropas Hydra-Genetics `create-input-files`, som läser metadata ur
-BAM-read groups. Scriptet kompletterar därefter tabellen med Quickens
+BAM-read groups. Scriptet kompletterar därefter tabellen med Naginis
 `input_type` och oanvända FASTQ-kolumner. För FASTQ skapas samma Hydra-stil
 direkt; ange en regex som fångar sample-namnet om filnamnet inte följer
 standardmönstret.
 
 ### Dorado `bam_pass` och barcode-mappning
 
-När Dorado redan har producerat `bam_pass/barcodeXX/*.bam` ska Quicken inte
+När Dorado redan har producerat `bam_pass/barcodeXX/*.bam` ska Nagini inte
 köra om basecalling eller demultiplexing. Ange i stället en CSV- eller TSV-fil
 med minst kolumnerna `barcode` och `sample`; `type` är valfri och använder
 `--sample-type` som standard:
@@ -321,7 +321,7 @@ pipeline_start_scripts/start_nagini.sh \
 
 Barcode-ID:n kan anges som `01` eller `barcode01` och normaliseras till
 `barcode01`. Alla BAM-filer under ett barcode blir separata units för samma
-sample; Quicken slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
+sample; Nagini slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
 att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en
 sample-mappning.
 
@@ -350,7 +350,7 @@ pipeline_start_scripts/start_nagini.sh \
 
 `--input-type aligned_bam` behåller befintlig mapping; `unmapped_bam` gör
 realignering; `fastq` kör minimap2-alignering. Befintliga tabeller återanvänds
-om inte `--force-inputs` anges. Scriptet skriver `config.quicken.yaml`,
+om inte `--force-inputs` anges. Scriptet skriver `config.nagini.yaml`,
 `site_config.yaml`, `reference_files.yaml` och `run_metadata.yaml` i
 analyskatalogen, så att en körning kan granskas eller startas om utan att
 förlita sig på den aktuella arbetskatalogen.

@@ -11,7 +11,7 @@ modules:
   annotation: "v1.4.1"
   cnv_sv: "v3.2.1"
   qc: "v0.8.0"
-  snv_indels: "v2.1.0-quicken"
+  snv_indels: "v2.1.0-nagini"
 reference_build: "hg38"
 annotate_small_variants_with_vep: false
 vep:

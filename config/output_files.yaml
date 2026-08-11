@@ -3,10 +3,10 @@ directory: "."
 files:
   - name: aligned BAM
     input: null
-    output: "alignment/quicken_bam/{sample}_{type}.bam"
+    output: "alignment/nagini_bam/{sample}_{type}.bam"
   - name: aligned BAM index
     input: null
-    output: "alignment/quicken_bam/{sample}_{type}.bam.bai"
+    output: "alignment/nagini_bam/{sample}_{type}.bam.bai"
   - name: read and sequence statistics
     input: null
     output: "qc/cramino/{sample}_{type}.txt"
@@ -104,6 +104,6 @@ files:
   - name: MultiQC Nanopore report
     input: null
     output: "qc/multiqc/multiqc_nanopore.html"
-  - name: Quicken Excel report
+  - name: Nagini Excel report
     input: null
-    output: "reports/{sample}_{type}.quicken_report.xlsx"
+    output: "reports/{sample}_{type}.nagini_report.xlsx"

@@ -6,13 +6,13 @@ import zipfile
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("quicken_report.py")
-SPEC = importlib.util.spec_from_file_location("quicken_report", SCRIPT)
+SCRIPT = Path(__file__).with_name("nagini_report.py")
+SPEC = importlib.util.spec_from_file_location("nagini_report", SCRIPT)
 REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 
 
-class QuickenReportTest(unittest.TestCase):
+class NaginiReportTest(unittest.TestCase):
     def test_parse_vep_vcf_and_write_workbook(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

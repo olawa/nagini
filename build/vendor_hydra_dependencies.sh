@@ -37,14 +37,14 @@ done
 # but remove that unused include in a local compatibility commit.
 snv_module="${module_root}/snv_indels"
 snv_patch="${pipeline_root}/build/patches/snv_indels_v2.1.0_snakemake7.patch"
-if git -C "${snv_module}" rev-parse --verify refs/tags/v2.1.0-quicken >/dev/null 2>&1; then
-  echo "Keeping existing snv_indels compatibility tag v2.1.0-quicken"
+if git -C "${snv_module}" rev-parse --verify refs/tags/v2.1.0-nagini >/dev/null 2>&1; then
+  echo "Keeping existing snv_indels compatibility tag v2.1.0-nagini"
 elif git -C "${snv_module}" apply --check "${snv_patch}" >/dev/null 2>&1; then
   git -C "${snv_module}" apply "${snv_patch}"
-  git -C "${snv_module}" -c user.name="quicken builder" -c user.email="quicken@localhost" commit -am "Compatibility patch for Snakemake 7" >/dev/null
-  git -C "${snv_module}" tag -f "v2.1.0-quicken" >/dev/null
+  git -C "${snv_module}" -c user.name="nagini builder" -c user.email="nagini@localhost" commit -am "Compatibility patch for Snakemake 7" >/dev/null
+  git -C "${snv_module}" tag -f "v2.1.0-nagini" >/dev/null
 else
-  echo "snv_indels is neither pristine v2.1.0 nor tagged v2.1.0-quicken; refusing to overwrite it" >&2
+  echo "snv_indels is neither pristine v2.1.0 nor tagged v2.1.0-nagini; refusing to overwrite it" >&2
   exit 1
 fi
 

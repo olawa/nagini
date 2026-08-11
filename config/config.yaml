@@ -57,7 +57,7 @@ modules:
   qc: "v0.8.0"
   # Local compatibility tag derived from Hydra snv_indels v2.1.0; see
   # build/patches/snv_indels_v2.1.0_snakemake7.patch.
-  snv_indels: "v2.1.0-quicken"
+  snv_indels: "v2.1.0-nagini"
 
 reference_build: "hg38"
 references:
@@ -153,7 +153,7 @@ vep:
   mode: "--offline --cache --merged"
   extra: "--assembly GRCh38 --check_existing --pick --variant_class --symbol --hgvs"
 
-quicken_excel_report:
+nagini_excel_report:
   # The report writer uses only Python's standard library.
   container: "docker://hydragenetics/common:3.1.1"
 

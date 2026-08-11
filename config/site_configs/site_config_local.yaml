@@ -1,6 +1,6 @@
 ---
 # Local Linux/workstation runtime settings.
-# Paths are deliberately relative to the Quicken checkout unless documented as
+# Paths are deliberately relative to the Nagini checkout unless documented as
 # an external asset. Prepare the reference bundle below references/ before a
 # full run.
 SITE_ID: local

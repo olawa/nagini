@@ -1,5 +1,5 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-description: Configuration for the quicken Nanopore pipeline
+description: Configuration for the nagini Nanopore pipeline
 type: object
 properties:
   site:
@@ -69,7 +69,7 @@ properties:
     $ref: "#/definitions/tool_config"
   bcftools_norm_mutect2:
     $ref: "#/definitions/tool_config"
-  quicken_excel_report:
+  nagini_excel_report:
     $ref: "#/definitions/tool_config"
   vep:
     type: object

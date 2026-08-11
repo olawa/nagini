@@ -9,8 +9,8 @@ rule samtools_merge_bam:
     input:
         bams=get_unit_alignment_bams,
     output:
-        bam="alignment/quicken_bam/{sample}_{type}.bam",
-        bai="alignment/quicken_bam/{sample}_{type}.bam.bai",
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
     params:
         extra=config.get("samtools_merge_bam", {}).get("extra", ""),
     log:
@@ -30,7 +30,7 @@ rule samtools_merge_bam:
     container:
         config.get("samtools_merge_bam", {}).get("container", config["default_container"])
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: merge per-unit BAMs into {output.bam}"
     shell:

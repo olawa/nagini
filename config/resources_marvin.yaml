@@ -90,7 +90,7 @@ vep:
   mem_mb: 65536
   mem_per_cpu: 8192
   partition: "core,core_bkup"
-quicken_excel_report:
+nagini_excel_report:
   threads: 1
   time: "02:00:00"
   mem_mb: 8192

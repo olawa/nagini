@@ -42,7 +42,7 @@ rule sv_summary:
     container:
         config.get("sv_summary", {}).get("container", config["default_container"])
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: summarise structural variants in {input.vcf}"
     script:

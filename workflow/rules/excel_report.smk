@@ -4,7 +4,7 @@ __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
 
-rule quicken_excel_report:
+rule nagini_excel_report:
     """Build a portable multi-sheet workbook from final QC and variant outputs."""
     input:
         snv_vcf=get_small_variant_report_vcf,
@@ -15,7 +15,7 @@ rule quicken_excel_report:
         target_coverage="qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt",
         cramino="qc/cramino/{sample}_{type}.txt",
     output:
-        xlsx="reports/{sample}_{type}.quicken_report.xlsx",
+        xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
         reference_build=config["reference"]["build"],
         snv_annotation=(
@@ -23,24 +23,24 @@ rule quicken_excel_report:
         ),
         cytoband=get_cytoband_file,
     log:
-        "logs/quicken_excel_report/{sample}_{type}.log",
+        "logs/nagini_excel_report/{sample}_{type}.log",
     benchmark:
         repeat(
-            "benchmarks/quicken_excel_report/{sample}_{type}.tsv",
-            config.get("quicken_excel_report", {}).get("benchmark_repeats", 1),
+            "benchmarks/nagini_excel_report/{sample}_{type}.tsv",
+            config.get("nagini_excel_report", {}).get("benchmark_repeats", 1),
         )
     threads: 1
     resources:
-        mem_mb=config.get("quicken_excel_report", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("quicken_excel_report", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("quicken_excel_report", {}).get("partition", config["default_resources"]["partition"]),
+        mem_mb=config.get("nagini_excel_report", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("nagini_excel_report", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("nagini_excel_report", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
-        time=config.get("quicken_excel_report", {}).get("time", config["default_resources"]["time"]),
+        time=config.get("nagini_excel_report", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("quicken_excel_report", {}).get("container", config["default_container"])
+        config.get("nagini_excel_report", {}).get("container", config["default_container"])
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: compile Excel report for {wildcards.sample}_{wildcards.type}"
     script:
-        "../scripts/quicken_report.py"
+        "../scripts/nagini_report.py"

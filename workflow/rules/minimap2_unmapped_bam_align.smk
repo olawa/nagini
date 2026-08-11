@@ -10,8 +10,8 @@ rule minimap2_unmapped_bam_align:
         bam=lambda wildcards: get_unit_input(wildcards, "bam"),
         target=get_reference_index(),
     output:
-        bam="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam",
-        bai="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam.bai",
+        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam",
+        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam.bai",
     params:
         preset=config.get("minimap2_align", {}).get("preset", "map-ont"),
         extra=config.get("minimap2_align", {}).get("extra", ""),
@@ -34,7 +34,7 @@ rule minimap2_unmapped_bam_align:
     container:
         config.get("minimap2_unmapped_bam_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: samtools fastq + minimap2 for {input.bam}"
     shell:

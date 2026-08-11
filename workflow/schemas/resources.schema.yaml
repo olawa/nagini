@@ -1,5 +1,5 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-description: Resource definitions used by quicken and its Hydra modules.
+description: Resource definitions used by nagini and its Hydra modules.
 type: object
 properties:
   default_resources:
@@ -26,7 +26,7 @@ properties:
     $ref: "#/definitions/resources"
   vep:
     $ref: "#/definitions/resources"
-  quicken_excel_report:
+  nagini_excel_report:
     $ref: "#/definitions/resources"
 additionalProperties: true
 

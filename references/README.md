@@ -37,7 +37,7 @@ installed file list. Add that file and set `HG38_CYTOBAND` when it is available.
 config keeps hs1 as a placeholder; the workstation config uses the installed
 `hs1.fa`, `.fai`, `.dict`, and `.mmi` files.
 
-Select a runtime site with `pipeline_start_scripts/start_quicken.sh --site`
+Select a runtime site with `pipeline_start_scripts/start_nagini.sh --site`
 (`local`, `workstation`, or `marvin`).
 The launcher combines the shared config with the matching file under
 `config/site_configs/` and keeps the corresponding manifest under

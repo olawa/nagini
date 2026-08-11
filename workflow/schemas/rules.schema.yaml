@@ -1,5 +1,5 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-description: Input/output descriptions for quicken-specific rules.
+description: Input/output descriptions for nagini-specific rules.
 type: object
 properties:
   stage_aligned_bam:
@@ -24,7 +24,7 @@ properties:
     $ref: "#/definitions/rule_io"
   vep_annotate_mutect2:
     $ref: "#/definitions/rule_io"
-  quicken_excel_report:
+  nagini_excel_report:
     $ref: "#/definitions/rule_io"
 additionalProperties: true
 definitions:

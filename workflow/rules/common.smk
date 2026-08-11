@@ -141,7 +141,7 @@ if vep_enabled() and not config.get("vep", {}).get("vep_cache"):
 
 
 date_string = datetime.now().strftime("%Y%m%d--%H-%M-%S")
-pipeline_version = get_pipeline_version(workflow, pipeline_name="quicken")
+pipeline_version = get_pipeline_version(workflow, pipeline_name="nagini")
 version_files = touch_pipeline_version_file_name(
     pipeline_version,
     date_string=date_string,
@@ -254,7 +254,7 @@ def get_unit_alignment_path(row):
         raise WorkflowError(
             f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam or aligned_bam."
         )
-    return "alignment/quicken_align/{}_{}_{}_{}.{}.bam".format(
+    return "alignment/nagini_align/{}_{}_{}_{}.{}.bam".format(
         row["sample"],
         row["type"],
         row["processing_unit"],

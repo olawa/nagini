@@ -9,8 +9,8 @@ rule stage_aligned_bam:
     input:
         bam=lambda wildcards: get_unit_input(wildcards, "bam"),
     output:
-        bam="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.aligned_bam.bam",
-        bai="alignment/quicken_align/{sample}_{type}_{processing_unit}_{barcode}.aligned_bam.bam.bai",
+        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.aligned_bam.bam",
+        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.aligned_bam.bam.bai",
     params:
         extra=config.get("stage_aligned_bam", {}).get("extra", ""),
     log:
@@ -30,7 +30,7 @@ rule stage_aligned_bam:
     container:
         config.get("stage_aligned_bam", {}).get("container", config["default_container"])
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: sort/index an existing aligned BAM; no realignment is performed"
     shell:

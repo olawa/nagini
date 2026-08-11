@@ -40,8 +40,7 @@ For each sample, Nagini can perform:
 
 The workflow produces:
 
-- sorted, indexed BAM files under `alignment/quicken_bam/` (the legacy output
-  directory name is retained for compatibility);
+- sorted, indexed BAM files under `alignment/nagini_bam/`;
 - read and coverage metrics under `qc/`;
 - filtered and normalized SNV/indel VCFs under `snv_indels/`;
 - structural-variant VCFs and summaries under `cnv_sv/` and `reports/`; and

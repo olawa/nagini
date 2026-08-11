@@ -6,13 +6,13 @@ from pathlib import Path
 import yaml
 
 
-SCRIPT = Path(__file__).with_name("prepare_quicken_inputs.py")
-SPEC = importlib.util.spec_from_file_location("prepare_quicken_inputs", SCRIPT)
+SCRIPT = Path(__file__).with_name("prepare_nagini_inputs.py")
+SPEC = importlib.util.spec_from_file_location("prepare_nagini_inputs", SCRIPT)
 PREPARE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREPARE)
 
 
-class PrepareQuickenInputsTest(unittest.TestCase):
+class PrepareNaginiInputsTest(unittest.TestCase):
     def test_site_merge_and_placeholder_expansion(self):
         base = {"A": "base", "nested": {"keep": True, "replace": "base"}}
         site = {"B": "site", "nested": {"replace": "site"}}

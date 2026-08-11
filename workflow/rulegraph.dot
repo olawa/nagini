@@ -22,7 +22,7 @@ digraph snakemake_dag {
     17[label = "bcftools_norm_mutect2", color = "0.11 0.6 0.85", style="rounded"];
     18[label = "snv_indels_filtered_mutect2_tabix", color = "0.46 0.6 0.85", style="rounded"];
     19[label = "qc_multiqc_longread", color = "0.37 0.6 0.85", style="rounded"];
-    20[label = "quicken_excel_report", color = "0.39 0.6 0.85", style="rounded"];
+    20[label = "nagini_excel_report", color = "0.39 0.6 0.85", style="rounded"];
     1 -> 0;
     7 -> 0;
     4 -> 0;

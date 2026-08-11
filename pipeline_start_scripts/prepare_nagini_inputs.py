@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create Hydra-style input tables and a run-local Quicken config.
+"""Create Hydra-style input tables and a run-local Nagini config.
 
 Hydra-Genetics can create ONT tables from BAM read groups. FASTQ input does
 not have enough metadata for Hydra to infer the same table, so this helper
@@ -432,7 +432,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
                 f"{registry_site!r} != {config.get('site')!r}"
             )
 
-    # Quicken's checked-in configs use paths relative to the repository root,
+    # Nagini's checked-in configs use paths relative to the repository root,
     # even though the YAML files themselves live below config/.
     base_dir = args.pipeline_root.resolve()
     config["samples"] = str((analysis_dir / "samples.tsv").resolve())
@@ -509,7 +509,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     )
     config["library_root"] = str(args.library_root.resolve()) if args.library_root else ""
 
-    runtime_config = analysis_dir / "config.quicken.yaml"
+    runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
     return runtime_config

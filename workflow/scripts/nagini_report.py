@@ -1,4 +1,4 @@
-"""Create a dependency-free XLSX summary for a quicken analysis.
+"""Create a dependency-free XLSX summary for a nagini analysis.
 
 The writer uses only Python's standard library.  This keeps report generation
 available in the same offline runtime as the other pipeline helper scripts.
@@ -380,13 +380,13 @@ def write_xlsx(path, sheets):
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
             'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
             'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-            '<dc:title>quicken analysis report</dc:title><dc:creator>quicken</dc:creator>'
+            '<dc:title>nagini analysis report</dc:title><dc:creator>nagini</dc:creator>'
             f'<dcterms:created xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:created></cp:coreProperties>'
         ),
         "docProps/app.xml": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-            '<Application>quicken</Application></Properties>'
+            '<Application>nagini</Application></Properties>'
         ),
     }
     for index, (_name, rows) in enumerate(sheets, 1):
@@ -461,7 +461,7 @@ def run_from_snakemake(snakemake):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a quicken XLSX report")
+    parser = argparse.ArgumentParser(description="Create a nagini XLSX report")
     parser.add_argument("--output", required=True)
     parser.add_argument("--sample", required=True)
     parser.add_argument("--sample-type", required=True)

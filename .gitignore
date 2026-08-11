@@ -10,10 +10,10 @@ reports
 logs
 benchmarks
 vendor/
-config.quicken.yaml
+config.nagini.yaml
 run_metadata.yaml
 site_config.yaml
 reference_files.yaml
 describe_workflow.rst
 describe_jupyter_notebook.txt
-quicken
+nagini

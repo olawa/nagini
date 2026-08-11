@@ -135,7 +135,7 @@ rule bcftools_norm_mutect2:
     container:
         config.get("bcftools_norm_mutect2", {}).get("container", config["default_container"])
     conda:
-        "../envs/quicken.yaml"
+        "../envs/nagini.yaml"
     message:
         "{rule}: normalize filtered Mutect2 calls for {wildcards.sample}_{wildcards.type}"
     shell:

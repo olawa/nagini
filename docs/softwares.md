@@ -19,24 +19,24 @@ Mutect2-efterbehandling, VEP, SV-sammanfattning och Excelrapportering.
 | `gatk_filter_mutect_calls` | GATK FilterMutectCalls | Filtrerar den sammanfogade Mutect2-VCF:en med den sammanslagna statistiken. |
 | `bcftools_norm_mutect2` | bcftools norm/index | Vänsterjusterar, normaliserar och delar multialleliska varianter. |
 | `vep_annotate_mutect2` | Ensembl VEP | Valfri offline-annotering mot en referenskompatibel cache. |
-| `quicken_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
+| `nagini_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
 
 Shell-/script-reglerna har `container`, `conda`, logg, benchmark och de fem
 standardresurserna. Mosdepth-reglerna använder i stället den pinnade Hydra-
-wrapperns egna miljödefinition. Conda-fallback finns i `envs/quicken.yaml`,
+wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
 `envs/gatk.yaml` och `envs/vep.yaml`.
 
 ## Hydra-moduler
 
-| Modul | Tag i quicken | Användning |
+| Modul | Tag i nagini | Användning |
 | --- | --- | --- |
 | alignment | `v0.8.0` | minimap2-index |
 | cnv_sv | `v3.2.1` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth, target-BED mosdepth, MultiQC |
-| snv_indels | `v2.1.0-quicken` | BED-split, Mutect2, bcftools concat, tabix |
+| snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, bcftools concat, tabix |
 | annotation | `v1.4.1` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
 
-`v2.1.0-quicken` är en lokal kompatibilitetstagg från Hydra
+`v2.1.0-nagini` är en lokal kompatibilitetstagg från Hydra
 `snv_indels v2.1.0`; patchen tar bort en oanvänd DeepTrio-include som annars
 ger parsefel med Snakemake 7.32.4. Patchfilen finns i
 `build/patches/snv_indels_v2.1.0_snakemake7.patch`.
