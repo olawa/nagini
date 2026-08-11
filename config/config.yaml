@@ -1,7 +1,136 @@
 ---
+# Generic Ubuntu/offline-oriented configuration. Run Snakemake from the
+# quicken repository root so these relative paths resolve as written.
+hydra_local_path: "vendor"
+
+samples: "config/samples.tsv"
+units: "config/units.tsv"
 output: "config/output_files.yaml"
 resources: "config/resources.yaml"
-samples: "samples.tsv"
-units: "units.tsv"
+default_container: "docker://hydragenetics/common:3.1.1"
 
-default_container: "docker://hydragenetics/common:0.1.9"
+modules:
+  alignment: "v0.8.0"
+  annotation: "v1.4.1"
+  cnv_sv: "v3.2.1"
+  qc: "v0.8.0"
+  # Local compatibility tag derived from Hydra snv_indels v2.1.0; see
+  # build/patches/snv_indels_v2.1.0_snakemake7.patch.
+  snv_indels: "v2.1.0-quicken"
+
+reference_build: "hg38"
+references:
+  hg38:
+    # Replace these paths with the local reference bundle you have prepared.
+    fasta: "references/hg38/GRCh38.fa"
+    fai: "references/hg38/GRCh38.fa.fai"
+    dict: "references/hg38/GRCh38.dict"
+    design_bed: "references/hg38/targets.bed"
+    sv_annotation_bed: ""
+    chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
+    skip_chrs: [chrM]
+  hs1:
+    # No hs1/T2T path was present in the existing workspace configs; fill in
+    # this bundle before selecting reference_build: hs1.
+    fasta: "references/hs1/chm13v2.0.fa"
+    fai: "references/hs1/chm13v2.0.fa.fai"
+    dict: "references/hs1/chm13v2.0.dict"
+    design_bed: "references/hs1/targets.bed"
+    sv_annotation_bed: ""
+    chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
+    skip_chrs: [chrM]
+
+# Passed verbatim to minimap2. Add/remove methylation- or SAM-related flags
+# here, for example --MD or -y, according to the basecaller and downstream
+# modification workflow. The alignment rule also adds an @RG line by default.
+minimap2_align:
+  preset: "map-ont"
+  extra: "-y -Y --MD"
+  read_group: ""
+  container: "docker://hydragenetics/minimap2:2.26"
+
+minimap2_index:
+  container: "docker://hydragenetics/common:3.1.1"
+
+sniffles2_call:
+  container: "docker://hydragenetics/sniffles2:2.2"
+  tandem_repeats: ""
+  extra: ""
+
+samtools_fastq:
+  # -T carries MM/ML tags into FASTQ comments when the input BAM contains
+  # them. Set to "-n" if the installed samtools cannot copy these tags.
+  extra: "-n -T MM,ML"
+
+mosdepth:
+  by: "500"
+  container: "docker://hydragenetics/mosdepth:0.3.2"
+  extra: "--fast-mode --no-per-base"
+
+mosdepth_bed:
+  container: "docker://hydragenetics/mosdepth:0.3.2"
+  extra: ""
+
+cramino:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: ""
+
+gatk_mutect2:
+  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  # Mutect2 is retained because it is part of the requested analysis, but
+  # its ONT error model and filtering require validation for the intended use.
+  extra: ""
+
+gatk_merge_mutect_stats:
+  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  extra: ""
+
+gatk_filter_mutect_calls:
+  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  extra: ""
+
+bcftools_norm_mutect2:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: "--multiallelics -both --check-ref w"
+
+# VEP is optional because its offline cache must match the selected reference.
+# The normalized filtered VCF is used in the report when this is false.
+annotate_small_variants_with_vep: false
+vep:
+  container: "docker://hydragenetics/vep:111.0"
+  vep_cache: ""
+  mode: "--offline --cache --merged"
+  extra: "--assembly GRCh38 --check_existing --pick --variant_class --symbol --hgvs"
+
+quicken_excel_report:
+  # The report writer uses only Python's standard library.
+  container: "docker://hydragenetics/common:3.1.1"
+
+snpeff:
+  container: "docker://hydragenetics/snpeff:5.0"
+  db: ""
+  extra: "-nodownload"
+
+simple_sv_annotation:
+  container: "docker://hydragenetics/simple_sv_annotation:2019.02.18"
+  panel: ""
+  fusion_pairs: ""
+
+annotate_small_variants: false
+annotate_svs: false
+
+multiqc:
+  container: "docker://hydragenetics/multiqc:1.11"
+  use_input_files_only: true
+  reports:
+    nanopore:
+      included_unit_types: [N, T, R]
+      qc_files:
+        - "qc/cramino/{sample}_{type}.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+        - "reports/sv_summary/{sample}_{type}.tsv"

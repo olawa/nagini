@@ -1,4 +1,48 @@
-$schema: "http://json-schema.org/draft-04/schema#"
-description: snakemake rule input and output files description file
+$schema: "http://json-schema.org/draft-07/schema#"
+description: Input/output descriptions for quicken-specific rules.
 type: object
 properties:
+  stage_aligned_bam:
+    $ref: "#/definitions/rule_io"
+  minimap2_fastq_align:
+    $ref: "#/definitions/rule_io"
+  minimap2_unmapped_bam_align:
+    $ref: "#/definitions/rule_io"
+  samtools_merge_bam:
+    $ref: "#/definitions/rule_io"
+  mosdepth_genome:
+    $ref: "#/definitions/rule_io"
+  mosdepth_targets:
+    $ref: "#/definitions/rule_io"
+  sv_summary:
+    $ref: "#/definitions/rule_io"
+  gatk_merge_mutect_stats:
+    $ref: "#/definitions/rule_io"
+  gatk_filter_mutect_calls:
+    $ref: "#/definitions/rule_io"
+  bcftools_norm_mutect2:
+    $ref: "#/definitions/rule_io"
+  vep_annotate_mutect2:
+    $ref: "#/definitions/rule_io"
+  quicken_excel_report:
+    $ref: "#/definitions/rule_io"
+additionalProperties: true
+definitions:
+  rule_io:
+    type: object
+    properties:
+      input:
+        type: object
+        description: Named input files for the rule.
+        additionalProperties:
+          type: string
+      output:
+        type: object
+        description: Named output files for the rule.
+        additionalProperties:
+          type: string
+      params:
+        type: object
+        description: Configurable command parameters.
+        additionalProperties: true
+    additionalProperties: true

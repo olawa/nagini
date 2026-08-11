@@ -1,0 +1,2 @@
+sample	type	platform	processing_unit	barcode	input_type	fastq1	fastq2	bam	methylation	run_id	basecalling_model
+example	N	ONT	PU1	NB	unmapped_bam	UNUSED	UNUSED	../mitochondrial/.tests/integration/alignment/samtools_merge_bam/NA12878_N.bam	No	run_001	sup

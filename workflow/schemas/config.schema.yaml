@@ -1,20 +1,126 @@
-$schema: "http://json-schema.org/draft-04/schema#"
-description: snakemake configuration file
+$schema: "http://json-schema.org/draft-07/schema#"
+description: Configuration for the quicken Nanopore pipeline
 type: object
 properties:
+  hydra_local_path:
+    type: string
+    description: Local root containing hydra-genetics/<module> checkouts for offline execution.
   samples:
     type: string
   units:
     type: string
   output:
     type: string
-    description: output yaml/json file defining expected output from pipeline
+    description: YAML/JSON output specification.
   resources:
     type: string
-    description: Path to resources.yaml file
+    description: Resource configuration file.
   default_container:
     type: string
-    description: name or path to a default docker/singularity container
+    description: Default Docker/Singularity/Apptainer image.
+  reference_build:
+    type: string
+    enum: [hg38, hs1]
+  references:
+    type: object
+    description: Reference paths keyed by reference_build.
+    properties:
+      hg38:
+        $ref: "#/definitions/reference"
+      hs1:
+        $ref: "#/definitions/reference"
+    required: [hg38, hs1]
+  modules:
+    type: object
+    description: Pinned Hydra-Genetics module tags.
+    additionalProperties:
+      type: string
+  annotate_small_variants:
+    type: boolean
+    description: Enable the legacy SnpEff small-variant branch.
+  annotate_small_variants_with_vep:
+    type: boolean
+    description: Annotate normalized filtered small variants with an offline VEP cache.
+  annotate_svs:
+    type: boolean
+  gatk_merge_mutect_stats:
+    $ref: "#/definitions/tool_config"
+  gatk_filter_mutect_calls:
+    $ref: "#/definitions/tool_config"
+  bcftools_norm_mutect2:
+    $ref: "#/definitions/tool_config"
+  quicken_excel_report:
+    $ref: "#/definitions/tool_config"
+  vep:
+    type: object
+    properties:
+      container:
+        type: string
+      vep_cache:
+        type: string
+      mode:
+        type: string
+      extra:
+        type: string
+      benchmark_repeats:
+        type: integer
+        minimum: 1
+    additionalProperties: true
+  minimap2_align:
+    type: object
+    properties:
+      preset:
+        type: string
+      extra:
+        type: string
+      read_group:
+        type: string
+  output_directory:
+    type: string
+  multiqc:
+    type: object
+  reference:
+    type: object
+  resources_config:
+    type: object
+  default_resources:
+    type: object
+additionalProperties: true
+definitions:
+  tool_config:
+    type: object
+    properties:
+      container:
+        type: string
+      extra:
+        type: string
+      benchmark_repeats:
+        type: integer
+        minimum: 1
+    additionalProperties: true
+  reference:
+    type: object
+    properties:
+      fasta:
+        type: string
+      fai:
+        type: string
+      dict:
+        type: string
+      design_bed:
+        type: string
+      sv_annotation_bed:
+        type: string
+      chromosomes:
+        type: array
+        items:
+          type: string
+      skip_chrs:
+        type: array
+        items:
+          type: string
+    required: [fasta, fai, dict, design_bed, chromosomes]
+
 
 required:
   - samples
@@ -22,4 +128,6 @@ required:
   - output
   - resources
   - default_container
-
+  - reference_build
+  - references
+  - modules

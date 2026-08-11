@@ -1,24 +1,48 @@
-$schema: "http://json-schema.org/draft-04/schema#"
-description: snakemake configuration file
+$schema: "http://json-schema.org/draft-07/schema#"
+description: Resource definitions used by quicken and its Hydra modules.
 type: object
 properties:
   default_resources:
+    $ref: "#/definitions/resources"
+  stage_aligned_bam:
+    $ref: "#/definitions/resources"
+  minimap2_fastq_align:
+    $ref: "#/definitions/resources"
+  minimap2_unmapped_bam_align:
+    $ref: "#/definitions/resources"
+  samtools_merge_bam:
+    $ref: "#/definitions/resources"
+  mosdepth:
+    $ref: "#/definitions/resources"
+  mosdepth_bed:
+    $ref: "#/definitions/resources"
+  sv_summary:
+    $ref: "#/definitions/resources"
+  gatk_merge_mutect_stats:
+    $ref: "#/definitions/resources"
+  gatk_filter_mutect_calls:
+    $ref: "#/definitions/resources"
+  bcftools_norm_mutect2:
+    $ref: "#/definitions/resources"
+  vep:
+    $ref: "#/definitions/resources"
+  quicken_excel_report:
+    $ref: "#/definitions/resources"
+additionalProperties: true
+
+required: [default_resources]
+definitions:
+  resources:
     type: object
     properties:
       mem_mb:
         type: integer
-        description: default memory used for a rule
       mem_per_cpu:
         type: integer
-        description: default memory used per cpu for a rule
       partition:
         type: string
-        description: default partition to use on the cluser for a rule
       threads:
         type: integer
-        description: default number of threads that will be used by a rule
       time:
         type: string
-        description: default max execution time for a rule
-required:
-  - default_resources
+    additionalProperties: true

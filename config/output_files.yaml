@@ -1,5 +1,109 @@
 ---
- files: 
-   - name: "_copy_samples_tsv"
-     output: "result/samples.tsv"
-     input: "samples.tsv"
+directory: "."
+files:
+  - name: aligned BAM
+    input: null
+    output: "alignment/quicken_bam/{sample}_{type}.bam"
+  - name: aligned BAM index
+    input: null
+    output: "alignment/quicken_bam/{sample}_{type}.bam.bai"
+  - name: read and sequence statistics
+    input: null
+    output: "qc/cramino/{sample}_{type}.txt"
+  - name: whole genome coverage summary
+    input: null
+    output: "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
+  - name: whole genome coverage regions
+    input: null
+    output: "qc/mosdepth/{sample}_{type}.regions.bed.gz"
+  - name: whole genome coverage distribution
+    input: null
+    output: "qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
+  - name: whole genome window distribution
+    input: null
+    output: "qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
+  - name: target region coverage summary
+    input: null
+    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+  - name: target region per-base coverage BED
+    input: null
+    output: "qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz"
+  - name: target coverage distribution
+    input: null
+    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+  - name: target region distribution
+    input: null
+    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+  - name: Sniffles2 structural variant VCF
+    input: null
+    output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
+  - name: Sniffles2 structural variant index
+    input: null
+    output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
+  - name: Sniffles2 SNF evidence
+    input: null
+    output: "cnv_sv/sniffles2_call/{sample}_{type}.snf"
+  - name: structural variant summary
+    input: null
+    output: "reports/sv_summary/{sample}_{type}.tsv"
+  - name: translocation summary
+    input: null
+    output: "reports/sv_summary/{sample}_{type}.translocations.tsv"
+  - name: structural variant summary JSON
+    input: null
+    output: "reports/sv_summary/{sample}_{type}.json"
+  - name: Mutect2 merged unfiltered VCF
+    input: null
+    output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
+  - name: Mutect2 merged VCF index
+    input: null
+    output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz.tbi"
+  - name: Mutect2 filtered VCF
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz"
+  - name: Mutect2 filtered VCF index
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz.tbi"
+  - name: Mutect2 filtering statistics
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filteringStats.tsv"
+  - name: Mutect2 normalized filtered VCF
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+  - name: Mutect2 normalized filtered VCF index
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+  - name: Mutect2 VEP annotation
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    when: annotate_small_variants_with_vep
+  - name: Mutect2 VEP annotation index
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    when: annotate_small_variants_with_vep
+  - name: Mutect2 VEP statistics
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    when: annotate_small_variants_with_vep
+  - name: Mutect2 SnpEff annotation
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"
+    when: annotate_small_variants
+  - name: Mutect2 SnpEff statistics
+    input: null
+    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff.csv"
+    when: annotate_small_variants
+  - name: Sniffles2 SnpEff annotation
+    input: null
+    output: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.vcf.gz"
+    when: annotate_svs
+  - name: Sniffles2 simple SV annotation
+    input: null
+    output: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.ss_annotated.vcf"
+    when: annotate_svs
+  - name: MultiQC Nanopore report
+    input: null
+    output: "qc/multiqc/multiqc_nanopore.html"
+  - name: Quicken Excel report
+    input: null
+    output: "reports/{sample}_{type}.quicken_report.xlsx"

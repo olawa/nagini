@@ -1,0 +1,104 @@
+---
+default_resources:
+  threads: 1
+  time: "24:00:00"
+  mem_mb: 6144
+  mem_per_cpu: 6144
+  partition: "core,core_bkup"
+
+stage_aligned_bam:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+minimap2_fastq_align:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+minimap2_unmapped_bam_align:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+samtools_merge_bam:
+  threads: 8
+  time: "12:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+sniffles2_call:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+cramino:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+mosdepth:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+mosdepth_bed:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+gatk_mutect2:
+  threads: 8
+  time: "48:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 8192
+  partition: "core,core_bkup"
+gatk_merge_mutect_stats:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 16384
+  partition: "core,core_bkup"
+gatk_filter_mutect_calls:
+  threads: 1
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 32768
+  partition: "core,core_bkup"
+bcftools_concat:
+  threads: 2
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+bcftools_norm_mutect2:
+  threads: 2
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 8192
+  partition: "core,core_bkup"
+vep:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 8192
+  partition: "core,core_bkup"
+quicken_excel_report:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: "core,core_bkup"
+sv_summary:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: "core,core_bkup"

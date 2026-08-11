@@ -1,8 +1,91 @@
 ---
-
 default_resources:
   threads: 1
   time: "12:00:00"
-  mem_mb: 1024
-  mem_per_cpu: 3072
+  mem_mb: 4096
+  mem_per_cpu: 4096
+  partition: core
+
+stage_aligned_bam:
+  threads: 2
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+minimap2_fastq_align:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+minimap2_unmapped_bam_align:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+samtools_merge_bam:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+mosdepth:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+mosdepth_bed:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+sv_summary:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 4096
+  mem_per_cpu: 4096
+  partition: core
+
+gatk_merge_mutect_stats:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: core
+
+gatk_filter_mutect_calls:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 16384
+  partition: core
+
+bcftools_norm_mutect2:
+  threads: 2
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+vep:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 8192
+  partition: core
+
+quicken_excel_report:
+  threads: 1
+  time: "01:00:00"
+  mem_mb: 4096
+  mem_per_cpu: 4096
   partition: core

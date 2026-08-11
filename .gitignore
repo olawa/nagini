@@ -1,6 +1,15 @@
 .eggs
 __pycache__
 .snakemake
+results
+alignment
+qc
+cnv_sv
+snv_indels
+reports
+logs
+benchmarks
+vendor/
 describe_workflow.rst
 describe_jupyter_notebook.txt
 quicken

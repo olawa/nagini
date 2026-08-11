@@ -3,22 +3,39 @@ __copyright__ = "Copyright 2026, Ola Wallerman"
 __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
-import itertools
-import numpy as np
+"""Pipeline-wide configuration, input handling and output compilation.
+
+The unit table deliberately contains an ``input_type`` column.  This keeps
+the three input paths explicit:
+
+* ``fastq`` -> minimap2 alignment
+* ``unmapped_bam`` -> samtools fastq, then minimap2 alignment
+* ``aligned_bam`` -> copied and indexed, never realigned
+
+Hydra modules are imported after this file, so the selected reference is
+available to every module as ``config["reference"]``.
+"""
+
+import json
+import os
 import pathlib
+import re
+import shlex
+import sys
+from datetime import datetime
+
 import pandas as pd
 import yaml
-from datetime import datetime
-from snakemake.utils import validate
-from snakemake.utils import min_version
+from snakemake.exceptions import WorkflowError
+from snakemake.utils import min_version, validate
 
-from hydra_genetics.utils.resources import load_resources
-from hydra_genetics.utils.samples import *
-from hydra_genetics.utils.units import *
-
+from hydra_genetics import min_version as hydra_min_version
 from hydra_genetics.utils.misc import export_config_as_file
-from hydra_genetics.utils.software_versions import add_version_files_to_multiqc
+from hydra_genetics.utils.misc import get_module_snakefile
+from hydra_genetics.utils.resources import load_resources
+from hydra_genetics.utils.samples import get_samples
 from hydra_genetics.utils.software_versions import add_software_version_to_config
+from hydra_genetics.utils.software_versions import add_version_files_to_multiqc
 from hydra_genetics.utils.software_versions import export_pipeline_version_as_file
 from hydra_genetics.utils.software_versions import export_software_version_as_file
 from hydra_genetics.utils.software_versions import get_pipeline_version
@@ -26,157 +43,249 @@ from hydra_genetics.utils.software_versions import touch_pipeline_version_file_n
 from hydra_genetics.utils.software_versions import touch_software_version_file
 from hydra_genetics.utils.software_versions import use_container
 
+
+hydra_min_version("3.0.0")
 min_version("7.8.0")
 
-### Set and validate config file
 
 if not workflow.overwrite_configfiles:
-    sys.exit("At least one config file must be passed using --configfile/--configfiles, by command line or a profile!")
+    sys.exit("Pass a config file with --configfile or --configfiles.")
 
 try:
     validate(config, schema="../schemas/config.schema.yaml")
-except WorkflowError as we:
-    # Probably a validation error, but the original exception in lost in
-    # snakemake. Pull out the most relevant information instead of a potentially
-    # *very* long error message.
-    if not we.args[0].lower().startswith("error validating config file"):
+except WorkflowError as error:
+    if not error.args[0].lower().startswith("error validating config file"):
         raise
-    error_msg = "\n".join(we.args[0].splitlines()[:2])
-    parent_rule_ = we.args[0].splitlines()[3].split()[-1]
-    if parent_rule_ == "schema:":
+    error_msg = "\n".join(error.args[0].splitlines()[:2])
+    parent_schema_path = error.args[0].splitlines()[3].split()[-1]
+    if parent_schema_path == "schema:":
         sys.exit(error_msg)
-    else:
-        schema_hiearachy = parent_rule_.split()[-1]
-        schema_section = ".".join(re.findall(r"\['([^']+)'\]", schema_hiearachy)[1::2])
-        sys.exit(f"{error_msg} in {schema_section}")
+    schema_hierarchy = parent_schema_path.split()[-1]
+    schema_section = ".".join(re.findall(r"\['([^']+)'\]", schema_hierarchy)[1::2])
+    sys.exit(f"{error_msg} in {schema_section}")
 
-date_string = datetime.now().strftime('%Y%m%d--%H-%M-%S')
+
+reference_build = config.get("reference_build", "hg38")
+references = config.get("references", {})
+if reference_build not in references:
+    raise WorkflowError(
+        f"reference_build={reference_build} is not defined in config['references']. "
+        f"Available builds: {', '.join(sorted(references))}"
+    )
+config["reference"] = references[reference_build]
+config["reference"]["build"] = reference_build
+
+if config.get("annotate_small_variants_with_vep", False) and not config.get("vep", {}).get("vep_cache"):
+    raise WorkflowError(
+        "annotate_small_variants_with_vep is true, but vep.vep_cache is empty. "
+        "Configure a reference-compatible offline VEP cache or disable VEP annotation."
+    )
+
+
+date_string = datetime.now().strftime("%Y%m%d--%H-%M-%S")
 pipeline_version = get_pipeline_version(workflow, pipeline_name="quicken")
-version_files = touch_pipeline_version_file_name(pipeline_version, date_string=date_string, directory="results/versions/software")
+version_files = touch_pipeline_version_file_name(
+    pipeline_version,
+    date_string=date_string,
+    directory="results/versions/software",
+)
+update_config = config
 if use_container(workflow):
-    version_files.append(touch_software_version_file(config, date_string=date_string, directory="results/versions/software"))
+    version_files.append(
+        touch_software_version_file(
+            config,
+            date_string=date_string,
+            directory="results/versions/software",
+        )
+    )
 add_version_files_to_multiqc(config, version_files)
 
+
 onstart:
-    export_pipeline_version_as_file(pipeline_version, date_string=date_string, directory="results/versions/software")
-    # Make sure that the user have the requested containers to be used
+    export_pipeline_version_as_file(
+        pipeline_version,
+        date_string=date_string,
+        directory="results/versions/software",
+    )
     if use_container(workflow):
-        # From the config retrieve all dockers used and parse labels for software versions. Add
-        # this information to config dict.
         update_config, software_info = add_software_version_to_config(config, workflow, False)
-        # Print all softwares used as files. Additional parameters that can be set
-        # - directory, default value: software_versions
-        # - file_name_ending, default value: mqc_versions.yaml
-        # date_string, a string that will be added to the folder name to make it unique (preferably a timestamp)
-        export_software_version_as_files(software_info, date_string=date_string, directory="results/versions/software")
-    # print config dict as a file. Additional parameters that can be set
-    # output_file, default config
-    # output_directory, default = None, i.e no folder
-    # date_string, a string that will be added to the folder name to make it unique (preferably a timestamp)
+        export_software_version_as_file(
+            software_info,
+            date_string=date_string,
+            directory="results/versions/software",
+        )
     export_config_as_file(update_config, date_string=date_string, directory="results/versions")
 
-### Read and validate resources file
 
 config = load_resources(config, config["resources"])
 validate(config, schema="../schemas/resources.schema.yaml")
 
-
-### Read and validate samples file
-
-samples = pd.read_table(config["samples"], dtype=str).set_index("sample", drop=False)
+samples = pd.read_table(config["samples"], dtype=str).fillna("").set_index("sample", drop=False)
 validate(samples, schema="../schemas/samples.schema.yaml")
 
-### Read and validate units file
-
-units = (
-    pandas.read_table(config["units"], dtype=str)
-    .set_index(["sample", "type", "flowcell", "lane", "barcode"], drop=False)
-    .sort_index()
-)
-
+# Keep this dataframe flat.  Hydra's ONT modules index the same table in
+# their own namespace, while the custom input rules need input_type as well.
+units = pd.read_table(config["units"], dtype=str).fillna("")
 validate(units, schema="../schemas/units.schema.yaml")
 
-### Read and validate output file
-
-with open(config["output"]) as output:
+with open(config["output"]) as output_file:
     if config["output"].endswith("json"):
-        output_spec = json.load(output)
-    elif config["output"].endswith("yaml") or config["output"].endswith("yml"):
-        output_spec = yaml.safe_load(output.read())
-
+        output_spec = json.load(output_file)
+    else:
+        output_spec = yaml.safe_load(output_file.read())
 validate(output_spec, schema="../schemas/output_files.schema.yaml")
 
 
-### Set wildcard constraints
 wildcard_constraints:
-    sample="|".join(samples.index),
+    sample="|".join(re.escape(str(sample)) for sample in samples.index),
     type="N|T|R",
+    processing_unit="[A-Za-z0-9_.-]+",
+    barcode="[A-Za-z0-9+_.-]+",
+
+
+def _unit_rows(sample, unit_type, processing_unit=None, barcode=None):
+    """Return unit rows for a sample/type and optional ONT unit key."""
+
+    rows = units[(units["sample"] == sample) & (units["type"] == unit_type)]
+    if processing_unit is not None:
+        rows = rows[rows["processing_unit"] == processing_unit]
+    if barcode is not None:
+        rows = rows[rows["barcode"] == barcode]
+    return rows
+
+
+def get_unit(wildcards):
+    rows = _unit_rows(
+        wildcards.sample,
+        wildcards.type,
+        getattr(wildcards, "processing_unit", None),
+        getattr(wildcards, "barcode", None),
+    )
+    if len(rows) != 1:
+        raise WorkflowError(
+            "Expected exactly one units.tsv row for "
+            f"sample={wildcards.sample}, type={wildcards.type}, "
+            f"processing_unit={getattr(wildcards, 'processing_unit', None)}, "
+            f"barcode={getattr(wildcards, 'barcode', None)}; found {len(rows)}."
+        )
+    return rows.iloc[0]
+
+
+def get_unit_input(wildcards, column):
+    row = get_unit(wildcards)
+    value = str(row.get(column, "")).strip()
+    if value in {"", ".", "NA", "nan", "None"}:
+        raise WorkflowError(
+            f"units.tsv column {column} is empty for "
+            f"{wildcards.sample}/{wildcards.type}/{wildcards.processing_unit}/{wildcards.barcode}."
+        )
+    return value
+
+
+def get_unit_input_type(wildcards):
+    return str(get_unit(wildcards)["input_type"]).strip().lower()
+
+
+def get_unit_alignment_path(row):
+    suffix = {
+        "fastq": "fastq",
+        "unmapped_bam": "unmapped_bam",
+        "aligned_bam": "aligned_bam",
+    }.get(str(row["input_type"]).strip().lower())
+    if suffix is None:
+        raise WorkflowError(
+            f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam or aligned_bam."
+        )
+    return "alignment/quicken_align/{}_{}_{}_{}.{}.bam".format(
+        row["sample"],
+        row["type"],
+        row["processing_unit"],
+        row["barcode"],
+        suffix,
+    )
+
+
+def get_unit_alignment_bams(wildcards):
+    rows = _unit_rows(wildcards.sample, wildcards.type)
+    if rows.empty:
+        raise WorkflowError(f"No units.tsv rows for {wildcards.sample}/{wildcards.type}.")
+    return [get_unit_alignment_path(row) for _, row in rows.iterrows()]
+
+
+def get_reference_index():
+    fasta_name = os.path.basename(config["reference"]["fasta"])
+    preset = config.get("minimap2_align", {}).get("preset", "map-ont")
+    return "alignment/minimap2_index/{}.{}.mmi".format(fasta_name, preset)
+
+
+def get_minimap2_read_group(wildcards):
+    configured = config.get("minimap2_align", {}).get("read_group", "")
+    if configured:
+        return configured.format(
+            sample=wildcards.sample,
+            type=wildcards.type,
+            processing_unit=wildcards.processing_unit,
+            barcode=wildcards.barcode,
+        )
+    return (
+        r"@RG\tID:{sample}_{type}_{processing_unit}_{barcode}"
+        r"\tSM:{sample}_{type}\tPL:ONT"
+    ).format(
+        sample=wildcards.sample,
+        type=wildcards.type,
+        processing_unit=wildcards.processing_unit,
+        barcode=wildcards.barcode,
+    )
+
+
+def get_reference_chromosomes():
+    chromosomes = config["reference"].get("chromosomes", [])
+    if chromosomes:
+        return list(chromosomes)
+    fai = config["reference"].get("fai", f"{config['reference']['fasta']}.fai")
+    if not os.path.exists(fai):
+        raise WorkflowError(
+            "No reference.chromosomes configured and the reference .fai is not available: "
+            f"{fai}"
+        )
+    with open(fai) as fai_file:
+        return [line.split("\t", 1)[0] for line in fai_file if line.strip()]
+
+
+reference_chromosomes = get_reference_chromosomes()
+
+
+def get_small_variant_report_vcf(wildcards):
+    """Return the normalized VCF, preferring VEP annotation when enabled."""
+    suffix = ".filtered.norm.vep.vcf.gz" if config.get("annotate_small_variants_with_vep", False) else ".filtered.norm.vcf.gz"
+    return f"snv_indels/mutect2_postprocess/{wildcards.sample}_{wildcards.type}{suffix}"
+
+
+def get_small_variant_report_vcf_index(wildcards):
+    return f"{get_small_variant_report_vcf(wildcards)}.tbi"
+
+
+def get_unit_types_for_sample(sample):
+    return sorted(set(units.loc[units["sample"] == sample, "type"]))
 
 
 def compile_output_file_list(wildcards):
     outdir = pathlib.Path(output_spec.get("directory", "./"))
     output_files = []
-
-    for f in output_spec["files"]:
-        # Please remember to add any additional values down below
-        # that the output strings should be formatted with.
-        outputpaths = set(
-            [
-                f["output"].format(sample=sample, type=unit_type)
-                for sample in get_samples(samples)
-                for unit_type in get_unit_types(units, sample)
-            ]
-        )
-
-        for op in outputpaths:
-            output_files.append(outdir / Path(op))
-
-    return output_files
-
-
-def generate_copy_rules(output_spec):
-    output_directory = pathlib.Path(output_spec.get("directory", "./"))
-    rulestrings = []
-
-    for f in output_spec["files"]:
-        if f["input"] is None:
+    for file_definition in output_spec["files"]:
+        condition = file_definition.get("when")
+        if condition and not config.get(condition, False):
             continue
-
-        rule_name = "_copy_{}".format("_".join(re.split(r"\W{1,}", f["name"].strip().lower())))
-        input_file = pathlib.Path(f["input"])
-        output_file = output_directory / pathlib.Path(f["output"])
-
-        mem_mb = config.get("_copy", {}).get("mem_mb", config["default_resources"]["mem_mb"])
-        mem_per_cpu = config.get("_copy", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])
-        partition = config.get("_copy", {}).get("partition", config["default_resources"]["partition"])
-        threads = config.get("_copy", {}).get("threads", config["default_resources"]["threads"])
-        time = config.get("_copy", {}).get("time", config["default_resources"]["time"])
-        copy_container = config.get("_copy", {}).get("container", config["default_container"])
-
-        rule_code = "\n".join(
-            [
-                f'@workflow.rule(name="{rule_name}")',
-                f'@workflow.input("{input_file}")',
-                f'@workflow.output("{output_file}")',
-                f'@workflow.log("logs/{rule_name}_{output_file.name}.log")',
-                f'@workflow.container("{copy_container}")',
-                f'@workflow.resources(time="{time}", threads={threads}, mem_mb="{mem_mb}", '
-                f'mem_per_cpu={mem_per_cpu}, partition="{partition}")',
-                f'@workflow.shellcmd("{copy_container}")',
-                "@workflow.run\n",
-                f"def __rule_{rule_name}(input, output, params, wildcards, threads, resources, "
-                "log, version, rule, conda_env, container_img, singularity_args, use_singularity, "
-                "env_modules, bench_record, jobid, is_shell, bench_iteration, cleanup_scripts, "
-                "shadow_dir, edit_notebook, conda_base_path, basedir, runtime_sourcecache_path, "
-                "__is_snakemake_rule_func=True):",
-                '\tshell("(cp --preserve=timestamps {input[0]} {output[0]}) &> {log}", bench_record=bench_record, '
-                "bench_iteration=bench_iteration)\n\n",
-            ]
-        )
-
-        rulestrings.append(rule_code)
-
-    exec(compile("\n".join(rulestrings), "copy_result_files", "exec"), workflow.globals)
-
-
-generate_copy_rules(output_spec)
+        allowed_types = file_definition.get("types")
+        for sample in get_samples(samples):
+            for unit_type in get_unit_types_for_sample(sample):
+                if allowed_types and unit_type not in allowed_types:
+                    continue
+                output_files.append(
+                    outdir
+                    / file_definition["output"].format(
+                        sample=sample,
+                        type=unit_type,
+                    )
+                )
+    return output_files

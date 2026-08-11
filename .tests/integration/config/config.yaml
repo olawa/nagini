@@ -1,2 +1,51 @@
 ---
- output: "../../config/output_files.yaml"
+# Test-only overrides layered on top of config/config.yaml.
+samples: ".tests/integration/samples.tsv"
+units: ".tests/integration/units.tsv"
+hydra_local_path: "vendor"
+output: "config/output_files.yaml"
+resources: "config/resources.yaml"
+default_container: "docker://hydragenetics/common:3.1.1"
+modules:
+  alignment: "v0.8.0"
+  annotation: "v1.4.1"
+  cnv_sv: "v3.2.1"
+  qc: "v0.8.0"
+  snv_indels: "v2.1.0-quicken"
+reference_build: "hg38"
+annotate_small_variants_with_vep: false
+vep:
+  vep_cache: ".tests/integration/reference"
+  mode: "--offline --cache"
+  extra: "--assembly GRCh38 --pick --symbol --hgvs"
+multiqc:
+  use_input_files_only: true
+  reports:
+    nanopore:
+      included_unit_types: [N]
+      qc_files:
+        - "qc/cramino/{sample}_{type}.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
+        - "qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+        - "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+        - "reports/sv_summary/{sample}_{type}.tsv"
+references:
+  hg38:
+    fasta: ".tests/integration/reference/test.fa"
+    fai: ".tests/integration/reference/test.fa.fai"
+    dict: ".tests/integration/reference/test.dict"
+    design_bed: ".tests/integration/reference/targets.bed"
+    sv_annotation_bed: ""
+    chromosomes: [chr1]
+    skip_chrs: []
+  hs1:
+    fasta: ".tests/integration/reference/test.fa"
+    fai: ".tests/integration/reference/test.fa.fai"
+    dict: ".tests/integration/reference/test.dict"
+    design_bed: ".tests/integration/reference/targets.bed"
+    sv_annotation_bed: ""
+    chromosomes: [chr1]
+    skip_chrs: []

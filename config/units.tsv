@@ -1,2 +1,2 @@
-sample	type	platform	machine	flowcell	lane	barcode	fastq1	fastq2	adapter
-NA12878	T	Illumina	NextSeq	HCGT	L001	ACG+GCT	f1.fastq.gz	f2.fastq.gz	ACGTGCT
+sample	type	platform	processing_unit	barcode	input_type	fastq1	fastq2	bam	methylation	run_id	basecalling_model
+example	N	ONT	PU1	NB	fastq	/path/to/example.fastq.gz	UNUSED	UNUSED	No	run_001	sup
