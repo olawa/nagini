@@ -5,7 +5,7 @@ labels: bug
 ---
 
 <!--
-# quicken bug report
+# nagini bug report
 
 Hi there!
 

@@ -1,11 +1,11 @@
 ---
 name: Feature request
-about: Suggest an idea for the quicken pipeline
+about: Suggest an idea for the nagini pipeline
 labels: enhancement
 ---
 
 <!--
-# quicken feature request
+# nagini feature request
 
 Hi there!
 

@@ -1,12 +1,12 @@
-# Quicken
+# Nagini
 
-Quicken is an Oxford Nanopore sequencing analysis pipeline. It turns raw or
+Nagini is an Oxford Nanopore sequencing analysis pipeline. It turns raw or
 pre-aligned reads into normalized alignments, quality-control metrics, small
 variant calls, structural variant calls, and a consolidated analysis report.
 
 ## Input modes
 
-Quicken accepts three kinds of sample input:
+Nagini accepts three kinds of sample input:
 
 | Input | Processing |
 | --- | --- |
@@ -23,7 +23,7 @@ target regions, and sample- and unit-level metadata.
 
 ## Analysis
 
-For each sample, Quicken can perform:
+For each sample, Nagini can perform:
 
 - alignment normalization and BAM indexing;
 - read and whole-genome coverage QC;
@@ -40,7 +40,8 @@ For each sample, Quicken can perform:
 
 The workflow produces:
 
-- sorted, indexed BAM files under `alignment/quicken_bam/`;
+- sorted, indexed BAM files under `alignment/quicken_bam/` (the legacy output
+  directory name is retained for compatibility);
 - read and coverage metrics under `qc/`;
 - filtered and normalized SNV/indel VCFs under `snv_indels/`;
 - structural-variant VCFs and summaries under `cnv_sv/` and `reports/`; and

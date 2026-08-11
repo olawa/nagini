@@ -1,4 +1,4 @@
-site_name: quicken
+site_name: nagini
 nav:
   - Introduction: intro.md
   - Softwares: softwares.md

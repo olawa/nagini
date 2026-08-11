@@ -1,6 +1,6 @@
-# Verktyg och Hydra-regler i quicken
+# Verktyg och Hydra-regler i nagini
 
-`quicken` använder i första hand Hydra-Genetics-regler och wrappers. Lokala
+`nagini` använder i första hand Hydra-Genetics-regler och wrappers. Lokala
 regler finns för inputbranching, en wrapper-kompatibel mosdepth-kedja,
 Mutect2-efterbehandling, VEP, SV-sammanfattning och Excelrapportering.
 

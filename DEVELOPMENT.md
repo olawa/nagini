@@ -1,6 +1,6 @@
-# quicken
+# nagini
 
-`quicken` är en Hydra-Genetics/Snakemake-pipeline för Oxford Nanopore-data.
+`nagini` är en Hydra-Genetics/Snakemake-pipeline för Oxford Nanopore-data.
 Den stöder FASTQ, oalignerad BAM och alignad BAM, referensbyggena hg38 och
 T2T/hs1, minimap2-alignering, coverage-QC, filtrerade och normaliserade
 Mutect2-anrop, Sniffles2, valfri VEP-annotering och en samlad Excelrapport.
@@ -26,33 +26,33 @@ Pipeline-scaffolden skapades med:
 
 ```bash
 hydra-genetics create-pipeline \
-  -n quicken \
+  -n nagini \
   -d "Nanopore pipeline for alignment, QC, small variants and structural variants" \
   -a "Ola Wallerman" \
   -e "ola.wallerman@scilifelab.uu.se" \
   -g olawa \
   --version 0.0.1 \
   --min-snakemake-version 7.8.0 \
-  -o quicken
+  -o nagini
 ```
 
 Egna regler scaffoldades med Hydra `create-rule` och fylldes sedan med
 pipeline-specifik logik:
 
 ```bash
-hydra-genetics create-rule -c stage_aligned_bam -m quicken \
+hydra-genetics create-rule -c stage_aligned_bam -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c minimap2_fastq_align -m quicken \
+hydra-genetics create-rule -c minimap2_fastq_align -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c minimap2_unmapped_bam_align -m quicken \
+hydra-genetics create-rule -c minimap2_unmapped_bam_align -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c merge_bam -t samtools -m quicken \
+hydra-genetics create-rule -c merge_bam -t samtools -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c mosdepth_genome -m quicken \
+hydra-genetics create-rule -c mosdepth_genome -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c mosdepth_targets -m quicken \
+hydra-genetics create-rule -c mosdepth_targets -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c sv_summary -m quicken \
+hydra-genetics create-rule -c sv_summary -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
 ```
 
@@ -148,7 +148,7 @@ SnpEff-grenen kan fortfarande aktiveras separat med
 Första gången krävs nätverk för att lägga Hydra-moduler och wrappers lokalt:
 
 ```bash
-cd quicken
+cd nagini
 ./build/vendor_hydra_dependencies.sh
 ```
 
@@ -187,7 +187,7 @@ För en site-aware körning som samtidigt skapar Hydra-tabeller och sparar alla
 konfigurationsfiler i analyskatalogen:
 
 ```bash
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --site local \
   --inbox-path /data/run_001 \
   --input-type unmapped_bam \
@@ -200,7 +200,7 @@ På Linux-workstationen med den delade referensmappen används i stället
 indexet och kör första provet utan VEP medan cachen färdigställs:
 
 ```bash
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --site workstation \
   --inbox-path /data/run_001 \
   --input-type unmapped_bam \
@@ -222,11 +222,11 @@ rekommenderade reproducerbara vägen när de redan är förberedda.
 Site-aware launcher (rekommenderad):
 
 ```bash
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --site marvin \
   --inbox-path /data/run_001 \
   --input-type unmapped_bam \
-  --analysis-dir /projects/wp2/quicken/run_001 \
+  --analysis-dir /projects/wp2/nagini/run_001 \
   --dry-run
 ```
 
@@ -277,7 +277,7 @@ respektive `units_unmapped.tsv`. För granskning av hela beroendegrafen finns
 
 ## Startscript och Hydra-input
 
-`pipeline_start_scripts/start_quicken.sh` följer samma mönster som CGU:s
+`pipeline_start_scripts/start_nagini.sh` följer samma mönster som CGU:s
 övriga `pipeline_start_scripts`: den tar en inbox, skapar eller återanvänder
 `samples.tsv` och `units.tsv` i analyskatalogen, skriver en körspecifik config
 och startar Snakemake med vald site-profil.
@@ -310,7 +310,7 @@ barcode02,SAMPLE_B,N
 Starta med:
 
 ```bash
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --site workstation \
   --inbox-path /data/run_001/bam_pass \
   --input-type unmapped_bam \
@@ -329,20 +329,20 @@ Exempel:
 
 ```bash
 # Oalignerad ONT-BAM; metadata läses från BAM-headern
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --inbox-path /data/run_001 \
   --input-type unmapped_bam \
   --analysis-dir /data/analysis/run_001
 
 # FASTQ; sample fångas från filnamnets första del före underscore
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --inbox-path /data/fastq \
   --input-type fastq \
   --sample-regex '^(?P<sample>[^_]+)_' \
   --analysis-dir /data/analysis/run_001
 
 # Bara kontrollera DAG:en
-pipeline_start_scripts/start_quicken.sh \
+pipeline_start_scripts/start_nagini.sh \
   --inbox-path /data/run_001 \
   --input-type unmapped_bam \
   --dry-run

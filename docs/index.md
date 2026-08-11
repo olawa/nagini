@@ -1,4 +1,4 @@
-# quicken
+# nagini
 
 En Hydra-Genetics/Snakemake-pipeline för Nanoporedata. Pipelinekörningen kan
 starta från FASTQ, oalignerad BAM eller redan alignad BAM och producerar
