@@ -169,6 +169,32 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(config["dorado"]["kit"], "SQK-RBK114-24")
         self.assertEqual(config["dorado"]["device"], "cuda:all")
 
+    def test_minknow_runtime_config_supports_local_binary(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "minknow"
+        args.dorado_input = Path("/tmp/run/pod5")
+        args.input_dir = args.dorado_input
+        args.dorado_model = "hac"
+        args.basecalling_model = "hac"
+        args.dorado_kit = "SQK-RBK114-24"
+        args.dorado_device = "cuda:all"
+        args.dorado_models_directory = None
+        args.dorado_container = ""
+        args.dorado_binary = "/usr/local/bin/dorado"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["dorado"]["binary"], "/usr/local/bin/dorado")
+        self.assertEqual(config["dorado"]["container"], "none")
+
 
 if __name__ == "__main__":
     unittest.main()

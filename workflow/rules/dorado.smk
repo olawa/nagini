@@ -14,6 +14,20 @@ dorado_barcodes = sorted(
 )
 
 
+def get_dorado_container(wildcards=None):
+    container = config.get("dorado", {}).get("container")
+    if container in ("", None, "none", "None", False, "local"):
+        return None
+    return container
+
+
+def get_dorado_binary(wildcards=None):
+    binary = config.get("dorado", {}).get("binary", "")
+    if binary:
+        return os.path.expanduser(str(binary))
+    return "dorado"
+
+
 rule dorado_basecaller:
     """Basecall a MinKNOW/POD5 directory and retain barcode sequence context."""
     input:
@@ -21,6 +35,7 @@ rule dorado_basecaller:
     output:
         bam="basecalling/dorado/basecalled.bam",
     params:
+        dorado_bin=get_dorado_binary,
         model=config.get("dorado", {}).get("model", "hac"),
         kit=config.get("dorado", {}).get("kit", ""),
         device_arg=(
@@ -55,12 +70,12 @@ rule dorado_basecaller:
         threads=config.get("dorado", {}).get("basecaller_threads", config["default_resources"]["threads"]),
         time=config.get("dorado", {}).get("basecaller_time", config["default_resources"]["time"]),
     container:
-        config.get("dorado", {}).get("container", "docker://ontresearch/dorado:1.3.0")
+        get_dorado_container
     message:
         "{rule}: basecall MinKNOW/POD5 input with Dorado"
     shell:
         r"""
-        dorado basecaller {params.model:q} {input.reads:q} --recursive \
+        {params.dorado_bin} basecaller {params.model:q} {input.reads:q} --recursive \
             --no-trim \
             {params.device_arg} {params.models_directory_arg} \
             {params.extra} > {output.bam} 2> {log}
@@ -74,6 +89,7 @@ rule dorado_demux:
     output:
         demux_dir=directory("basecalling/dorado_demux"),
     params:
+        dorado_bin=get_dorado_binary,
         kit=config.get("dorado", {}).get("kit", ""),
         threads=config.get("dorado", {}).get("demux_threads", config["default_resources"]["threads"]),
         barcodes=" ".join(dorado_barcodes),
@@ -93,7 +109,7 @@ rule dorado_demux:
         threads=config.get("dorado", {}).get("demux_threads", config["default_resources"]["threads"]),
         time=config.get("dorado", {}).get("demux_time", config["default_resources"]["time"]),
     container:
-        config.get("dorado", {}).get("container", "docker://ontresearch/dorado:1.3.0")
+        get_dorado_container
     message:
         "{rule}: demultiplex Dorado BAM output by barcode"
     shell:
@@ -101,7 +117,7 @@ rule dorado_demux:
         raw="{output.demux_dir}.raw"
         rm -rf "$raw" "{output.demux_dir}"
         mkdir -p "$raw" "{output.demux_dir}"
-        dorado demux --output-dir "$raw" --kit-name {params.kit} \
+        {params.dorado_bin} demux --output-dir "$raw" --kit-name {params.kit} \
             --no-trim --emit-summary {params.extra} {input.bam:q} > {log} 2>&1
         for barcode in {params.barcodes}; do
             # A read loop instead of mapfile keeps this working on the bash 3.x
@@ -109,7 +125,7 @@ rule dorado_demux:
             bam_files=()
             while IFS= read -r bam_file; do
                 bam_files+=("$bam_file")
-            done < <(find "$raw" -type f -iname "*${{barcode}}*.bam" -print)
+            done < <(find "$raw" -type f \( -path "*/${barcode}/*.bam" -o -name "${barcode}.bam" -o -name "*${barcode}*.bam" \) -print)
             if [[ "${{#bam_files[@]}}" -eq 0 ]]; then
                 # A barcode listed in the sample sheet can legitimately receive
                 # no reads (failed library, empty well).  Emitting a header-only
