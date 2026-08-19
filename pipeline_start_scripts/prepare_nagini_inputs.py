@@ -72,6 +72,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dorado-container", default="")
     parser.add_argument("--dorado-binary", default="")
     parser.add_argument("--methylation", choices=("Yes", "No"), default="No")
+    parser.add_argument(
+        "--bed-file",
+        "--bed",
+        "--design-bed",
+        dest="bed_file",
+        type=Path,
+        help="Target region BED file (overrides site default). If omitted, any single *.bed in inbox is auto-detected.",
+    )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -587,6 +595,24 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             if not getattr(args, "dorado_container", ""):
                 dorado_settings["container"] = "none"
         config.setdefault("dorado", {}).update(dorado_settings)
+
+    bed_path = None
+    if getattr(args, "bed_file", None):
+        bed_path = str(args.bed_file.resolve())
+    elif getattr(args, "input_dir", None) and args.input_dir.is_dir():
+        bed_files = sorted(args.input_dir.glob("*.bed"))
+        if len(bed_files) == 1:
+            bed_path = str(bed_files[0].resolve())
+
+    if bed_path:
+        ref_build = config.get("reference_build", "hg38")
+        if "references" in config and isinstance(config["references"], dict):
+            if ref_build in config["references"] and isinstance(config["references"][ref_build], dict):
+                config["references"][ref_build]["design_bed"] = bed_path
+        if "reference" in config and isinstance(config["reference"], dict):
+            config["reference"]["design_bed"] = bed_path
+        config["HG38_DESIGN_BED"] = bed_path
+        config["HS1_DESIGN_BED"] = bed_path
 
     runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:

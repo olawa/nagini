@@ -195,6 +195,63 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(config["dorado"]["binary"], "/usr/local/bin/dorado")
         self.assertEqual(config["dorado"]["container"], "none")
 
+    def test_runtime_config_supports_bed_file_override(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "minknow"
+        args.dorado_input = None
+        args.input_dir = Path("/tmp/run")
+        args.dorado_model = ""
+        args.basecalling_model = "hac"
+        args.dorado_kit = ""
+        args.dorado_device = ""
+        args.dorado_models_directory = None
+        args.dorado_container = ""
+        args.dorado_binary = ""
+        args.bed_file = Path("/custom/path/my_targets.bed")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["references"]["hg38"]["design_bed"], "/custom/path/my_targets.bed")
+        self.assertEqual(config["HG38_DESIGN_BED"], "/custom/path/my_targets.bed")
+
+    def test_runtime_config_auto_detects_inbox_bed(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "minknow"
+        args.dorado_input = None
+        args.dorado_model = ""
+        args.basecalling_model = "hac"
+        args.dorado_kit = ""
+        args.dorado_device = ""
+        args.dorado_models_directory = None
+        args.dorado_container = ""
+        args.dorado_binary = ""
+        args.bed_file = None
+
+        with tempfile.TemporaryDirectory() as inbox, tempfile.TemporaryDirectory() as tmpdir:
+            inbox_bed = Path(inbox) / "custom_panel.bed"
+            inbox_bed.write_text("chr1\t100\t200\n")
+            args.input_dir = Path(inbox)
+
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["references"]["hg38"]["design_bed"], str(inbox_bed.resolve()))
+        self.assertEqual(config["HG38_DESIGN_BED"], str(inbox_bed.resolve()))
+
 
 if __name__ == "__main__":
     unittest.main()
