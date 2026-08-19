@@ -108,7 +108,7 @@ sniffles2_call:
   extra: ""
 
 dorado:
-  container: "docker://ontresearch/dorado:1.3.0"
+  container: "docker://ontresearch/dorado:shac8f356489fa8b44b31beba841b84d2879de2088e"
   input: ""
   model: "hac"
   kit: ""

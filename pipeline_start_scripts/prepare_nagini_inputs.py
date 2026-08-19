@@ -69,6 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dorado-kit", default="")
     parser.add_argument("--dorado-device", default="")
     parser.add_argument("--dorado-models-directory", type=Path)
+    parser.add_argument("--dorado-container", default="")
     parser.add_argument("--methylation", choices=("Yes", "No"), default="No")
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument("--force", action="store_true")
@@ -569,7 +570,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     config["library_root"] = str(args.library_root.resolve()) if args.library_root else ""
 
     if getattr(args, "input_type", "") == "minknow":
-        config.setdefault("dorado", {}).update({
+        dorado_settings = {
             "input": str((args.dorado_input or args.input_dir).resolve()),
             "model": args.dorado_model or args.basecalling_model,
             "kit": args.dorado_kit,
@@ -577,7 +578,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             "models_directory": str(args.dorado_models_directory.resolve())
             if args.dorado_models_directory
             else "",
-        })
+        }
+        if getattr(args, "dorado_container", ""):
+            dorado_settings["container"] = args.dorado_container
+        config.setdefault("dorado", {}).update(dorado_settings)
 
     runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:

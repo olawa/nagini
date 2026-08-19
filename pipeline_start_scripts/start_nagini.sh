@@ -30,6 +30,7 @@ run_id=""
 basecalling_model="unknown"
 dorado_device=""
 dorado_models_directory=""
+dorado_container=""
 methylation="No"
 tumor_content=""
 cores=""
@@ -65,6 +66,7 @@ Options:
   --dorado-model MODEL          Alias for --basecalling-model.
   --dorado-device DEVICE        Dorado device, for example cuda:all or cuda:0.
   --dorado-models-directory DIR Directory containing downloaded Dorado models.
+  --dorado-container IMAGE      Override default Dorado Docker/Singularity image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
   --tumor-content FLOAT         Optional value added to samples.tsv.
   --cores N                     Override the profile's core count.
@@ -203,6 +205,11 @@ while [[ $# -gt 0 ]]; do
         --dorado-models-directory)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             dorado_models_directory="$2"
+            shift 2
+            ;;
+        --dorado-container)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_container="$2"
             shift 2
             ;;
         --methylation)
@@ -346,6 +353,7 @@ prepare_cmd=(
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
 [[ -n "$dorado_device" ]] && prepare_cmd+=(--dorado-device "$dorado_device")
 [[ -n "$dorado_models_directory" ]] && prepare_cmd+=(--dorado-models-directory "$dorado_models_directory")
+[[ -n "$dorado_container" ]] && prepare_cmd+=(--dorado-container "$dorado_container")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
 $force_inputs && prepare_cmd+=(--force)

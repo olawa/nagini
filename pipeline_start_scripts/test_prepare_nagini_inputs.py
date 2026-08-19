@@ -162,7 +162,10 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
             config = yaml.safe_load(runtime.read_text())
 
-        self.assertEqual(config["dorado"]["container"], "docker://ontresearch/dorado:1.3.0")
+        self.assertEqual(
+            config["dorado"]["container"],
+            "docker://ontresearch/dorado:shac8f356489fa8b44b31beba841b84d2879de2088e",
+        )
         self.assertEqual(config["dorado"]["kit"], "SQK-RBK114-24")
         self.assertEqual(config["dorado"]["device"], "cuda:all")
 
