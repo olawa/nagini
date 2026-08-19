@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Create Hydra-style input tables and a run-local Nagini config.
 
-Hydra-Genetics can create ONT tables from BAM read groups. FASTQ input does
-not have enough metadata for Hydra to infer the same table, so this helper
-creates the equivalent table using conservative defaults and explicit CLI
-options. Dorado's ``bam_pass/barcodeXX`` layout can be ingested directly when
-``--barcode-map`` supplies the biological sample name for each barcode.
+Hydra-Genetics can create ONT tables from BAM read groups. FASTQ and MinKNOW
+input do not have enough metadata for Hydra to infer the same table, so this
+helper creates the equivalent table using conservative defaults and explicit
+CLI options. Dorado's ``bam_pass/barcodeXX`` layout can be ingested directly
+when ``--barcode-map`` supplies the biological sample name for each barcode.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-files", type=Path)
     parser.add_argument("--library-root", type=Path)
     parser.add_argument(
-        "--input-type", choices=("fastq", "unmapped_bam", "aligned_bam"), required=True
+        "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam"), required=True
     )
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
     parser.add_argument("--sequence-id", default="")
@@ -64,6 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--barcode", default="NB")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--basecalling-model", default="unknown")
+    parser.add_argument("--dorado-input", type=Path)
+    parser.add_argument("--dorado-model", default="")
+    parser.add_argument("--dorado-kit", default="")
+    parser.add_argument("--dorado-device", default="")
+    parser.add_argument("--dorado-models-directory", type=Path)
     parser.add_argument("--methylation", choices=("Yes", "No"), default="No")
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument("--force", action="store_true")
@@ -131,7 +136,7 @@ def read_barcode_map(path: Path, default_type: str) -> dict[str, dict[str, str]]
 
 
 def discover_bams_by_barcode(input_dir: Path) -> dict[str, list[Path]]:
-    """Find BAMs below barcodeXX directories, retaining absolute paths."""
+    """Find BAMs below barcodeXX directories or with barcodeXX filenames."""
 
     bams: defaultdict[str, list[Path]] = defaultdict(list)
     root_barcode = normalize_barcode(input_dir.name)
@@ -145,6 +150,14 @@ def discover_bams_by_barcode(input_dir: Path) -> dict[str, list[Path]]:
             if re.fullmatch(r"barcode\d+", candidate):
                 barcode = candidate
                 break
+        if not barcode:
+            # Dorado demux versions may emit ``barcode01.bam`` directly below
+            # the output directory instead of creating barcode subdirectories.
+            for token in re.findall(r"(?i)(?:barcode|bc)\d+", path.stem):
+                candidate = normalize_barcode(token)
+                if re.fullmatch(r"barcode\d+", candidate):
+                    barcode = candidate
+                    break
         barcode = barcode or root_barcode
         if barcode:
             bams[barcode].append(path.resolve())
@@ -318,6 +331,38 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
     return samples, units
 
 
+def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Create deferred units for Dorado outputs produced by Snakemake."""
+
+    mapping = read_barcode_map(args.barcode_map.resolve(), args.sample_type)
+    run_id = args.run_id or args.sequence_id or args.input_dir.name
+    samples_by_name: dict[str, dict[str, str]] = {}
+    units: list[dict[str, str]] = []
+    for barcode in sorted(mapping):
+        assignment = mapping[barcode]
+        sample_name = assignment["sample"]
+        samples_by_name.setdefault(sample_name, {"sample": sample_name})
+        units.append(
+            {
+                "sample": sample_name,
+                "type": assignment["type"],
+                "platform": "ONT",
+                "machine": "unknown",
+                "processing_unit": f"{barcode}_001",
+                "barcode": "BC",
+                "barcode_name": barcode,
+                "input_type": "dorado_bam",
+                "fastq1": "UNUSED",
+                "fastq2": "UNUSED",
+                "bam": f"basecalling/dorado_demux/{barcode}.bam",
+                "methylation": args.methylation,
+                "run_id": run_id,
+                "basecalling_model": args.basecalling_model,
+            }
+        )
+    return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
+
+
 def run_hydra_create_input_files(args: argparse.Namespace, analysis_dir: Path) -> None:
     command = [
         "hydra-genetics",
@@ -365,7 +410,11 @@ def normalize_bam_tables(
     return samples, units
 
 
-def validate_tables(samples: list[dict[str, str]], units: list[dict[str, str]]) -> None:
+def validate_tables(
+    samples: list[dict[str, str]],
+    units: list[dict[str, str]],
+    allow_deferred_inputs: bool = False,
+) -> None:
     sample_ids = {row.get("sample", "") for row in samples}
     if not sample_ids or "" in sample_ids:
         raise SystemExit("samples.tsv must contain non-empty sample identifiers.")
@@ -381,7 +430,11 @@ def validate_tables(samples: list[dict[str, str]], units: list[dict[str, str]]) 
             raise SystemExit(f"Unit refers to sample absent from samples.tsv: {row['sample']}")
         input_type = row.get("input_type")
         input_path = row.get("fastq1") if input_type == "fastq" else row.get("bam")
-        if not input_path or input_path == "UNUSED" or not Path(input_path).exists():
+        if (
+            not input_path
+            or input_path == "UNUSED"
+            or (not allow_deferred_inputs and not Path(input_path).exists())
+        ):
             raise SystemExit(f"Input file does not exist for unit {key}: {input_path}")
 
 
@@ -515,6 +568,17 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     )
     config["library_root"] = str(args.library_root.resolve()) if args.library_root else ""
 
+    if getattr(args, "input_type", "") == "minknow":
+        config.setdefault("dorado", {}).update({
+            "input": str((args.dorado_input or args.input_dir).resolve()),
+            "model": args.dorado_model or args.basecalling_model,
+            "kit": args.dorado_kit,
+            "device": args.dorado_device,
+            "models_directory": str(args.dorado_models_directory.resolve())
+            if args.dorado_models_directory
+            else "",
+        })
+
     runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
@@ -536,6 +600,11 @@ def main() -> None:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_fastq_tables(args)
+    elif args.input_type == "minknow":
+        if samples_path.exists() and units_path.exists() and not args.force:
+            samples, units = read_tsv(samples_path), read_tsv(units_path)
+        else:
+            samples, units = make_minknow_tables(args)
     elif args.barcode_map:
         if samples_path.exists() and units_path.exists() and not args.force:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
@@ -547,7 +616,7 @@ def main() -> None:
     if args.tumor_content is not None:
         for row in samples:
             row["tumor_content"] = args.tumor_content
-    validate_tables(samples, units)
+    validate_tables(samples, units, allow_deferred_inputs=args.input_type == "minknow")
 
     sample_columns = list(samples[0]) if samples else ["sample"]
     unit_columns = list(BASE_UNIT_COLUMNS)

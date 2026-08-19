@@ -13,6 +13,10 @@ rule stage_aligned_bam:
         bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.aligned_bam.bam.bai",
     params:
         extra=config.get("stage_aligned_bam", {}).get("extra", ""),
+        # GATK identifies the sample from the BAM read-group SM tag.  Existing
+        # aligned BAMs from Dorado commonly have no @RG header, so make the
+        # sample identity explicit while staging the input.
+        read_group=lambda wildcards: get_minimap2_read_group(wildcards),
     log:
         "logs/stage_aligned_bam/{sample}_{type}_{processing_unit}_{barcode}.log",
     benchmark:
@@ -32,9 +36,15 @@ rule stage_aligned_bam:
     conda:
         "../../envs/nagini.yaml"
     message:
-        "{rule}: sort/index an existing aligned BAM; no realignment is performed"
+        "{rule}: add sample metadata and sort/index an existing aligned BAM; no realignment is performed"
     shell:
         """
-        samtools sort -@ {threads} {params.extra} -o {output.bam} {input.bam} &> {log}
+        samtools addreplacerg \
+            -r '{params.read_group}' \
+            -m overwrite_all \
+            -o {output.bam}.with_rg.bam \
+            {input.bam} &> {log}
+        samtools sort -@ {threads} {params.extra} -o {output.bam} {output.bam}.with_rg.bam >> {log} 2>&1
+        rm -f {output.bam}.with_rg.bam
         samtools index -@ {threads} {output.bam} {output.bai} >> {log} 2>&1
         """

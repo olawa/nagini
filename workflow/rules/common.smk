@@ -11,6 +11,7 @@ the three input paths explicit:
 * ``fastq`` -> minimap2 alignment
 * ``unmapped_bam`` -> samtools fastq, then minimap2 alignment
 * ``aligned_bam`` -> copied and indexed, never realigned
+* ``dorado_bam`` -> produced by the pipeline's Dorado basecalling/demux stage
 
 Hydra modules are imported after this file, so the selected reference is
 available to every module as ``config["reference"]``.
@@ -249,10 +250,11 @@ def get_unit_alignment_path(row):
         "fastq": "fastq",
         "unmapped_bam": "unmapped_bam",
         "aligned_bam": "aligned_bam",
+        "dorado_bam": "dorado_bam",
     }.get(str(row["input_type"]).strip().lower())
     if suffix is None:
         raise WorkflowError(
-            f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam or aligned_bam."
+            f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam, aligned_bam or dorado_bam."
         )
     return "alignment/nagini_align/{}_{}_{}_{}.{}.bam".format(
         row["sample"],
@@ -268,6 +270,16 @@ def get_unit_alignment_bams(wildcards):
     if rows.empty:
         raise WorkflowError(f"No units.tsv rows for {wildcards.sample}/{wildcards.type}.")
     return [get_unit_alignment_path(row) for _, row in rows.iterrows()]
+
+
+def get_unit_dorado_bam(wildcards):
+    """Return the pipeline-owned demultiplexed BAM for a Dorado unit."""
+
+    row = get_unit(wildcards)
+    barcode = str(row.get("barcode_name", "")).strip()
+    if not barcode:
+        raise WorkflowError("Dorado units require barcode_name in units.tsv.")
+    return str(row.get("bam", f"basecalling/dorado_demux/{barcode}.bam"))
 
 
 def get_reference_index():

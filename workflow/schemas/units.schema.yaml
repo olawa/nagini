@@ -18,7 +18,7 @@ properties:
     pattern: "^[A-Za-z0-9+_.-]+$"
   input_type:
     type: string
-    enum: [fastq, unmapped_bam, aligned_bam]
+    enum: [fastq, unmapped_bam, aligned_bam, dorado_bam]
   fastq1:
     type: string
   fastq2:
@@ -61,6 +61,6 @@ allOf:
   - if:
       properties:
         input_type:
-          enum: [unmapped_bam, aligned_bam]
+          enum: [unmapped_bam, aligned_bam, dorado_bam]
     then:
       required: [bam]

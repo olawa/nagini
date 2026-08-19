@@ -107,6 +107,18 @@ sniffles2_call:
   tandem_repeats: ""
   extra: ""
 
+dorado:
+  container: "docker://ontresearch/dorado:1.3.0"
+  input: ""
+  model: "hac"
+  kit: ""
+  device: ""
+  models_directory: ""
+  basecaller_extra: ""
+  demux_extra: ""
+  basecaller_threads: 8
+  demux_threads: 8
+
 samtools_fastq:
   # -T carries MM/ML tags into FASTQ comments when the input BAM contains
   # them. Set to "-n" if the installed samtools cannot copy these tags.
@@ -122,7 +134,7 @@ mosdepth_bed:
   extra: ""
 
 cramino:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "docker://hydragenetics/cramino:0.14.5"
   extra: ""
 
 gatk_mutect2:

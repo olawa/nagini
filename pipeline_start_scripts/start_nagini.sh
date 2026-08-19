@@ -25,8 +25,11 @@ sequence_id=""
 sample_regex=""
 barcode_map=""
 barcode="NB"
+barcode_kit=""
 run_id=""
 basecalling_model="unknown"
+dorado_device=""
+dorado_models_directory=""
 methylation="No"
 tumor_content=""
 cores=""
@@ -39,7 +42,7 @@ Usage:
   $(basename "$0") --inbox-path PATH [options]
 
 Required:
-  --inbox-path PATH             Directory containing ONT FASTQ or BAM files.
+  --inbox-path PATH             Directory containing ONT POD5, FASTQ, or BAM files.
 
 Options:
   --analysis-dir PATH           Analysis/output directory (default: current directory).
@@ -50,14 +53,18 @@ Options:
   --reference-files PATH        Reference registry (default: config/reference_files/reference_files_<site>.yaml).
   --library-root PATH           Optional cgu/library root recorded in the run snapshot.
   --profile PATH                Snakemake profile (default: profiles/<site>).
-  --input-type TYPE             fastq, unmapped_bam, or aligned_bam.
+  --input-type TYPE             minknow, fastq, unmapped_bam, or aligned_bam.
   --sample-type TYPE            N, T, or R (default: N).
   --sequenceid ID               Run identifier; defaults to inbox directory name.
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
-  --barcode-map PATH            CSV/TSV barcode-to-sample map for Dorado bam_pass input.
+  --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed input.
+  --barcode-kit KIT             Dorado barcode kit used for demultiplexing minknow input.
   --default-barcode BARCODE     Barcode for FASTQ and BAM rows (default: NB).
   --run-id ID                   Run ID for generated FASTQ rows.
-  --basecalling-model MODEL     Basecalling model for generated FASTQ rows.
+  --basecalling-model MODEL     Basecalling model (also used by Dorado for minknow input).
+  --dorado-model MODEL          Alias for --basecalling-model.
+  --dorado-device DEVICE        Dorado device, for example cuda:all or cuda:0.
+  --dorado-models-directory DIR Directory containing downloaded Dorado models.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
   --tumor-content FLOAT         Optional value added to samples.tsv.
   --cores N                     Override the profile's core count.
@@ -68,6 +75,8 @@ Options:
 Examples:
   $(basename "$0") --inbox-path /data/run_001 --input-type unmapped_bam
   $(basename "$0") --inbox-path /data/fastq --input-type fastq --sample-regex '^(?P<sample>[^_]+)_'
+  $(basename "$0") --inbox-path /data/minknow_run --input-type minknow \\
+    --barcode-kit SQK-RBK114-24 --basecalling-model sup --barcode-map barcode_map.csv
 EOF
 }
 
@@ -161,6 +170,11 @@ while [[ $# -gt 0 ]]; do
             barcode_map="$2"
             shift 2
             ;;
+        --barcode-kit)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            barcode_kit="$2"
+            shift 2
+            ;;
         --default-barcode|--barcode)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             barcode="$2"
@@ -174,6 +188,21 @@ while [[ $# -gt 0 ]]; do
         --basecalling-model)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             basecalling_model="$2"
+            shift 2
+            ;;
+        --dorado-model)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            basecalling_model="$2"
+            shift 2
+            ;;
+        --dorado-device)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_device="$2"
+            shift 2
+            ;;
+        --dorado-models-directory)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_models_directory="$2"
             shift 2
             ;;
         --methylation)
@@ -228,6 +257,9 @@ fi
 if [[ -n "$barcode_map" ]]; then
     barcode_map="$(absolute_path "$barcode_map")"
 fi
+if [[ -n "$dorado_models_directory" ]]; then
+    dorado_models_directory="$(absolute_path "$dorado_models_directory")"
+fi
 
 [[ -d "$input_dir" ]] || die "Input directory does not exist: $input_dir"
 [[ -d "$pipeline_path" ]] || die "Pipeline directory does not exist: $pipeline_path"
@@ -250,16 +282,19 @@ require_command snakemake
 if [[ -z "$input_type" ]]; then
     bam_count="$(find "$input_dir" -type f -name '*.bam' | wc -l | tr -d ' ')"
     fastq_count="$(find "$input_dir" -type f \( -name '*.fastq' -o -name '*.fastq.gz' -o -name '*.fq' -o -name '*.fq.gz' \) | wc -l | tr -d ' ')"
-    if [[ "$bam_count" -gt 0 && "$fastq_count" -eq 0 ]]; then
+    pod5_count="$(find "$input_dir" -type f -iname '*.pod5' | wc -l | tr -d ' ')"
+    if [[ "$pod5_count" -gt 0 ]]; then
+        input_type="minknow"
+    elif [[ "$bam_count" -gt 0 && "$fastq_count" -eq 0 ]]; then
         input_type="unmapped_bam"
     elif [[ "$fastq_count" -gt 0 && "$bam_count" -eq 0 ]]; then
         input_type="fastq"
     else
-        die "Could not infer input type; pass --input-type fastq, unmapped_bam, or aligned_bam."
+        die "Could not infer input type; pass --input-type minknow, fastq, unmapped_bam, or aligned_bam."
     fi
 fi
 case "$input_type" in
-    fastq|unmapped_bam|aligned_bam) ;;
+    minknow|fastq|unmapped_bam|aligned_bam) ;;
     *) die "Unsupported --input-type: $input_type" ;;
 esac
 if [[ ("$input_type" == "unmapped_bam" || "$input_type" == "aligned_bam") && -z "$barcode_map" ]]; then
@@ -267,6 +302,15 @@ if [[ ("$input_type" == "unmapped_bam" || "$input_type" == "aligned_bam") && -z 
 fi
 [[ "$sample_type" =~ ^(N|T|R)$ ]] || die "--sample-type must be N, T, or R"
 [[ "$methylation" =~ ^(Yes|No)$ ]] || die "--methylation must be Yes or No"
+
+source_input_dir="$input_dir"
+source_input_type="$input_type"
+if [[ "$input_type" == "minknow" ]]; then
+    [[ -n "$barcode_kit" ]] || die "--barcode-kit is required with --input-type minknow"
+    [[ -n "$barcode_map" ]] || die "--barcode-map is required with --input-type minknow"
+    [[ "$basecalling_model" != "unknown" ]] || die "--basecalling-model (or --dorado-model) is required with --input-type minknow"
+    [[ -z "$dorado_models_directory" || -d "$dorado_models_directory" ]] || die "Dorado models directory does not exist: $dorado_models_directory"
+fi
 
 mkdir -p "$analysis_dir"
 if [[ -z "$sequence_id" ]]; then
@@ -299,6 +343,9 @@ prepare_cmd=(
 )
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
+[[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
+[[ -n "$dorado_device" ]] && prepare_cmd+=(--dorado-device "$dorado_device")
+[[ -n "$dorado_models_directory" ]] && prepare_cmd+=(--dorado-models-directory "$dorado_models_directory")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
 $force_inputs && prepare_cmd+=(--force)
@@ -311,6 +358,8 @@ cat > "$analysis_dir/run_metadata.yaml" <<EOF
 sequence_id: "$sequence_id"
 input_dir: "$input_dir"
 input_type: "$input_type"
+source_input_dir: "$source_input_dir"
+source_input_type: "$source_input_type"
 sample_type: "$sample_type"
 site: "$site"
 pipeline_path: "$pipeline_path"
@@ -318,6 +367,10 @@ base_config: "$base_config"
 site_config: "$site_config"
 reference_files: "$reference_files"
 barcode_map: "${barcode_map:-}"
+barcode_kit: "${barcode_kit:-}"
+basecalling_model: "$basecalling_model"
+dorado_device: "${dorado_device:-}"
+dorado_models_directory: "${dorado_models_directory:-}"
 runtime_config: "$analysis_dir/config.nagini.yaml"
 profile: "$profile"
 library_root: "${library_root:-}"

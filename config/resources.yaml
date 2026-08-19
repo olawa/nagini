@@ -5,6 +5,8 @@ default_resources:
   mem_mb: 4096
   mem_per_cpu: 4096
   partition: core
+  # Scheduler generic-resource request. Empty everywhere except GPU rules.
+  gres: ""
 
 stage_aligned_bam:
   threads: 2
@@ -12,6 +14,28 @@ stage_aligned_bam:
   mem_mb: 8192
   mem_per_cpu: 4096
   partition: core
+
+stage_dorado_bam:
+  threads: 2
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+dorado:
+  basecaller_threads: 8
+  basecaller_time: "72:00:00"
+  basecaller_mem_mb: 32768
+  basecaller_mem_per_cpu: 4096
+  basecaller_partition: core
+  # Local and workstation runs address the GPU directly via --dorado-device and
+  # the profile's --nv, so no scheduler request is needed here.
+  basecaller_gres: ""
+  demux_threads: 8
+  demux_time: "12:00:00"
+  demux_mem_mb: 32768
+  demux_mem_per_cpu: 4096
+  demux_partition: core
 
 minimap2_fastq_align:
   threads: 8

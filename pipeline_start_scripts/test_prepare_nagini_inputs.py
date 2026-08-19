@@ -106,6 +106,66 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(units[1]["processing_unit"], "barcode02_001")
         self.assertTrue(all(row["input_type"] == "unmapped_bam" for row in units))
 
+    def test_dorado_demux_flat_barcode_filenames_are_discovered(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "demux"
+            root.mkdir()
+            (root / "barcode01.bam").touch()
+            (root / "barcode02.bam").touch()
+
+            found = PREPARE.discover_bams_by_barcode(root)
+
+        self.assertEqual(sorted(found), ["barcode01", "barcode02"])
+
+    def test_minknow_tables_defer_dorado_outputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "minknow"
+            root.mkdir()
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type\nbarcode05,SAMPLE_A,N\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = mapping
+            args.sample_type = "N"
+            args.input_type = "minknow"
+            args.sequence_id = "run-1"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "hac"
+
+            samples, units = PREPARE.make_minknow_tables(args)
+            PREPARE.validate_tables(samples, units, allow_deferred_inputs=True)
+
+        self.assertEqual(samples, [{"sample": "SAMPLE_A"}])
+        self.assertEqual(units[0]["input_type"], "dorado_bam")
+        self.assertEqual(units[0]["bam"], "basecalling/dorado_demux/barcode05.bam")
+
+    def test_minknow_runtime_config_keeps_dorado_container_settings(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "minknow"
+        args.dorado_input = Path("/tmp/run/pod5")
+        args.input_dir = args.dorado_input
+        args.dorado_model = "hac"
+        args.basecalling_model = "hac"
+        args.dorado_kit = "SQK-RBK114-24"
+        args.dorado_device = "cuda:all"
+        args.dorado_models_directory = None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["dorado"]["container"], "docker://ontresearch/dorado:1.3.0")
+        self.assertEqual(config["dorado"]["kit"], "SQK-RBK114-24")
+        self.assertEqual(config["dorado"]["device"], "cuda:all")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,8 +71,16 @@ mosdepth:
   extra: "--fast-mode --no-per-base"
 mosdepth_bed:
   container: "docker://hydragenetics/mosdepth:0.3.2"
+dorado:
+  container: "docker://ontresearch/dorado:1.3.0"
+  basecaller_threads: 24
+  demux_threads: 20
+  basecaller_partition: "gpu"
+  demux_partition: "core"
+  basecaller_mem_mb: 120000
+  demux_mem_mb: 122880
 cramino:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "docker://hydragenetics/cramino:0.14.5"
 gatk_mutect2:
   container: "docker://hydragenetics/gatk4:4.2.2.0"
   extra: ""
