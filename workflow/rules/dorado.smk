@@ -14,18 +14,12 @@ dorado_barcodes = sorted(
 )
 
 
-def get_dorado_container(wildcards=None):
-    container = config.get("dorado", {}).get("container")
-    if container in ("", None, "none", "None", False, "local"):
-        return None
-    return container
+_dorado_img = config.get("dorado", {}).get("container")
+if _dorado_img in ("", None, "none", "None", False, "local"):
+    _dorado_img = None
 
-
-def get_dorado_binary(wildcards=None):
-    binary = config.get("dorado", {}).get("binary", "")
-    if binary:
-        return os.path.expanduser(str(binary))
-    return "dorado"
+_dorado_exe = config.get("dorado", {}).get("binary", "")
+_dorado_exe = os.path.expanduser(str(_dorado_exe)) if _dorado_exe else "dorado"
 
 
 rule dorado_basecaller:
@@ -35,7 +29,7 @@ rule dorado_basecaller:
     output:
         bam="basecalling/dorado/basecalled.bam",
     params:
-        dorado_bin=get_dorado_binary,
+        dorado_bin=_dorado_exe,
         model=config.get("dorado", {}).get("model", "hac"),
         kit=config.get("dorado", {}).get("kit", ""),
         device_arg=(
@@ -70,7 +64,7 @@ rule dorado_basecaller:
         threads=config.get("dorado", {}).get("basecaller_threads", config["default_resources"]["threads"]),
         time=config.get("dorado", {}).get("basecaller_time", config["default_resources"]["time"]),
     container:
-        get_dorado_container
+        _dorado_img
     message:
         "{rule}: basecall MinKNOW/POD5 input with Dorado"
     shell:
@@ -89,7 +83,7 @@ rule dorado_demux:
     output:
         demux_dir=directory("basecalling/dorado_demux"),
     params:
-        dorado_bin=get_dorado_binary,
+        dorado_bin=_dorado_exe,
         kit=config.get("dorado", {}).get("kit", ""),
         threads=config.get("dorado", {}).get("demux_threads", config["default_resources"]["threads"]),
         barcodes=" ".join(dorado_barcodes),
@@ -109,7 +103,7 @@ rule dorado_demux:
         threads=config.get("dorado", {}).get("demux_threads", config["default_resources"]["threads"]),
         time=config.get("dorado", {}).get("demux_time", config["default_resources"]["time"]),
     container:
-        get_dorado_container
+        _dorado_img
     message:
         "{rule}: demultiplex Dorado BAM output by barcode"
     shell:
