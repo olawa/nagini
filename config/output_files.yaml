@@ -52,39 +52,74 @@ files:
   - name: structural variant summary JSON
     input: null
     output: "reports/sv_summary/{sample}_{type}.json"
+  - name: ClairS-TO concatenated VCF
+    input: null
+    output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
+    when: clairs_to_enabled
+  - name: ClairS-TO concatenated VCF index
+    input: null
+    output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz.tbi"
+    when: clairs_to_enabled
+  - name: ClairS-TO normalized VCF
+    input: null
+    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    when: clairs_to_enabled
+  - name: ClairS-TO normalized VCF index
+    input: null
+    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    when: clairs_to_enabled
+  - name: ClairS-TO VEP annotation
+    input: null
+    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    when: clairs_to_vep_enabled
+  - name: ClairS-TO VEP annotation index
+    input: null
+    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    when: clairs_to_vep_enabled
+  - name: ClairS-TO VEP statistics
+    input: null
+    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    when: clairs_to_vep_enabled
   - name: Mutect2 merged unfiltered VCF
     input: null
     output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
+    when: mutect2_enabled
   - name: Mutect2 merged VCF index
     input: null
     output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz.tbi"
+    when: mutect2_enabled
   - name: Mutect2 filtered VCF
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz"
+    when: mutect2_enabled
   - name: Mutect2 filtered VCF index
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz.tbi"
+    when: mutect2_enabled
   - name: Mutect2 filtering statistics
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filteringStats.tsv"
+    when: mutect2_enabled
   - name: Mutect2 normalized filtered VCF
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    when: mutect2_enabled
   - name: Mutect2 normalized filtered VCF index
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    when: mutect2_enabled
   - name: Mutect2 VEP annotation
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
-    when: annotate_small_variants_with_vep
+    when: mutect2_vep_enabled
   - name: Mutect2 VEP annotation index
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
-    when: annotate_small_variants_with_vep
+    when: mutect2_vep_enabled
   - name: Mutect2 VEP statistics
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
-    when: annotate_small_variants_with_vep
+    when: mutect2_vep_enabled
   - name: Mutect2 SnpEff annotation
     input: null
     output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"

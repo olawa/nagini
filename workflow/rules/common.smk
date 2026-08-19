@@ -356,10 +356,28 @@ def get_reference_chromosomes():
 reference_chromosomes = get_reference_chromosomes()
 
 
+def get_small_variant_caller():
+    caller = str(config.get("small_variant_caller", "clairs_to")).strip().lower()
+    return caller if caller in ("clairs_to", "mutect2", "both") else "clairs_to"
+
+
+def clairs_to_enabled():
+    return get_small_variant_caller() in ("clairs_to", "both")
+
+
+def mutect2_enabled():
+    return get_small_variant_caller() in ("mutect2", "both")
+
+
 def get_small_variant_report_vcf(wildcards):
     """Return the normalized VCF, preferring VEP annotation when enabled."""
     suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-    return f"snv_indels/mutect2_postprocess/{wildcards.sample}_{wildcards.type}{suffix}"
+    caller_dir = (
+        "snv_indels/clairs_to_postprocess"
+        if clairs_to_enabled()
+        else "snv_indels/mutect2_postprocess"
+    )
+    return f"{caller_dir}/{wildcards.sample}_{wildcards.type}{suffix}"
 
 
 def get_small_variant_report_vcf_index(wildcards):
@@ -375,9 +393,24 @@ def compile_output_file_list(wildcards):
     output_files = []
     for file_definition in output_spec["files"]:
         condition = file_definition.get("when")
-        enabled = vep_enabled() if condition == "annotate_small_variants_with_vep" else config.get(condition, False)
-        if condition and not enabled:
+        if condition == "annotate_small_variants_with_vep":
+            enabled = vep_enabled()
+        elif condition == "clairs_to_enabled":
+            enabled = clairs_to_enabled()
+        elif condition == "clairs_to_vep_enabled":
+            enabled = clairs_to_enabled() and vep_enabled()
+        elif condition == "mutect2_enabled":
+            enabled = mutect2_enabled()
+        elif condition == "mutect2_vep_enabled":
+            enabled = mutect2_enabled() and vep_enabled()
+        elif condition:
+            enabled = bool(config.get(condition, False))
+        else:
+            enabled = True
+
+        if not enabled:
             continue
+
         allowed_types = file_definition.get("types")
         for sample in get_samples(samples):
             for unit_type in get_unit_types_for_sample(sample):

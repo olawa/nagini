@@ -13,6 +13,19 @@ modules:
   qc: "v0.8.0"
   snv_indels: "v2.1.0-nagini"
 reference_build: "hg38"
+small_variant_caller: "clairs_to"
+clairs_to_call:
+  container: "docker://hkubal/clairs-to:latest"
+  platform: "ont_r10_dorado_hac_5khz_ssrs"
+  snv_min_af: 0.05
+  indel_min_af: 0.1
+  extra: ""
+clairs_to_concat:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: ""
+bcftools_norm_clairs_to:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: "--multiallelics -both --check-ref w"
 annotate_small_variants_with_vep: false
 vep:
   vep_cache: ".tests/integration/reference"

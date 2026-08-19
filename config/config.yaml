@@ -137,6 +137,23 @@ cramino:
   container: "docker://hydragenetics/cramino:0.14.5"
   extra: ""
 
+small_variant_caller: "clairs_to"
+
+clairs_to_call:
+  container: "docker://hkubal/clairs-to:latest"
+  platform: "ont_r10_dorado_hac_5khz_ssrs"
+  snv_min_af: 0.05
+  indel_min_af: 0.1
+  extra: "--enable_long_indel"
+
+clairs_to_concat:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: ""
+
+bcftools_norm_clairs_to:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: "--multiallelics -both --check-ref w"
+
 gatk_mutect2:
   container: "docker://hydragenetics/gatk4:4.2.2.0"
   # Mutect2 is retained because it is part of the requested analysis, but

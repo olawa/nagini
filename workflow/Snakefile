@@ -215,6 +215,69 @@ use rule tabix from snv_indels as snv_indels_vep_tabix with:
 
 
 # ===========================================================================
+# HYDRA-GENETICS MODULE: snv_indels / ClairS-TO
+# ===========================================================================
+
+use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
+    input:
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+        bed=config["reference"]["design_bed"],
+    params:
+        extra=config.get("clairs_to_call", {}).get("extra", ""),
+        platform=config.get("clairs_to_call", {}).get("platform", ""),
+        snv_min_af=config.get("clairs_to_call", {}).get("snv_min_af", 0.05),
+        indel_min_af=config.get("clairs_to_call", {}).get("indel_min_af", 0.1),
+        outdir=lambda w, output: os.path.dirname(output[0]),
+
+
+use rule clairs_to_concat from snv_indels as snv_indels_clairs_to_concat
+
+
+use rule tabix from snv_indels as snv_indels_clairs_to_tabix with:
+    input:
+        gz="snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz",
+    output:
+        tbi="snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz.tbi",
+    log:
+        "logs/clairs_to_tabix/{sample}_{type}.snv-indels.vcf.gz.tbi.log",
+    benchmark:
+        repeat(
+            "benchmarks/clairs_to_tabix/{sample}_{type}.snv-indels.vcf.gz.tbi.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bgzip from snv_indels as snv_indels_clairs_to_vep_bgzip with:
+    input:
+        vcf="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf",
+    output:
+        gz="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    log:
+        "logs/clairs_to_vep_bgzip/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/clairs_to_vep_bgzip/{sample}_{type}.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from snv_indels as snv_indels_clairs_to_vep_tabix with:
+    input:
+        gz="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    output:
+        tbi="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi",
+    log:
+        "logs/clairs_to_vep_tabix/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/clairs_to_vep_tabix/{sample}_{type}.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
+# ===========================================================================
 # HYDRA-GENETICS MODULE: qc
 # ===========================================================================
 

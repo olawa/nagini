@@ -100,6 +100,27 @@ bcftools_norm_mutect2:
   mem_per_cpu: 4096
   partition: core
 
+clairs_to_call:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+clairs_to_concat:
+  threads: 2
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+bcftools_norm_clairs_to:
+  threads: 2
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
 vep:
   threads: 4
   time: "08:00:00"

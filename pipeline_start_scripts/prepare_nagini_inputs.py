@@ -80,6 +80,22 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Target region BED file (overrides site default). If omitted, any single *.bed in inbox is auto-detected.",
     )
+    parser.add_argument(
+        "--small-variant-caller",
+        choices=("clairs_to", "mutect2", "both"),
+        default="",
+        help="Somatic small-variant caller to execute and report (default: clairs_to from config).",
+    )
+    parser.add_argument(
+        "--clairs-to-platform",
+        default="",
+        help="ClairS-TO platform model (e.g. ont_r10_dorado_hac_5khz_ssrs). Auto-derived from basecalling model if omitted.",
+    )
+    parser.add_argument(
+        "--clairs-to-container",
+        default="",
+        help="Override default ClairS-TO container image.",
+    )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -613,6 +629,26 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             config["reference"]["design_bed"] = bed_path
         config["HG38_DESIGN_BED"] = bed_path
         config["HS1_DESIGN_BED"] = bed_path
+
+    if getattr(args, "small_variant_caller", ""):
+        config["small_variant_caller"] = args.small_variant_caller
+
+    clairs_to_platform = getattr(args, "clairs_to_platform", "")
+    if not clairs_to_platform:
+        model_str = (
+            getattr(args, "dorado_model", "")
+            or getattr(args, "basecalling_model", "")
+        ).lower()
+        if "sup" in model_str:
+            clairs_to_platform = "ont_r10_dorado_sup_5khz_ssrs"
+        elif "hac" in model_str or "fast" in model_str:
+            clairs_to_platform = "ont_r10_dorado_hac_5khz_ssrs"
+
+    if clairs_to_platform:
+        config.setdefault("clairs_to_call", {})["platform"] = clairs_to_platform
+
+    if getattr(args, "clairs_to_container", ""):
+        config.setdefault("clairs_to_call", {})["container"] = args.clairs_to_container
 
     runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:

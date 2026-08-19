@@ -33,6 +33,9 @@ dorado_models_directory=""
 dorado_container=""
 dorado_binary=""
 bed_file=""
+small_variant_caller=""
+clairs_to_platform=""
+clairs_to_container=""
 methylation="No"
 tumor_content=""
 cores=""
@@ -72,6 +75,9 @@ Options:
   --dorado-binary PATH          Path to local dorado binary (e.g. ~/tmp/tools/dorado-2.1.1-linux-x64/bin/dorado).
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
+  --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
+  --clairs-to-platform MODEL    ClairS-TO platform model (auto-selected from basecalling model if omitted).
+  --clairs-to-container IMAGE   Override default ClairS-TO container image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
   --tumor-content FLOAT         Optional value added to samples.tsv.
   --cores N                     Override the profile's core count.
@@ -227,6 +233,21 @@ while [[ $# -gt 0 ]]; do
             bed_file="$2"
             shift 2
             ;;
+        --small-variant-caller)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            small_variant_caller="$2"
+            shift 2
+            ;;
+        --clairs-to-platform)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            clairs_to_platform="$2"
+            shift 2
+            ;;
+        --clairs-to-container)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            clairs_to_container="$2"
+            shift 2
+            ;;
         --methylation)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             methylation="$2"
@@ -371,6 +392,9 @@ prepare_cmd=(
 [[ -n "$dorado_container" ]] && prepare_cmd+=(--dorado-container "$dorado_container")
 [[ -n "$dorado_binary" ]] && prepare_cmd+=(--dorado-binary "$dorado_binary")
 [[ -n "$bed_file" ]] && prepare_cmd+=(--bed-file "$bed_file")
+[[ -n "$small_variant_caller" ]] && prepare_cmd+=(--small-variant-caller "$small_variant_caller")
+[[ -n "$clairs_to_platform" ]] && prepare_cmd+=(--clairs-to-platform "$clairs_to_platform")
+[[ -n "$clairs_to_container" ]] && prepare_cmd+=(--clairs-to-container "$clairs_to_container")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
 $force_inputs && prepare_cmd+=(--force)
