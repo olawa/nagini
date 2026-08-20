@@ -17,7 +17,11 @@ rule sv_summary:
             if config.get("annotate_svs", False)
             else "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
         ),
-        annotation_bed=config.get("reference", {}).get("sv_annotation_bed", "") or [],
+        annotation_bed=lambda wildcards: (
+            config.get("reference", {}).get("sv_annotation_bed", "")
+            or config.get("reference", {}).get("design_bed", "")
+            or []
+        ),
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
         tsv="reports/sv_summary/{sample}_{type}.tsv",
