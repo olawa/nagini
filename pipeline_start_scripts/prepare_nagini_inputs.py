@@ -426,7 +426,7 @@ def normalize_bam_tables(
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     samples_path = analysis_dir / "samples.tsv"
     units_path = analysis_dir / "units.tsv"
-    if not samples_path.exists() or not units_path.exists():
+    if not samples_path.exists() or not units_path.exists() or getattr(args, "force", False):
         run_hydra_create_input_files(args, analysis_dir)
     if not samples_path.exists() or not units_path.exists():
         raise SystemExit("Hydra did not create samples.tsv and units.tsv.")
@@ -705,7 +705,10 @@ def main() -> None:
         else:
             samples, units = make_bam_tables_from_barcode_map(args)
     else:
-        samples, units = normalize_bam_tables(args, args.analysis_dir)
+        if samples_path.exists() and units_path.exists() and not args.force:
+            samples, units = read_tsv(samples_path), read_tsv(units_path)
+        else:
+            samples, units = normalize_bam_tables(args, args.analysis_dir)
 
     if args.tumor_content is not None:
         for row in samples:
