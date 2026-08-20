@@ -119,7 +119,7 @@ rule dorado_demux:
             bam_files=()
             while IFS= read -r bam_file; do
                 bam_files+=("$bam_file")
-            done < <(find "$raw" -type f \( -path "*/${barcode}/*.bam" -o -name "${barcode}.bam" -o -name "*${barcode}*.bam" \) -print)
+            done < <(find "$raw" -type f \( -path "*/${{barcode}}/*.bam" -o -name "${{barcode}}.bam" -o -name "*${{barcode}}*.bam" \) -print)
             if [[ "${{#bam_files[@]}}" -eq 0 ]]; then
                 # A barcode listed in the sample sheet can legitimately receive
                 # no reads (failed library, empty well).  Emitting a header-only
