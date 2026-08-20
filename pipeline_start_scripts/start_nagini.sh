@@ -277,7 +277,7 @@ while [[ $# -gt 0 ]]; do
             cores="$2"
             shift 2
             ;;
-        --force-inputs)
+        --force|--force-inputs)
             force_inputs=true
             shift
             ;;
