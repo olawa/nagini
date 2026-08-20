@@ -28,7 +28,7 @@ dorado:
   basecaller_mem_per_cpu: 4096
   basecaller_partition: core
   basecaller_gres: ""
-  demux_threads: 16
+  demux_threads: 24
   demux_time: "12:00:00"
   demux_mem_mb: 32768
   demux_mem_per_cpu: 4096
@@ -49,7 +49,7 @@ dorado_fastq:
   partition: core
 
 dorado_alignment:
-  threads: 32
+  threads: 48
   time: "24:00:00"
   mem_mb: 65536
   mem_per_cpu: 4096
@@ -63,56 +63,56 @@ finalize_dorado_alignment:
   partition: core
 
 minimap2_fastq_align:
-  threads: 32
+  threads: 48
   time: "24:00:00"
   mem_mb: 65536
   mem_per_cpu: 4096
   partition: core
 
 minimap2_unmapped_bam_align:
-  threads: 32
+  threads: 48
   time: "24:00:00"
   mem_mb: 65536
   mem_per_cpu: 4096
   partition: core
 
 samtools_merge_bam:
-  threads: 8
+  threads: 16
   time: "04:00:00"
   mem_mb: 16384
   mem_per_cpu: 4096
   partition: core
 
 sniffles2_call:
-  threads: 16
+  threads: 48
   time: "12:00:00"
   mem_mb: 32768
   mem_per_cpu: 4096
   partition: core
 
 cramino:
-  threads: 4
+  threads: 8
   time: "04:00:00"
   mem_mb: 16384
   mem_per_cpu: 4096
   partition: core
 
 mosdepth:
-  threads: 8
+  threads: 16
   time: "04:00:00"
   mem_mb: 16384
   mem_per_cpu: 4096
   partition: core
 
 mosdepth_bed:
-  threads: 8
+  threads: 16
   time: "04:00:00"
   mem_mb: 16384
   mem_per_cpu: 4096
   partition: core
 
 clairs_to_call:
-  threads: 32
+  threads: 48
   time: "24:00:00"
   mem_mb: 65536
   mem_per_cpu: 4096
@@ -168,7 +168,7 @@ bcftools_norm_mutect2:
   partition: core
 
 vep:
-  threads: 8
+  threads: 48
   time: "08:00:00"
   mem_mb: 32768
   mem_per_cpu: 4096
