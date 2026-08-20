@@ -97,7 +97,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clairs-to-platform",
         default="",
-        help="ClairS-TO platform model (e.g. ont_r10_dorado_hac_5khz_ssrs). Auto-derived from basecalling model if omitted.",
+        help="ClairS-TO platform model (e.g. ont_r10_dorado_hac_4khz). Auto-derived from basecalling model if omitted.",
     )
     parser.add_argument(
         "--clairs-to-container",
@@ -662,7 +662,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         if "sup" in model_str:
             clairs_to_platform = "ont_r10_dorado_sup_5khz_ssrs"
         elif "hac" in model_str or "fast" in model_str:
-            clairs_to_platform = "ont_r10_dorado_hac_5khz_ssrs"
+            clairs_to_platform = "ont_r10_dorado_hac_4khz"
 
     if clairs_to_platform:
         config.setdefault("clairs_to_call", {})["platform"] = clairs_to_platform

@@ -95,7 +95,7 @@ cramino:
 small_variant_caller: "clairs_to"
 clairs_to_call:
   container: "docker://hkubal/clairs-to:latest"
-  platform: "ont_r10_dorado_hac_5khz_ssrs"
+  platform: "ont_r10_dorado_hac_4khz"
   snv_min_af: 0.05
   indel_min_af: 0.1
   extra: ""
