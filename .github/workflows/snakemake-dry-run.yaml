@@ -32,6 +32,8 @@ jobs:
         run: |
           pip install -r requirements.test.txt
       - name: snakemake dry run
-        working-directory: .tests/integration
         run: |
-          snakemake -n -s ../../workflow/Snakefile --configfiles ../../config/config.yaml config/config.yaml
+          snakemake -n -s workflow/Snakefile --configfiles config/config.yaml .tests/integration/config/config.yaml
+          snakemake -n -s workflow/Snakefile --configfiles config/config.yaml .tests/integration/config/config.yaml .tests/integration/config/config_minknow.yaml
+          snakemake -n -s workflow/Snakefile --configfiles config/config.yaml .tests/integration/config/config.yaml .tests/integration/config/config_minknow.yaml .tests/integration/config/config_both_outputs.yaml
+          snakemake -n -s workflow/Snakefile --configfiles config/config.yaml .tests/integration/config/config.yaml .tests/integration/config/config_minknow.yaml .tests/integration/config/config_dorado_aligner.yaml

@@ -97,6 +97,50 @@ properties:
         type: string
       read_group:
         type: string
+  dorado:
+    type: object
+    properties:
+      container:
+        type: [string, "null"]
+      binary:
+        type: string
+      input:
+        type: string
+      model:
+        type: string
+      kit:
+        type: string
+      device:
+        type: string
+      models_directory:
+        type: string
+      basecaller_extra:
+        type: string
+      demux_extra:
+        type: string
+      demux_output_format:
+        type: string
+        enum: [bam, fastq, both]
+      allow_empty_barcodes:
+        type: boolean
+      benchmark_repeats:
+        type: integer
+        minimum: 1
+    additionalProperties: true
+  dorado_alignment:
+    type: object
+    properties:
+      aligner:
+        type: string
+        enum: [minimap2, dorado]
+      container:
+        type: string
+      extra:
+        type: string
+      benchmark_repeats:
+        type: integer
+        minimum: 1
+    additionalProperties: true
   output_directory:
     type: string
   multiqc:

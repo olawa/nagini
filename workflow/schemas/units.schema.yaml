@@ -16,6 +16,9 @@ properties:
   barcode:
     type: string
     pattern: "^[A-Za-z0-9+_.-]+$"
+  barcode_name:
+    type: string
+    pattern: "^barcode[0-9]+$"
   input_type:
     type: string
     enum: [fastq, unmapped_bam, aligned_bam, dorado_bam]
@@ -64,3 +67,9 @@ allOf:
           enum: [unmapped_bam, aligned_bam, dorado_bam]
     then:
       required: [bam]
+  - if:
+      properties:
+        input_type:
+          const: dorado_bam
+    then:
+      required: [barcode_name]

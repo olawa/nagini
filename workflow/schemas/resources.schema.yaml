@@ -6,6 +6,16 @@ properties:
     $ref: "#/definitions/resources"
   stage_aligned_bam:
     $ref: "#/definitions/resources"
+  dorado:
+    $ref: "#/definitions/resources"
+  dorado_demux_bam:
+    $ref: "#/definitions/resources"
+  dorado_fastq:
+    $ref: "#/definitions/resources"
+  dorado_alignment:
+    $ref: "#/definitions/resources"
+  finalize_dorado_alignment:
+    $ref: "#/definitions/resources"
   minimap2_fastq_align:
     $ref: "#/definitions/resources"
   minimap2_unmapped_bam_align:
@@ -44,5 +54,7 @@ definitions:
       threads:
         type: integer
       time:
+        type: string
+      gres:
         type: string
     additionalProperties: true

@@ -187,6 +187,18 @@ validate(samples, schema="../schemas/samples.schema.yaml")
 units = pd.read_table(config["units"], dtype=str).fillna("")
 validate(units, schema="../schemas/units.schema.yaml")
 
+dorado_units = units[units["input_type"].str.lower() == "dorado_bam"]
+dorado_barcodes = sorted(
+    {
+        str(value).strip()
+        for value in dorado_units.get("barcode_name", pd.Series(dtype=str)).tolist()
+        if str(value).strip()
+    }
+)
+dorado_demux_output_format = str(
+    config.get("dorado", {}).get("demux_output_format", "fastq")
+).strip().lower()
+
 with open(config["output"]) as output_file:
     if config["output"].endswith("json"):
         output_spec = json.load(output_file)
@@ -280,6 +292,16 @@ def get_unit_dorado_bam(wildcards):
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
     return str(row.get("bam", f"basecalling/dorado_demux/{barcode}.bam"))
+
+
+def get_unit_dorado_fastq(wildcards):
+    """Return the exported FASTQ for a pipeline-produced Dorado unit."""
+
+    row = get_unit(wildcards)
+    barcode = str(row.get("barcode_name", "")).strip()
+    if not barcode:
+        raise WorkflowError("Dorado units require barcode_name in units.tsv.")
+    return f"basecalling/dorado_fastq/{barcode}.fastq.gz"
 
 
 def get_reference_index():
@@ -423,4 +445,17 @@ def compile_output_file_list(wildcards):
                         type=unit_type,
                     )
                 )
+
+    if dorado_barcodes:
+        output_files.append(outdir / "basecalling/dorado_demux/demux_summary.tsv")
+        if dorado_demux_output_format in ("bam", "both"):
+            output_files.extend(
+                outdir / f"basecalling/dorado_demux/{barcode}.bam"
+                for barcode in dorado_barcodes
+            )
+        if dorado_demux_output_format in ("fastq", "both"):
+            output_files.extend(
+                outdir / f"basecalling/dorado_fastq/{barcode}.fastq.gz"
+                for barcode in dorado_barcodes
+            )
     return output_files

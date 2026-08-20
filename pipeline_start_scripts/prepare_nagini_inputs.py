@@ -71,6 +71,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dorado-models-directory", type=Path)
     parser.add_argument("--dorado-container", default="")
     parser.add_argument("--dorado-binary", default="")
+    parser.add_argument(
+        "--dorado-demux-output-format",
+        choices=("bam", "fastq", "both"),
+        default="fastq",
+    )
+    parser.add_argument(
+        "--dorado-aligner", choices=("minimap2", "dorado"), default="minimap2"
+    )
     parser.add_argument("--methylation", choices=("Yes", "No"), default="No")
     parser.add_argument(
         "--bed-file",
@@ -603,6 +611,9 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             "models_directory": str(args.dorado_models_directory.resolve())
             if args.dorado_models_directory
             else "",
+            "demux_output_format": getattr(
+                args, "dorado_demux_output_format", "fastq"
+            ),
         }
         if getattr(args, "dorado_container", ""):
             dorado_settings["container"] = args.dorado_container
@@ -611,6 +622,9 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             if not getattr(args, "dorado_container", ""):
                 dorado_settings["container"] = "none"
         config.setdefault("dorado", {}).update(dorado_settings)
+        config.setdefault("dorado_alignment", {})["aligner"] = getattr(
+            args, "dorado_aligner", "minimap2"
+        )
 
     bed_path = None
     if getattr(args, "bed_file", None):

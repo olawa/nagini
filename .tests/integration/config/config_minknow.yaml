@@ -1,0 +1,12 @@
+units: ".tests/integration/units_minknow.tsv"
+dorado:
+  container: "none"
+  binary: "dorado"
+  input: ".tests/integration/input"
+  model: "hac,5mCG_5hmCG"
+  kit: "SQK-NBD114-24"
+  device: "cuda:all"
+  demux_output_format: "fastq"
+  allow_empty_barcodes: false
+dorado_alignment:
+  aligner: "minimap2"

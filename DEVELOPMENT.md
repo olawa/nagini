@@ -326,6 +326,23 @@ sample; Nagini slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
 att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en
 sample-mappning.
 
+### MinKNOW/POD5, demultiplexering och alignment
+
+MinKNOW-input basecallas utan referens och Dorado demultiplexerar därefter till
+en explicit, oalignerad BAM per `barcode_name`. `--demux-output-format` styr om
+BAM, FASTQ eller båda behålls; FASTQ är standard och används direkt av
+minimap2. `samtools fastq -T MM,ML` skriver modifieringstaggar i
+FASTQ-kommentaren och minimap2 `-y` för tillbaka dem till den alignade BAM-filen.
+Flaggan `-Y` behålls också, men den styr soft-clipping av supplementära
+alignment och är inte i sig det som bevarar modifieringarna.
+
+Barcode-BAM:en är en deklarerad Snakemake-output och alignas först i nästa
+regel. `--dorado-aligner minimap2` är standard; `dorado` kan väljas som
+alternativ. Båda vägarna avslutas med samma RG-hantering, koordinatsortering och
+indexering innan BAM-filer från flera units slås ihop per sample och typ.
+Dorado körs med `--emit-summary`; filen exponeras med det stabila namnet
+`basecalling/dorado_demux/demux_summary.tsv` oberoende av Dorados eget filnamn.
+
 Exempel:
 
 ```bash

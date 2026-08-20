@@ -4,6 +4,18 @@ type: object
 properties:
   stage_aligned_bam:
     $ref: "#/definitions/rule_io"
+  dorado_basecaller:
+    $ref: "#/definitions/rule_io"
+  dorado_demux:
+    $ref: "#/definitions/rule_io"
+  dorado_demux_barcode_bam:
+    $ref: "#/definitions/rule_io"
+  dorado_demux_fastq:
+    $ref: "#/definitions/rule_io"
+  align_dorado_bam_raw:
+    $ref: "#/definitions/rule_io"
+  finalize_dorado_bam_alignment:
+    $ref: "#/definitions/rule_io"
   minimap2_fastq_align:
     $ref: "#/definitions/rule_io"
   minimap2_unmapped_bam_align:

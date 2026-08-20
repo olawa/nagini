@@ -73,12 +73,23 @@ mosdepth_bed:
   container: "docker://hydragenetics/mosdepth:0.3.2"
 dorado:
   container: "docker://ontresearch/dorado:shac8f356489fa8b44b31beba841b84d2879de2088e"
+  demux_output_format: "fastq"
+  allow_empty_barcodes: false
   basecaller_threads: 24
   demux_threads: 20
   basecaller_partition: "gpu"
   demux_partition: "core"
   basecaller_mem_mb: 120000
   demux_mem_mb: 122880
+dorado_alignment:
+  aligner: "minimap2"
+  extra: ""
+dorado_demux_bam:
+  container: "docker://hydragenetics/common:3.1.1"
+dorado_fastq:
+  container: "docker://hydragenetics/common:3.1.1"
+finalize_dorado_alignment:
+  container: "docker://hydragenetics/common:3.1.1"
 cramino:
   container: "docker://hydragenetics/cramino:0.14.5"
 small_variant_caller: "clairs_to"

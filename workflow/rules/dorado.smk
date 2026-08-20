@@ -2,16 +2,7 @@ __author__ = "Ola Wallerman"
 __copyright__ = "Copyright 2026, Ola Wallerman"
 __license__ = "GPL-3"
 
-"""Containerised Dorado preprocessing for MinKNOW/POD5 input."""
-
-
-dorado_barcodes = sorted(
-    {
-        str(value).strip()
-        for value in units.get("barcode_name", pd.Series(dtype=str)).tolist()
-        if str(value).strip()
-    }
-)
+"""Containerised Dorado basecalling and barcode-level raw-data export."""
 
 
 _dorado_img = config.get("dorado", {}).get("container")
@@ -20,6 +11,22 @@ if _dorado_img in ("", None, "none", "None", False, "local"):
 
 _dorado_exe = config.get("dorado", {}).get("binary", "")
 _dorado_exe = os.path.expanduser(str(_dorado_exe)) if _dorado_exe else "dorado"
+
+_dorado_output_format = str(
+    config.get("dorado", {}).get("demux_output_format", "fastq")
+).lower()
+_dorado_keep_bam = _dorado_output_format in ("bam", "both")
+_dorado_keep_fastq = _dorado_output_format in ("fastq", "both")
+_dorado_barcode_bam = "basecalling/dorado_demux/{dorado_barcode}.bam"
+_dorado_barcode_bam_output = (
+    _dorado_barcode_bam if _dorado_keep_bam else temp(_dorado_barcode_bam)
+)
+_dorado_barcode_fastq = "basecalling/dorado_fastq/{dorado_barcode}.fastq.gz"
+_dorado_barcode_fastq_output = (
+    _dorado_barcode_fastq
+    if _dorado_keep_fastq
+    else temp(_dorado_barcode_fastq)
+)
 
 
 rule dorado_basecaller:
@@ -77,16 +84,15 @@ rule dorado_basecaller:
 
 
 rule dorado_demux:
-    """Demultiplex basecalled reads and normalize one BAM per barcode."""
+    """Classify reads and retain Dorado's native demultiplexing directory."""
     input:
         bam="basecalling/dorado/basecalled.bam",
     output:
-        demux_dir=directory("basecalling/dorado_demux"),
+        raw_dir=temp(directory("basecalling/dorado_demux_raw")),
+        summary="basecalling/dorado_demux/demux_summary.tsv",
     params:
         dorado_bin=_dorado_exe,
         kit=config.get("dorado", {}).get("kit", ""),
-        threads=config.get("dorado", {}).get("demux_threads", config["default_resources"]["threads"]),
-        barcodes=" ".join(dorado_barcodes),
         extra=config.get("dorado", {}).get("demux_extra", ""),
     log:
         "logs/dorado/demux.log",
@@ -108,31 +114,144 @@ rule dorado_demux:
         "{rule}: demultiplex Dorado BAM output by barcode"
     shell:
         r"""
-        raw="{output.demux_dir}.raw"
-        rm -rf "$raw" "{output.demux_dir}"
-        mkdir -p "$raw" "{output.demux_dir}"
-        {params.dorado_bin} demux --output-dir "$raw" --kit-name {params.kit} \
+        rm -rf {output.raw_dir:q}
+        mkdir -p {output.raw_dir:q} basecalling/dorado_demux
+        {params.dorado_bin} demux --output-dir {output.raw_dir:q} \
+            --kit-name {params.kit:q} --threads {threads} \
             --no-trim --emit-summary {params.extra} {input.bam:q} > {log} 2>&1
-        for barcode in {params.barcodes}; do
-            # A read loop instead of mapfile keeps this working on the bash 3.x
-            # that some container images still ship.
-            bam_files=()
-            while IFS= read -r bam_file; do
-                bam_files+=("$bam_file")
-            done < <(find "$raw" -type f \( -path "*/${{barcode}}/*.bam" -o -name "${{barcode}}.bam" -o -name "*${{barcode}}*.bam" \) -print)
-            if [[ "${{#bam_files[@]}}" -eq 0 ]]; then
-                # A barcode listed in the sample sheet can legitimately receive
-                # no reads (failed library, empty well).  Emitting a header-only
-                # BAM keeps that sample's own branch failing on its own merits
-                # instead of discarding the basecalling for every other sample.
-                echo "WARNING: no demultiplexed reads for $barcode; writing an empty BAM" >&2
-                echo "WARNING: no demultiplexed reads for $barcode" >> {log}
-                samtools view -H {input.bam:q} \
-                    | samtools view -b -o "{output.demux_dir}/${{barcode}}.bam" - >> {log} 2>&1
-            else
-                samtools merge -f -@ {threads} "{output.demux_dir}/${{barcode}}.bam" "${{bam_files[@]}}" >> {log} 2>&1
+
+        summary_file=""
+        while IFS= read -r candidate; do
+            summary_file="$candidate"
+            break
+        done < <(find {output.raw_dir:q} -type f \
+            \( -iname '*summary*.txt' -o -iname '*summary*.tsv' \) -print)
+        if [[ -z "$summary_file" ]]; then
+            echo "Dorado demux did not emit the requested summary file" >> {log}
+            exit 1
+        fi
+        cp "$summary_file" {output.summary:q}
+        """
+
+
+rule dorado_demux_barcode_bam:
+    """Normalize Dorado output to one explicit, unaligned BAM per barcode."""
+    input:
+        raw_dir="basecalling/dorado_demux_raw",
+        basecalled="basecalling/dorado/basecalled.bam",
+    output:
+        bam=_dorado_barcode_bam_output,
+    params:
+        barcode=lambda wildcards: wildcards.dorado_barcode,
+        allow_empty=str(
+            bool(config.get("dorado", {}).get("allow_empty_barcodes", False))
+        ).lower(),
+    log:
+        "logs/dorado/demux_{dorado_barcode}.log",
+    benchmark:
+        repeat(
+            "benchmarks/dorado/demux_{dorado_barcode}.tsv",
+            config.get("dorado", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("dorado_demux_bam", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("dorado_demux_bam", {}).get(
+            "mem_mb", config["default_resources"]["mem_mb"]
+        ),
+        mem_per_cpu=config.get("dorado_demux_bam", {}).get(
+            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
+        ),
+        partition=config.get("dorado_demux_bam", {}).get(
+            "partition", config["default_resources"]["partition"]
+        ),
+        threads=config.get("dorado_demux_bam", {}).get(
+            "threads", config["default_resources"]["threads"]
+        ),
+        time=config.get("dorado_demux_bam", {}).get(
+            "time", config["default_resources"]["time"]
+        ),
+    container:
+        config.get("dorado_demux_bam", {}).get(
+            "container", config["default_container"]
+        )
+    wildcard_constraints:
+        dorado_barcode="barcode[0-9]+",
+    message:
+        "{rule}: retain unaligned reads assigned to {wildcards.dorado_barcode}"
+    shell:
+        r"""
+        barcode={params.barcode:q}
+        bam_files=()
+        while IFS= read -r bam_file; do
+            bam_files+=("$bam_file")
+        done < <(find {input.raw_dir:q} -type f \
+            \( -path "*/${{barcode}}/*.bam" \
+               -o -name "${{barcode}}.bam" \
+               -o -name "*${{barcode}}*.bam" \) -print)
+
+        if [[ "${{#bam_files[@]}}" -eq 0 ]]; then
+            if [[ {params.allow_empty:q} != "true" ]]; then
+                echo "No demultiplexed reads found for $barcode" > {log}
+                exit 1
             fi
-            samtools index -@ {threads} "{output.demux_dir}/${{barcode}}.bam" >> {log} 2>&1
-        done
-        rm -rf "$raw"
+            echo "WARNING: no reads for $barcode; writing a header-only BAM" > {log}
+            samtools view -H {input.basecalled:q} \
+                | samtools view -b -o {output.bam:q} - >> {log} 2>&1
+        elif [[ "${{#bam_files[@]}}" -eq 1 ]]; then
+            # Dorado normally emits one BAM per barcode. A hard link avoids
+            # rewriting the full file while the raw demux directory is live.
+            rm -f {output.bam:q}
+            ln "${{bam_files[0]}}" {output.bam:q}
+            echo "Linked ${{bam_files[0]}} to {output.bam}" > {log}
+        else
+            samtools cat -o {output.bam:q} \
+                "${{bam_files[@]}}" > {log} 2>&1
+        fi
+        """
+
+
+rule dorado_demux_fastq:
+    """Optionally export a gzip-compressed FASTQ for a demultiplexed barcode."""
+    input:
+        bam="basecalling/dorado_demux/{dorado_barcode}.bam",
+    output:
+        fastq=_dorado_barcode_fastq_output,
+    params:
+        extra=config.get("samtools_fastq", {}).get("extra", "-n -T MM,ML"),
+    log:
+        "logs/dorado/fastq_{dorado_barcode}.log",
+    benchmark:
+        repeat(
+            "benchmarks/dorado/fastq_{dorado_barcode}.tsv",
+            config.get("dorado_fastq", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("dorado_fastq", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("dorado_fastq", {}).get(
+            "mem_mb", config["default_resources"]["mem_mb"]
+        ),
+        mem_per_cpu=config.get("dorado_fastq", {}).get(
+            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
+        ),
+        partition=config.get("dorado_fastq", {}).get(
+            "partition", config["default_resources"]["partition"]
+        ),
+        threads=config.get("dorado_fastq", {}).get(
+            "threads", config["default_resources"]["threads"]
+        ),
+        time=config.get("dorado_fastq", {}).get(
+            "time", config["default_resources"]["time"]
+        ),
+    container:
+        config.get("dorado_fastq", {}).get(
+            "container", config["default_container"]
+        )
+    wildcard_constraints:
+        dorado_barcode="barcode[0-9]+",
+    message:
+        "{rule}: export {wildcards.dorado_barcode} as FASTQ"
+    shell:
+        r"""
+        samtools fastq -@ {threads} {params.extra} {input.bam:q} 2> {log} \
+            | gzip -c > {output.fastq:q}
         """

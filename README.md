@@ -10,7 +10,7 @@ Nagini accepts four kinds of sample input:
 
 | Input | Processing |
 | --- | --- |
-| MinKNOW/POD5 folder | Dorado basecalling and barcode demultiplexing are run before the analysis. |
+| MinKNOW/POD5 folder | Dorado produces unaligned reads per barcode; the selected aligner then maps each barcode independently. |
 | FASTQ | Reads are aligned to the selected reference. |
 | Unmapped BAM | Reads are extracted, aligned, and normalized. |
 | Aligned BAM | Existing mapping is retained; the BAM is sorted and indexed for downstream analysis. |
@@ -23,8 +23,10 @@ the original BAM paths and Dorado barcode identifiers are retained in the
 For a MinKNOW/POD5 folder, the launcher accepts a Dorado model and barcode kit,
 then schedules containerized basecalling and demultiplexing as part of the
 workflow. The same barcode-to-sample map is used to create Hydra-style input
-tables before the DAG is built. Basecalling logs and intermediate BAMs are kept
-in the run's `basecalling/` directory.
+tables before the DAG is built. A gzip-compressed FASTQ is retained per barcode
+by default; an unaligned BAM can be retained instead or alongside it. Alignment
+is a separate step and uses the barcode FASTQ with minimap2 by default; Dorado
+aligner is also supported.
 
 Dorado is supplied by the pinned Singularity/Apptainer image configured for the
 selected site; no local Dorado installation is required.
@@ -37,7 +39,9 @@ pipeline_start_scripts/start_nagini.sh \
   --inbox-path /data/minknow_run \
   --barcode-kit SQK-RBK114-24 \
   --basecalling-model sup \
-  --barcode-map barcode_map.csv
+  --barcode-map barcode_map.csv \
+  --demux-output-format both \
+  --dorado-aligner minimap2
 ```
 
 The pipeline supports the hg38 and T2T/hs1 reference builds, configurable
@@ -62,6 +66,8 @@ For each sample, Nagini can perform:
 
 The workflow produces:
 
+- a FASTQ and/or unaligned BAM per barcode under `basecalling/` for MinKNOW input;
+- a stable Dorado demultiplexing summary at `basecalling/dorado_demux/demux_summary.tsv`;
 - sorted, indexed BAM files under `alignment/nagini_bam/`;
 - read and coverage metrics under `qc/`;
 - filtered and normalized SNV/indel VCFs under `snv_indels/`;

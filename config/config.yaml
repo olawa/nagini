@@ -116,12 +116,31 @@ dorado:
   models_directory: ""
   basecaller_extra: ""
   demux_extra: ""
+  # bam keeps one unaligned BAM per barcode; fastq makes the BAM temporary;
+  # both retains the BAM and also exports a gzip-compressed FASTQ.
+  demux_output_format: "fastq"
+  allow_empty_barcodes: false
   basecaller_threads: 8
   demux_threads: 8
 
+dorado_alignment:
+  # The raw per-barcode BAM remains unaligned. This selector controls the
+  # separate downstream alignment used by callers and coverage tools.
+  aligner: "minimap2"
+  extra: ""
+
+dorado_demux_bam:
+  container: "docker://hydragenetics/common:3.1.1"
+
+dorado_fastq:
+  container: "docker://hydragenetics/common:3.1.1"
+
+finalize_dorado_alignment:
+  container: "docker://hydragenetics/common:3.1.1"
+
 samtools_fastq:
-  # -T carries MM/ML tags into FASTQ comments when the input BAM contains
-  # them. Set to "-n" if the installed samtools cannot copy these tags.
+  # -T carries MM/ML tags into FASTQ comments. minimap2 -y copies those
+  # comments back into SAM auxiliary fields; -Y controls supplementary clips.
   extra: "-n -T MM,ML"
 
 mosdepth:

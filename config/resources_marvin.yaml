@@ -13,12 +13,6 @@ stage_aligned_bam:
   mem_mb: 16384
   mem_per_cpu: 4096
   partition: "core,core_bkup"
-stage_dorado_bam:
-  threads: 4
-  time: "04:00:00"
-  mem_mb: 16384
-  mem_per_cpu: 4096
-  partition: "core,core_bkup"
 dorado:
   basecaller_threads: 24
   basecaller_time: "72:00:00"
@@ -33,6 +27,30 @@ dorado:
   demux_mem_mb: 122880
   demux_mem_per_cpu: 6144
   demux_partition: "core,core_bkup"
+dorado_demux_bam:
+  threads: 1
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+dorado_fastq:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+dorado_alignment:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
+finalize_dorado_alignment:
+  threads: 8
+  time: "12:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core,core_bkup"
 minimap2_fastq_align:
   threads: 32
   time: "72:00:00"

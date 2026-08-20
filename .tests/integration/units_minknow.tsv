@@ -1,0 +1,2 @@
+sample	type	platform	machine	processing_unit	barcode	barcode_name	input_type	fastq1	fastq2	bam	methylation	run_id	basecalling_model
+example	N	ONT	unknown	barcode05_001	BC	barcode05	dorado_bam	UNUSED	UNUSED	basecalling/dorado_demux/barcode05.bam	Yes	run_001	hac,5mCG_5hmCG

@@ -157,6 +157,8 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         args.dorado_kit = "SQK-RBK114-24"
         args.dorado_device = "cuda:all"
         args.dorado_models_directory = None
+        args.dorado_demux_output_format = "both"
+        args.dorado_aligner = "dorado"
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
@@ -168,6 +170,8 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         )
         self.assertEqual(config["dorado"]["kit"], "SQK-RBK114-24")
         self.assertEqual(config["dorado"]["device"], "cuda:all")
+        self.assertEqual(config["dorado"]["demux_output_format"], "both")
+        self.assertEqual(config["dorado_alignment"]["aligner"], "dorado")
 
     def test_minknow_runtime_config_supports_local_binary(self):
         pipeline_root = Path(__file__).parents[1]

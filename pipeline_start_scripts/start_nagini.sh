@@ -32,6 +32,8 @@ dorado_device=""
 dorado_models_directory=""
 dorado_container=""
 dorado_binary=""
+dorado_demux_output_format="fastq"
+dorado_aligner="minimap2"
 bed_file=""
 small_variant_caller=""
 clairs_to_platform=""
@@ -73,6 +75,8 @@ Options:
   --dorado-models-directory DIR Directory containing downloaded Dorado models.
   --dorado-container IMAGE      Override default Dorado Docker/Singularity image (or 'none' for local binary).
   --dorado-binary PATH          Path to local dorado binary (e.g. ~/tmp/tools/dorado-2.1.1-linux-x64/bin/dorado).
+  --demux-output-format FORMAT  Per-barcode raw output: bam, fastq, or both (default: fastq).
+  --dorado-aligner ALIGNER      Alignment after demux: minimap2 or dorado (default: minimap2).
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
   --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
@@ -228,6 +232,16 @@ while [[ $# -gt 0 ]]; do
             dorado_binary="$2"
             shift 2
             ;;
+        --demux-output-format|--dorado-demux-output-format)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_demux_output_format="$2"
+            shift 2
+            ;;
+        --dorado-aligner)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_aligner="$2"
+            shift 2
+            ;;
         --bed-file|--bed|--design-bed)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             bed_file="$2"
@@ -345,7 +359,14 @@ if [[ ("$input_type" == "unmapped_bam" || "$input_type" == "aligned_bam") && -z 
 fi
 [[ "$sample_type" =~ ^(N|T|R)$ ]] || die "--sample-type must be N, T, or R"
 [[ "$methylation" =~ ^(Yes|No)$ ]] || die "--methylation must be Yes or No"
-
+case "$dorado_demux_output_format" in
+    bam|fastq|both) ;;
+    *) die "--demux-output-format must be bam, fastq, or both" ;;
+esac
+case "$dorado_aligner" in
+    minimap2|dorado) ;;
+    *) die "--dorado-aligner must be minimap2 or dorado" ;;
+esac
 source_input_dir="$input_dir"
 source_input_type="$input_type"
 if [[ "$input_type" == "minknow" ]]; then
@@ -387,6 +408,7 @@ prepare_cmd=(
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
+[[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-demux-output-format "$dorado_demux_output_format" --dorado-aligner "$dorado_aligner")
 [[ -n "$dorado_device" ]] && prepare_cmd+=(--dorado-device "$dorado_device")
 [[ -n "$dorado_models_directory" ]] && prepare_cmd+=(--dorado-models-directory "$dorado_models_directory")
 [[ -n "$dorado_container" ]] && prepare_cmd+=(--dorado-container "$dorado_container")
@@ -420,6 +442,8 @@ barcode_kit: "${barcode_kit:-}"
 basecalling_model: "$basecalling_model"
 dorado_device: "${dorado_device:-}"
 dorado_models_directory: "${dorado_models_directory:-}"
+dorado_demux_output_format: "$dorado_demux_output_format"
+dorado_aligner: "$dorado_aligner"
 runtime_config: "$analysis_dir/config.nagini.yaml"
 profile: "$profile"
 library_root: "${library_root:-}"
