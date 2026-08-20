@@ -1,5 +1,6 @@
 cores: 48
 rerun-incomplete: true
+rerun-triggers: [mtime, input]
 keep-going: true
 use-singularity: true
 singularity-args: "--cleanenv --nv --bind /data,/var/lib/minknow/data"

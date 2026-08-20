@@ -2,6 +2,7 @@ jobs: 100
 keep-going: true
 restart-times: 1
 rerun-incomplete: true
+rerun-triggers: [mtime, input]
 max-jobs-per-second: 20
 resources: "load=100"
 max-status-checks-per-second: 100
