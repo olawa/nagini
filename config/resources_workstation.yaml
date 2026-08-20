@@ -1,0 +1,189 @@
+---
+default_resources:
+  threads: 1
+  time: "24:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+  gres: ""
+
+stage_aligned_bam:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+stage_dorado_bam:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+dorado:
+  basecaller_threads: 8
+  basecaller_time: "72:00:00"
+  basecaller_mem_mb: 32768
+  basecaller_mem_per_cpu: 4096
+  basecaller_partition: core
+  basecaller_gres: ""
+  demux_threads: 16
+  demux_time: "12:00:00"
+  demux_mem_mb: 32768
+  demux_mem_per_cpu: 4096
+  demux_partition: core
+
+dorado_demux_bam:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+dorado_fastq:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+dorado_alignment:
+  threads: 32
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: core
+
+finalize_dorado_alignment:
+  threads: 8
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+minimap2_fastq_align:
+  threads: 32
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: core
+
+minimap2_unmapped_bam_align:
+  threads: 32
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: core
+
+samtools_merge_bam:
+  threads: 8
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+sniffles2_call:
+  threads: 16
+  time: "12:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+cramino:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+mosdepth:
+  threads: 8
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+mosdepth_bed:
+  threads: 8
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+clairs_to_call:
+  threads: 32
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: core
+
+clairs_to_concat:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+bcftools_norm_clairs_to:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+gatk_mutect2:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+gatk_merge_mutect_stats:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: core
+
+gatk_filter_mutect_calls:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 16384
+  partition: core
+
+bcftools_concat:
+  threads: 2
+  time: "04:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+bcftools_norm_mutect2:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 4096
+  partition: core
+
+vep:
+  threads: 8
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: core
+
+nagini_excel_report:
+  threads: 1
+  time: "01:00:00"
+  mem_mb: 4096
+  mem_per_cpu: 4096
+  partition: core
+
+sv_summary:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 4096
+  mem_per_cpu: 4096
+  partition: core
