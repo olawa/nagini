@@ -354,9 +354,6 @@ case "$input_type" in
     minknow|fastq|unmapped_bam|aligned_bam) ;;
     *) die "Unsupported --input-type: $input_type" ;;
 esac
-if [[ ("$input_type" == "unmapped_bam" || "$input_type" == "aligned_bam") && -z "$barcode_map" ]]; then
-    require_command hydra-genetics
-fi
 [[ "$sample_type" =~ ^(N|T|R)$ ]] || die "--sample-type must be N, T, or R"
 [[ "$methylation" =~ ^(Yes|No)$ ]] || die "--methylation must be Yes or No"
 case "$dorado_demux_output_format" in

@@ -403,51 +403,61 @@ def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]],
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
 
 
-def run_hydra_create_input_files(args: argparse.Namespace, analysis_dir: Path) -> None:
-    command = [
-        "hydra-genetics",
-        "create-input-files",
-        "--platform",
-        "ONT",
-        "--sample-type",
-        args.sample_type,
-        "--directory",
-        str(args.input_dir),
-        "--default-barcode",
-        args.barcode,
-    ]
-    if args.force:
-        command.append("--force")
-    subprocess.run(command, cwd=analysis_dir, check=True)
+def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    files = sorted(
+        path.resolve()
+        for path in args.input_dir.rglob("*")
+        if path.is_file() and path.name.lower().endswith(".bam")
+    )
+    if not files:
+        raise SystemExit(f"No BAM files found below {args.input_dir}.")
 
+    pattern = re.compile(args.sample_regex) if args.sample_regex else None
+    counters: defaultdict[str, int] = defaultdict(int)
+    units: list[dict[str, str]] = []
+    samples_by_name: dict[str, dict[str, str]] = {}
 
-def normalize_bam_tables(
-    args: argparse.Namespace, analysis_dir: Path
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    samples_path = analysis_dir / "samples.tsv"
-    units_path = analysis_dir / "units.tsv"
-    if not samples_path.exists() or not units_path.exists() or getattr(args, "force", False):
-        run_hydra_create_input_files(args, analysis_dir)
-    if not samples_path.exists() or not units_path.exists():
-        raise SystemExit("Hydra did not create samples.tsv and units.tsv.")
+    for path in files:
+        sample = ""
+        sample_type = args.sample_type
+        if pattern:
+            match = pattern.search(path.name)
+            if match:
+                if "sample" in match.groupdict():
+                    sample = match.group("sample")
+                elif match.groups():
+                    sample = match.group(1)
+                else:
+                    sample = match.group(0)
+                sample_type = match.groupdict().get("type", args.sample_type)
+        if not sample:
+            stem = path.stem
+            if stem.endswith(("_T", "_N", "_R")):
+                sample, sample_type = stem[:-2], stem[-1]
+            else:
+                sample = stem
 
-    samples = read_tsv(samples_path)
-    units = read_tsv(units_path)
-    if not units:
-        raise SystemExit("units.tsv contains no rows.")
-    for row in units:
-        row["input_type"] = args.input_type
-        row["fastq1"] = row.get("fastq1") or "UNUSED"
-        row["fastq2"] = row.get("fastq2") or "UNUSED"
-        bam_path = Path(row["bam"]).expanduser()
-        if not bam_path.is_absolute():
-            bam_path = analysis_dir / bam_path
-        row["bam"] = str(bam_path.resolve())
-        row.setdefault("machine", "unknown")
-        row.setdefault("methylation", args.methylation)
-        row.setdefault("run_id", args.run_id or args.sequence_id or args.input_dir.name)
-        row.setdefault("basecalling_model", args.basecalling_model)
-    return samples, units
+        counters[sample] += 1
+        run_id = args.run_id or args.sequence_id or args.input_dir.name
+        samples_by_name.setdefault(sample, {"sample": sample})
+        units.append(
+            {
+                "sample": sample,
+                "type": sample_type,
+                "platform": "ONT",
+                "machine": "unknown",
+                "processing_unit": f"PU{counters[sample]:03d}",
+                "barcode": args.barcode,
+                "input_type": args.input_type,
+                "fastq1": "UNUSED",
+                "fastq2": "UNUSED",
+                "bam": str(path),
+                "methylation": args.methylation,
+                "run_id": run_id,
+                "basecalling_model": args.basecalling_model,
+            }
+        )
+    return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
 
 
 def validate_tables(
@@ -708,7 +718,7 @@ def main() -> None:
         if samples_path.exists() and units_path.exists() and not args.force:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
-            samples, units = normalize_bam_tables(args, args.analysis_dir)
+            samples, units = make_bam_tables(args)
 
     if args.tumor_content is not None:
         for row in samples:
