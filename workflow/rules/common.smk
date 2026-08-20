@@ -179,6 +179,60 @@ onstart:
 config = load_resources(config, config["resources"])
 validate(config, schema="../schemas/resources.schema.yaml")
 
+
+def _scale_workstation_resources(cfg):
+    """Dynamically scale compute-heavy sequential rules to the allocated core budget."""
+    site = str(cfg.get("site", "")).strip().lower()
+    # Apply dynamic scaling on workstation and local runs (not cluster scheduler environments like marvin)
+    if site not in ("workstation", "local", ""):
+        return cfg
+
+    cores = None
+    if cfg.get("cores"):
+        try:
+            cores = int(cfg["cores"])
+        except (ValueError, TypeError):
+            pass
+    if not cores and hasattr(workflow, "cores") and workflow.cores:
+        try:
+            cores = int(workflow.cores)
+        except (ValueError, TypeError):
+            pass
+
+    if not cores or cores <= 1:
+        return cfg
+
+    # Compute-heavy sequential rules that should utilize the full allocated core budget:
+    full_core_rules = (
+        "minimap2_fastq_align",
+        "minimap2_unmapped_bam_align",
+        "dorado_alignment",
+        "clairs_to_call",
+        "sniffles2_call",
+        "vep",
+    )
+    for rule_name in full_core_rules:
+        if rule_name in cfg and isinstance(cfg[rule_name], dict):
+            cfg[rule_name]["threads"] = cores
+
+    # Moderate parallel / intermediate rules scaled proportionally:
+    moderate_core_rules = {
+        "samtools_merge_bam": max(4, min(16, cores // 2)),
+        "mosdepth": max(4, min(16, cores // 2)),
+        "mosdepth_bed": max(4, min(16, cores // 2)),
+    }
+    for rule_name, target_threads in moderate_core_rules.items():
+        if rule_name in cfg and isinstance(cfg[rule_name], dict):
+            cfg[rule_name]["threads"] = target_threads
+
+    if "dorado" in cfg and isinstance(cfg["dorado"], dict):
+        cfg["dorado"]["demux_threads"] = max(4, min(24, cores // 2))
+
+    return cfg
+
+
+config = _scale_workstation_resources(config)
+
 samples = pd.read_table(config["samples"], dtype=str).fillna("").set_index("sample", drop=False)
 validate(samples, schema="../schemas/samples.schema.yaml")
 

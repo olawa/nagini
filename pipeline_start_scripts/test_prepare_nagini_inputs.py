@@ -286,6 +286,33 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(config["small_variant_caller"], "clairs_to")
         self.assertEqual(config["clairs_to_call"]["platform"], "ont_r10_dorado_sup_5khz_ssrs")
 
+    def test_runtime_config_records_cores(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "minknow"
+        args.dorado_input = None
+        args.input_dir = Path("/tmp/run")
+        args.dorado_model = "hac"
+        args.basecalling_model = "hac"
+        args.dorado_kit = ""
+        args.dorado_device = ""
+        args.dorado_models_directory = None
+        args.dorado_container = ""
+        args.dorado_binary = ""
+        args.bed_file = None
+        args.cores = 96
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["cores"], 96)
+
 
 if __name__ == "__main__":
     unittest.main()

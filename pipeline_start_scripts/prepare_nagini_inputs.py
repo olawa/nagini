@@ -104,6 +104,12 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Override default ClairS-TO container image.",
     )
+    parser.add_argument(
+        "--cores",
+        type=int,
+        default=None,
+        help="Number of CPU cores allocated for the pipeline run.",
+    )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -663,6 +669,9 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
 
     if getattr(args, "clairs_to_container", ""):
         config.setdefault("clairs_to_call", {})["container"] = args.clairs_to_container
+
+    if getattr(args, "cores", None):
+        config["cores"] = int(args.cores)
 
     runtime_config = analysis_dir / "config.nagini.yaml"
     with runtime_config.open("w") as handle:

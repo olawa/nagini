@@ -417,6 +417,7 @@ prepare_cmd=(
 [[ -n "$small_variant_caller" ]] && prepare_cmd+=(--small-variant-caller "$small_variant_caller")
 [[ -n "$clairs_to_platform" ]] && prepare_cmd+=(--clairs-to-platform "$clairs_to_platform")
 [[ -n "$clairs_to_container" ]] && prepare_cmd+=(--clairs-to-container "$clairs_to_container")
+[[ -n "$cores" ]] && prepare_cmd+=(--cores "$cores")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
 $force_inputs && prepare_cmd+=(--force)
