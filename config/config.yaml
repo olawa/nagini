@@ -163,7 +163,7 @@ clairs_to_call:
   platform: "ont_r10_dorado_hac_5khz_ssrs"
   snv_min_af: 0.05
   indel_min_af: 0.1
-  extra: "--enable_long_indel"
+  extra: ""
 
 clairs_to_concat:
   container: "docker://hydragenetics/common:3.1.1"
