@@ -40,6 +40,7 @@ rule stage_aligned_bam:
     shell:
         """
         samtools addreplacerg \
+            -w \
             -r '{params.read_group}' \
             -m overwrite_all \
             -o {output.bam}.with_rg.bam \
