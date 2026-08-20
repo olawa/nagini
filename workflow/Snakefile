@@ -301,11 +301,37 @@ use rule cramino from qc as qc_cramino with:
         arrow="qc/cramino/{sample}_{type}.arrow",
 
 
-# Hydra's qc module still supplies cramino and MultiQC.  The two mosdepth
+def get_multiqc_input_files(wildcards):
+    report_name = getattr(wildcards, "report", "nanopore")
+    report_cfg = config.get("multiqc", {}).get("reports", {}).get(report_name, {})
+    template_files = report_cfg.get("qc_files", [])
+    included_types = set(report_cfg.get("included_unit_types", ["N", "T", "R"]))
+    resolved = []
+    for _, row in units.iterrows():
+        sample = str(row.get("sample", "")).strip()
+        unit_type = str(row.get("type", "")).strip()
+        pu = str(row.get("processing_unit", "")).strip()
+        barcode = str(row.get("barcode", "")).strip()
+        if unit_type in included_types:
+            for tf in template_files:
+                resolved.append(
+                    tf.format(
+                        sample=sample,
+                        type=unit_type,
+                        processing_unit=pu,
+                        barcode=barcode,
+                    )
+                )
+    return sorted(set(resolved))
+
+
+# Hydra's qc module still supplies cramino and MultiQC. The two mosdepth
 # rules are local because qc v0.8.0 declares output names that do not match
 # the pinned Snakemake wrapper; the local rules below use that same wrapper
 # with its supported output names.
-use rule multiqc_longread from qc as qc_multiqc_longread
+use rule multiqc_longread from qc as qc_multiqc_longread with:
+    input:
+        files=get_multiqc_input_files,
 
 
 # ===========================================================================
