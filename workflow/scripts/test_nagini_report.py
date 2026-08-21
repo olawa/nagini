@@ -32,10 +32,11 @@ class NaginiReportTest(unittest.TestCase):
                     "GT:AF:DP:AD\t0/1:0.25:40:30,10\n"
                 )
 
-            columns, records = REPORT.parse_small_variant_vcf(vcf)
+            columns, records, caller = REPORT.parse_small_variant_vcf(vcf)
             self.assertIn("Gene", columns)
+            self.assertIn("Caller", columns)
             self.assertEqual(records[0]["Gene"], "GENE1")
-            self.assertEqual(records[0]["VAF"], "0.25")
+            self.assertEqual(records[0]["VAF"], "0.250")
             self.assertEqual(records[0]["ClinVar_Significance"], "Pathogenic")
             self.assertEqual(records[0]["ClinVar_Disease"], "Disease_one")
 
@@ -60,7 +61,7 @@ class NaginiReportTest(unittest.TestCase):
             coverage = root / "coverage.tsv"
             coverage.write_text("chrom\tlength\tbases\tmean\nchr1\t100\t100\t12.5\ntotal\t100\t100\t12.5\n")
             cramino = root / "cramino.txt"
-            cramino.write_text("Reads\t10\nYield [Gb]: 0.01\n")
+            cramino.write_text("Reads\t10\nYield [Gb]: 0.01\nMean quality: 14.2\n")
 
             cytoband = root / "cytoBand.txt"
             cytoband.write_text(
@@ -72,14 +73,18 @@ class NaginiReportTest(unittest.TestCase):
             REPORT.generate_report(
                 str(full_output), "example", "N", "hg38", "VEP", str(vcf),
                 str(sv), str(translocations), str(coverage), str(coverage), str(cramino),
-                str(cytoband),
+                str(cytoband), caller="ClairS-TO", design_bed="/data/panel.bed",
+                platform="ont_r10_dorado_hac_4khz"
             )
             with zipfile.ZipFile(full_output) as workbook:
                 workbook_xml = workbook.read("xl/workbook.xml").decode()
                 self.assertEqual(workbook_xml.count("<sheet "), 7)
                 self.assertIn("Translocations", workbook_xml)
                 overview = workbook.read("xl/worksheets/sheet1.xml").decode()
-                self.assertIn("ClinVar pathogenic / likely pathogenic SNVs", overview)
+                self.assertIn("NAGINI NANOPORE ANALYSIS REPORT", overview)
+                self.assertIn("ClairS-TO (ont_r10_dorado_hac_4khz)", overview)
+                self.assertIn("panel.bed", overview)
+                self.assertIn("PATHOGENIC", overview)
                 sv_sheet = workbook.read("xl/worksheets/sheet3.xml").decode()
                 self.assertIn("Cytogenetic_Notation", sv_sheet)
 

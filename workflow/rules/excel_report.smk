@@ -22,6 +22,9 @@ rule nagini_excel_report:
             "VEP" if vep_enabled() else "none"
         ),
         cytoband=get_cytoband_file,
+        small_variant_caller=get_small_variant_caller(),
+        design_bed=lambda wildcards: config.get("reference", {}).get("design_bed", ""),
+        clairs_to_platform=lambda wildcards: config.get("clairs_to_call", {}).get("platform", ""),
     log:
         "logs/nagini_excel_report/{sample}_{type}.log",
     benchmark:

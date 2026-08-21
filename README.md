@@ -10,75 +10,84 @@ Nagini accepts four kinds of sample input:
 
 | Input | Processing |
 | --- | --- |
-| MinKNOW/POD5 folder | Dorado produces unaligned reads per barcode; the selected aligner then maps each barcode independently. |
-| FASTQ | Reads are aligned to the selected reference. |
+| MinKNOW/POD5 folder | Dorado basecalls and demultiplexes reads per barcode; the selected aligner then maps each barcode independently. |
+| FASTQ | Reads are aligned to the selected reference genome. |
 | Unmapped BAM | Reads are extracted, aligned, and normalized. |
-| Aligned BAM | Existing mapping is retained; the BAM is sorted and indexed for downstream analysis. |
+| Aligned BAM | Existing alignments are retained; the BAM is prepared, sorted, and indexed for downstream variant calling. |
 
-Dorado `bam_pass/barcodeXX` directories are supported with a separate
-barcode-to-sample map. The map is used to create the Hydra-style input tables;
-the original BAM paths and Dorado barcode identifiers are retained in the
-`barcode_name` column.
+### MinKNOW / POD5 Input & Dorado Demux
 
-For a MinKNOW/POD5 folder, the launcher accepts a Dorado model and barcode kit,
-then schedules containerized basecalling and demultiplexing as part of the
-workflow. The same barcode-to-sample map is used to create Hydra-style input
-tables before the DAG is built. A gzip-compressed FASTQ is retained per barcode
-by default; an unaligned BAM can be retained instead or alongside it. Alignment
-is a separate step and uses the barcode FASTQ with minimap2 by default; Dorado
-aligner is also supported.
+For MinKNOW/POD5 runs, the launcher accepts a Dorado model, modified basecalling flags (e.g. `5mCG_5hmCG`), and a barcode kit. It schedules basecalling and demultiplexing as part of the workflow.
 
-Dorado is supplied by the pinned Singularity/Apptainer image configured for the
-selected site; no local Dorado installation is required.
+A barcode map CSV/TSV maps barcode identifiers (e.g. `barcode01`) to clinical sample names and types (`T` for tumor, `N` for normal). Dorado can be run via container (default) or a local binary via `--dorado-binary`.
 
-For example:
+Example starting from raw MinKNOW POD5 data:
 
 ```bash
 pipeline_start_scripts/start_nagini.sh \
+  --site workstation \
   --input-type minknow \
   --inbox-path /data/minknow_run \
-  --barcode-kit SQK-RBK114-24 \
-  --basecalling-model sup \
+  --barcode-kit SQK-NBD114-24 \
+  --basecalling-model "hac,5mCG_5hmCG" \
+  --methylation Yes \
   --barcode-map barcode_map.csv \
-  --demux-output-format both \
-  --dorado-aligner minimap2
+  --dorado-binary ~/tools/dorado-2.1.1-linux-x64/bin/dorado \
+  --analysis-dir /data/analysis/run_01
 ```
 
-The pipeline supports the hg38 and T2T/hs1 reference builds, configurable
-target regions, and sample- and unit-level metadata.
+Example starting from existing aligned BAM files:
 
-## Analysis
+```bash
+pipeline_start_scripts/start_nagini.sh \
+  --site workstation \
+  --input-type aligned_bam \
+  --inbox-path /data/analysis/run_01/alignment/nagini_bam \
+  --analysis-dir /data/analysis/run_01
+```
 
-For each sample, Nagini can perform:
+## Analysis & Variant Calling
 
-- alignment normalization and BAM indexing;
-- read and whole-genome coverage QC;
-- target-region coverage QC;
-- Mutect2 small-variant calling with merged statistics, filtering, and
-  left-normalization;
-- optional VEP annotation with ClinVar fields, or SnpEff annotation of small variants;
-- Sniffles2 structural-variant calling;
-- structural-variant annotation and summaries, including translocations, BND
-  records, and optional cytoband notation; and
-- aggregation of QC results with MultiQC.
+For each sample, Nagini performs:
+
+- **Alignment & BAM staging:** Minimap2 alignment with `@RG` sample tags and samtools sorting/indexing.
+- **Coverage QC:** Mosdepth whole-genome and target-region (BED) coverage analysis.
+- **Read & Yield QC:** Cramino read-length, N50, and Q-score statistics.
+- **Somatic Small Variant Calling:**
+  - **ClairS-TO** (default): Deep-learning somatic SNV and small-indel caller optimized for ONT R10.4.1 data with automatic platform model selection (e.g. `ont_r10_dorado_hac_4khz`, `ont_r10_dorado_sup_5khz_ssrs`) and target BED restriction.
+  - **GATK Mutect2**: Somatic small-variant calling with merged statistics, filtering, and left-normalization.
+  - Caller selection is configurable via `--small-variant-caller clairs_to|mutect2|both`.
+- **Structural Variant Calling:** Sniffles2 SV calling with tandem-repeat annotations, translocation/BND extraction, cytogenetic band notation (ISCN-style), and target BED overlap.
+- **Annotation:** Optional VEP annotation with ClinVar pathogenicity fields and SnpEff.
+- **Reporting & Aggregation:** Fluffy-style consolidated multi-tab Excel reports and MultiQC HTML dashboard.
+
+## Target Region & Adaptive Sampling Support
+
+Target BED files (e.g. for ReadUntil or targeted panels) can be provided with `--bed-file /path/to/panel.bed` or placed directly in the input directory where they are automatically discovered.
+
+When a target BED is configured:
+- **ClairS-TO** and **Mutect2** restrict variant calling strictly to the target regions (`--bed_fn` / `-L`).
+- **Mosdepth** computes on-target coverage distributions and threshold fractions (10x, 20x, 30x, 50x, 100x).
+- **SV Summaries & Excel Reports** annotate and highlight structural variants and translocations overlapping the target genes/regions.
+
+## Resource Scaling
+
+On workstations and local compute, Nagini dynamically scales compute-heavy sequential rules (`minimap2`, `clairs_to_call`, `sniffles2_call`, `vep`) to the full allocated core budget (e.g. `--cores 48`), avoiding disk I/O thrashing from over-parallelized alignment while maximizing single-sample processing throughput.
 
 ## Results
 
 The workflow produces:
 
-- a FASTQ and/or unaligned BAM per barcode under `basecalling/` for MinKNOW input;
-- a stable Dorado demultiplexing summary at `basecalling/dorado_demux/demux_summary.tsv`;
-- sorted, indexed BAM files under `alignment/nagini_bam/`;
-- read and coverage metrics under `qc/`;
-- filtered and normalized SNV/indel VCFs under `snv_indels/`;
-- structural-variant VCFs and summaries under `cnv_sv/` and `reports/`; and
-- one Excel report per sample and input type under `reports/`.
+- **Alignments:** Sorted, indexed BAM files under `alignment/nagini_bam/`;
+- **Quality Control:** Cramino read metrics, Mosdepth WGS/target coverage under `qc/`, and an aggregated `qc/multiqc/multiqc_nanopore.html` dashboard;
+- **Small Variants:** Filtered, normalized VCFs under `snv_indels/`;
+- **Structural Variants:** Sniffles2 VCFs, SV summaries, and translocation tables under `cnv_sv/` and `reports/sv_summary/`;
+- **Excel Report:** One consolidated Excel workbook per sample under `reports/{sample}_{type}.nagini_report.xlsx` containing:
+  - **Overview:** Sample metadata, caller provenance, sequencing QC KPIs, and variant summary;
+  - **SNVs and indels:** Annotated small variants with VAF, depth, Gene, Consequence, and ClinVar significance;
+  - **SVs:** Structural variants with cytogenetic band notation and target gene overlaps;
+  - **Translocations:** Breakends and translocations with cytoband ISCN notation;
+  - **WGS coverage & Target coverage:** Mosdepth coverage tables;
+  - **Cramino QC:** Detailed read yield and quality metrics.
 
-Each Excel report contains separate sheets for an overview, SNVs and indels,
-structural variants, translocations, whole-genome coverage, target coverage,
-and Cramino QC metrics.
-
-The reports are technical summaries and are not clinical interpretations.
-
-Development and reproducibility notes are kept in
-[`DEVELOPMENT.md`](DEVELOPMENT.md).
+Development and reproducibility notes are kept in [`DEVELOPMENT.md`](DEVELOPMENT.md).
