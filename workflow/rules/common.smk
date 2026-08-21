@@ -500,14 +500,17 @@ def compile_output_file_list(wildcards):
 
         allowed_types = file_definition.get("types")
         for sample in get_samples(samples):
+            clean_sample = str(sample).strip()
             for unit_type in get_unit_types_for_sample(sample):
                 if allowed_types and unit_type not in allowed_types:
                     continue
+                clean_type = str(unit_type).strip()
+                template = str(file_definition["output"]).strip()
                 output_files.append(
                     outdir
-                    / file_definition["output"].format(
-                        sample=sample,
-                        type=unit_type,
+                    / template.format(
+                        sample=clean_sample,
+                        type=clean_type,
                     )
                 )
 
