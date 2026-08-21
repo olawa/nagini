@@ -217,14 +217,15 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         args.dorado_models_directory = None
         args.dorado_container = ""
         args.dorado_binary = ""
-        args.bed_file = Path("/custom/path/my_targets.bed")
-
         with tempfile.TemporaryDirectory() as tmpdir:
+            bed_path = Path(tmpdir) / "my_targets.bed"
+            bed_path.write_text("chr1\t1\t100\tGENE1\n")
+            args.bed_file = bed_path
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
             config = yaml.safe_load(runtime.read_text())
 
-        self.assertEqual(config["references"]["hg38"]["design_bed"], "/custom/path/my_targets.bed")
-        self.assertEqual(config["HG38_DESIGN_BED"], "/custom/path/my_targets.bed")
+        self.assertEqual(config["references"]["hg38"]["design_bed"], str(bed_path.resolve()))
+        self.assertEqual(config["HG38_DESIGN_BED"], str(bed_path.resolve()))
 
     def test_runtime_config_auto_detects_inbox_bed(self):
         pipeline_root = Path(__file__).parents[1]

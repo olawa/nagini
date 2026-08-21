@@ -646,7 +646,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
 
     bed_path = None
     if getattr(args, "bed_file", None):
-        bed_path = str(args.bed_file.resolve())
+        resolved_bed = args.bed_file.resolve()
+        if not resolved_bed.is_file():
+            raise SystemExit(f"Target BED file does not exist: {resolved_bed}")
+        bed_path = str(resolved_bed)
     elif getattr(args, "input_dir", None) and args.input_dir.is_dir():
         bed_files = sorted(args.input_dir.glob("*.bed"))
         if len(bed_files) == 1:

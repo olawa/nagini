@@ -244,7 +244,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --bed-file|--bed|--design-bed)
             [[ $# -ge 2 ]] || die "$1 requires a value"
-            bed_file="$2"
+            bed_file="$(absolute_path "$2")"
+            [[ -f "$bed_file" ]] || die "Target BED file does not exist: $bed_file"
             shift 2
             ;;
         --small-variant-caller)
