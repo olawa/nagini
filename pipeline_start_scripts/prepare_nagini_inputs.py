@@ -437,6 +437,8 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
             else:
                 sample = stem
 
+        sample = str(sample).strip()
+        sample_type = str(sample_type).strip()
         counters[sample] += 1
         run_id = args.run_id or args.sequence_id or args.input_dir.name
         samples_by_name.setdefault(sample, {"sample": sample})

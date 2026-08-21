@@ -233,12 +233,21 @@ def _scale_workstation_resources(cfg):
 
 config = _scale_workstation_resources(config)
 
-samples = pd.read_table(config["samples"], dtype=str).fillna("").set_index("sample", drop=False)
+samples = (
+    pd.read_table(config["samples"], dtype=str)
+    .fillna("")
+    .apply(lambda col: col.str.strip() if hasattr(col, "str") else col)
+    .set_index("sample", drop=False)
+)
 validate(samples, schema="../schemas/samples.schema.yaml")
 
 # Keep this dataframe flat.  Hydra's ONT modules index the same table in
 # their own namespace, while the custom input rules need input_type as well.
-units = pd.read_table(config["units"], dtype=str).fillna("")
+units = (
+    pd.read_table(config["units"], dtype=str)
+    .fillna("")
+    .apply(lambda col: col.str.strip() if hasattr(col, "str") else col)
+)
 validate(units, schema="../schemas/units.schema.yaml")
 
 dorado_units = units[units["input_type"].str.lower() == "dorado_bam"]
@@ -453,7 +462,9 @@ def get_small_variant_report_vcf(wildcards):
         if clairs_to_enabled()
         else "snv_indels/mutect2_postprocess"
     )
-    return f"{caller_dir}/{wildcards.sample}_{wildcards.type}{suffix}"
+    sample = str(wildcards.sample).strip()
+    unit_type = str(wildcards.type).strip()
+    return f"{caller_dir}/{sample}_{unit_type}{suffix}"
 
 
 def get_small_variant_report_vcf_index(wildcards):
