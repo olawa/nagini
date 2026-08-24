@@ -31,7 +31,7 @@ if _dorado_aligner == "minimap2":
         output:
             bam=_dorado_alignment_raw,
         params:
-            preset=config.get("minimap2_align", {}).get("preset", "map-ont"),
+            preset=lambda wildcards: get_minimap2_preset_for_unit(wildcards),
             extra=config.get("minimap2_align", {}).get("extra", ""),
         log:
             "logs/align_dorado_bam/{sample}_{type}_{processing_unit}_{barcode}.log",

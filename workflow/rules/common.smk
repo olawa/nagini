@@ -441,6 +441,57 @@ def get_reference_chromosomes():
 reference_chromosomes = get_reference_chromosomes()
 
 
+# ---------------------------------------------------------------------------
+# Library type routing
+# ---------------------------------------------------------------------------
+
+VALID_LIBRARY_TYPES = {"wgs", "amplicon", "cdna"}
+
+
+def get_library_type(sample):
+    """Return the library type for a sample from units.tsv (default: wgs)."""
+    col = "library_type"
+    if col not in units.columns:
+        return "wgs"
+    types = sorted(
+        {
+            str(val).strip().lower()
+            for val in units.loc[units["sample"] == sample, col].tolist()
+            if str(val).strip() and str(val).strip().lower() not in ("nan", "none", "")
+        }
+    )
+    return types[0] if types else "wgs"
+
+
+def sample_needs_dna_variant_calling(sample):
+    """WGS and amplicon samples get SNV/indel calling."""
+    return get_library_type(sample) in ("wgs", "amplicon")
+
+
+def sample_needs_sv_calling(sample):
+    """Only WGS samples get structural variant calling (Sniffles2)."""
+    return get_library_type(sample) == "wgs"
+
+
+def sample_needs_rna_analysis(sample):
+    """cDNA samples get RNA-specific analysis."""
+    return get_library_type(sample) == "cdna"
+
+
+def has_design_bed():
+    """Return True if a valid design_bed is configured."""
+    bed = config.get("reference", {}).get("design_bed", "")
+    return bool(bed and os.path.isfile(bed))
+
+
+def get_minimap2_preset_for_unit(wildcards):
+    """Return minimap2 preset based on library type."""
+    lt = get_library_type(wildcards.sample)
+    if lt in ("cdna", "direct_rna"):
+        return "splice"
+    return config.get("minimap2_align", {}).get("preset", "map-ont")
+
+
 def get_small_variant_caller():
     caller = str(config.get("small_variant_caller", "clairs_to")).strip().lower()
     return caller if caller in ("clairs_to", "mutect2", "both") else "clairs_to"
@@ -471,6 +522,36 @@ def get_small_variant_report_vcf_index(wildcards):
     return f"{get_small_variant_report_vcf(wildcards)}.tbi"
 
 
+def get_report_snv_vcf(wildcards):
+    if sample_needs_dna_variant_calling(wildcards.sample):
+        return get_small_variant_report_vcf(wildcards)
+    return []
+
+
+def get_report_snv_tbi(wildcards):
+    if sample_needs_dna_variant_calling(wildcards.sample):
+        return get_small_variant_report_vcf_index(wildcards)
+    return []
+
+
+def get_report_sv_tsv(wildcards):
+    if sample_needs_sv_calling(wildcards.sample):
+        return f"reports/sv_summary/{wildcards.sample}_{wildcards.type}.tsv"
+    return []
+
+
+def get_report_translocations_tsv(wildcards):
+    if sample_needs_sv_calling(wildcards.sample):
+        return f"reports/sv_summary/{wildcards.sample}_{wildcards.type}.translocations.tsv"
+    return []
+
+
+def get_report_target_coverage(wildcards):
+    if has_design_bed():
+        return f"qc/mosdepth_bed/{wildcards.sample}_{wildcards.type}.mosdepth.summary.txt"
+    return []
+
+
 def get_unit_types_for_sample(sample):
     return sorted(set(units.loc[units["sample"] == sample, "type"]))
 
@@ -480,27 +561,50 @@ def compile_output_file_list(wildcards):
     output_files = []
     for file_definition in output_spec["files"]:
         condition = file_definition.get("when")
-        if condition == "annotate_small_variants_with_vep":
-            enabled = vep_enabled()
-        elif condition == "clairs_to_enabled":
-            enabled = clairs_to_enabled()
-        elif condition == "clairs_to_vep_enabled":
-            enabled = clairs_to_enabled() and vep_enabled()
-        elif condition == "mutect2_enabled":
-            enabled = mutect2_enabled()
-        elif condition == "mutect2_vep_enabled":
-            enabled = mutect2_enabled() and vep_enabled()
-        elif condition:
-            enabled = bool(config.get(condition, False))
-        else:
-            enabled = True
-
-        if not enabled:
-            continue
-
         allowed_types = file_definition.get("types")
+
+        if condition == "annotate_small_variants_with_vep" and not vep_enabled():
+            continue
+        elif condition == "clairs_to_enabled" and not clairs_to_enabled():
+            continue
+        elif condition == "clairs_to_vep_enabled" and not (clairs_to_enabled() and vep_enabled()):
+            continue
+        elif condition == "mutect2_enabled" and not mutect2_enabled():
+            continue
+        elif condition == "mutect2_vep_enabled" and not (mutect2_enabled() and vep_enabled()):
+            continue
+        elif condition == "annotate_small_variants" and not bool(config.get("annotate_small_variants", False)):
+            continue
+        elif condition == "annotate_svs" and not bool(config.get("annotate_svs", False)):
+            continue
+        elif condition == "has_design_bed" and not has_design_bed():
+            continue
+        elif condition and condition not in (
+            "clairs_to_enabled", "clairs_to_vep_enabled", "mutect2_enabled",
+            "mutect2_vep_enabled", "annotate_small_variants", "annotate_svs",
+            "annotate_small_variants_with_vep", "has_design_bed", "sv_calling",
+            "sample_needs_dna_variant_calling", "sample_needs_sv_calling",
+            "sample_needs_rna_analysis"
+        ):
+            if not bool(config.get(condition, False)):
+                continue
+
         for sample in get_samples(samples):
             clean_sample = str(sample).strip()
+
+            if condition in (
+                "clairs_to_enabled", "clairs_to_vep_enabled", "mutect2_enabled",
+                "mutect2_vep_enabled", "annotate_small_variants", "sample_needs_dna_variant_calling"
+            ):
+                if not sample_needs_dna_variant_calling(clean_sample):
+                    continue
+            elif condition in ("sv_calling", "annotate_svs", "sample_needs_sv_calling"):
+                if not sample_needs_sv_calling(clean_sample):
+                    continue
+            elif condition == "sample_needs_rna_analysis":
+                if not sample_needs_rna_analysis(clean_sample):
+                    continue
+
             for unit_type in get_unit_types_for_sample(sample):
                 if allowed_types and unit_type not in allowed_types:
                     continue

@@ -13,7 +13,7 @@ rule minimap2_fastq_align:
         bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam",
         bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam.bai",
     params:
-        preset=config.get("minimap2_align", {}).get("preset", "map-ont"),
+        preset=lambda wildcards: get_minimap2_preset_for_unit(wildcards),
         extra=config.get("minimap2_align", {}).get("extra", ""),
         read_group=lambda wildcards: get_minimap2_read_group(wildcards),
     log:

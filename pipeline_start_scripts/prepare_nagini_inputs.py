@@ -37,6 +37,7 @@ BASE_UNIT_COLUMNS = [
     "methylation",
     "run_id",
     "basecalling_model",
+    "library_type",
 ]
 DEFAULT_SAMPLE_REGEX = r"(?P<sample>[^_]+)(?:_.*)?\.(?:fastq|fq)(?:\.gz)?$"
 
@@ -54,6 +55,12 @@ def parse_args() -> argparse.Namespace:
         "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam"), required=True
     )
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
+    parser.add_argument(
+        "--library-type",
+        choices=("wgs", "amplicon", "cdna"),
+        default="wgs",
+        help="Default library type when not specified in barcode map (default: wgs).",
+    )
     parser.add_argument("--sequence-id", default="")
     parser.add_argument("--sample-regex", default=DEFAULT_SAMPLE_REGEX)
     parser.add_argument(
@@ -130,7 +137,9 @@ def normalize_barcode(value: object) -> str:
     return barcode
 
 
-def read_barcode_map(path: Path, default_type: str) -> dict[str, dict[str, str]]:
+def read_barcode_map(
+    path: Path, default_type: str, default_library_type: str = "wgs"
+) -> dict[str, dict[str, str]]:
     """Read a barcode-to-sample CSV/TSV mapping with strict unique barcodes."""
 
     if not path.is_file():
@@ -155,6 +164,8 @@ def read_barcode_map(path: Path, default_type: str) -> dict[str, dict[str, str]]
         barcode = normalize_barcode(fields.get("barcode", fields.get("barcodename", "")))
         sample_name = fields.get("sample", fields.get("sampleid", ""))
         sample_type = fields.get("type", fields.get("sampletype", "")) or default_type
+        raw_lib = fields.get("librarytype", fields.get("library_type", "")) or default_library_type
+        library_type = str(raw_lib).strip().lower()
         if not barcode or not re.fullmatch(r"barcode\d+", barcode):
             raise SystemExit(f"Invalid or missing barcode in {path}: {row}")
         if not sample_name:
@@ -163,8 +174,17 @@ def read_barcode_map(path: Path, default_type: str) -> dict[str, dict[str, str]]
             raise SystemExit(
                 f"Invalid type={sample_type!r} for {barcode}; expected N, T or R."
             )
+        if library_type not in {"wgs", "amplicon", "cdna"}:
+            raise SystemExit(
+                f"Invalid library_type={library_type!r} for {barcode} in {path}; expected wgs, amplicon or cdna."
+            )
         normalized_rows.append(
-            {"barcode": barcode, "sample": sample_name, "type": sample_type}
+            {
+                "barcode": barcode,
+                "sample": sample_name,
+                "type": sample_type,
+                "library_type": library_type,
+            }
         )
 
     mapping: dict[str, dict[str, str]] = {}
@@ -209,7 +229,11 @@ def make_bam_tables_from_barcode_map(
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Build Hydra-style tables from Dorado ``bam_pass/barcodeXX`` output."""
 
-    mapping = read_barcode_map(args.barcode_map.resolve(), args.sample_type)
+    mapping = read_barcode_map(
+        args.barcode_map.resolve(),
+        args.sample_type,
+        getattr(args, "library_type", "wgs"),
+    )
     bams_by_barcode = discover_bams_by_barcode(args.input_dir)
     if not bams_by_barcode:
         raise SystemExit(f"No BAM files below barcode directories in {args.input_dir}.")
@@ -243,13 +267,13 @@ def make_bam_tables_from_barcode_map(
                     "type": assignment["type"],
                     "platform": "ONT",
                     "machine": "unknown",
-                "processing_unit": f"{barcode}_{index:03d}",
-                # Hydra's ONT schema accepts flowcell-style values such as
-                # BC/NB but rejects Dorado's numeric barcode05 identifiers.
-                # Keep the original Dorado identifier in barcode_name and
-                # use a valid technical barcode value for Hydra.
-                "barcode": "BC",
-                "barcode_name": barcode,
+                    "processing_unit": f"{barcode}_{index:03d}",
+                    # Hydra's ONT schema accepts flowcell-style values such as
+                    # BC/NB but rejects Dorado's numeric barcode05 identifiers.
+                    # Keep the original Dorado identifier in barcode_name and
+                    # use a valid technical barcode value for Hydra.
+                    "barcode": "BC",
+                    "barcode_name": barcode,
                     "input_type": args.input_type,
                     "fastq1": "UNUSED",
                     "fastq2": "UNUSED",
@@ -257,6 +281,9 @@ def make_bam_tables_from_barcode_map(
                     "methylation": args.methylation,
                     "run_id": run_id,
                     "basecalling_model": args.basecalling_model,
+                    "library_type": assignment.get(
+                        "library_type", getattr(args, "library_type", "wgs")
+                    ),
                 }
             )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
@@ -365,6 +392,7 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
                 "methylation": args.methylation,
                 "run_id": run_id,
                 "basecalling_model": args.basecalling_model,
+                "library_type": getattr(args, "library_type", "wgs"),
             }
         )
     samples = [{"sample": sample} for sample in sorted(counters)]
@@ -374,7 +402,11 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
 def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Create deferred units for Dorado outputs produced by Snakemake."""
 
-    mapping = read_barcode_map(args.barcode_map.resolve(), args.sample_type)
+    mapping = read_barcode_map(
+        args.barcode_map.resolve(),
+        args.sample_type,
+        getattr(args, "library_type", "wgs"),
+    )
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
@@ -398,6 +430,9 @@ def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]],
                 "methylation": args.methylation,
                 "run_id": run_id,
                 "basecalling_model": args.basecalling_model,
+                "library_type": assignment.get(
+                    "library_type", getattr(args, "library_type", "wgs")
+                ),
             }
         )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
@@ -457,6 +492,7 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
                 "methylation": args.methylation,
                 "run_id": run_id,
                 "basecalling_model": args.basecalling_model,
+                "library_type": getattr(args, "library_type", "wgs"),
             }
         )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units

@@ -7,12 +7,12 @@ __license__ = "GPL-3"
 rule nagini_excel_report:
     """Build a portable multi-sheet workbook from final QC and variant outputs."""
     input:
-        snv_vcf=get_small_variant_report_vcf,
-        snv_tbi=get_small_variant_report_vcf_index,
-        sv="reports/sv_summary/{sample}_{type}.tsv",
-        translocations="reports/sv_summary/{sample}_{type}.translocations.tsv",
+        snv_vcf=get_report_snv_vcf,
+        snv_tbi=get_report_snv_tbi,
+        sv=get_report_sv_tsv,
+        translocations=get_report_translocations_tsv,
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
-        target_coverage="qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt",
+        target_coverage=get_report_target_coverage,
         cramino="qc/cramino/{sample}_{type}.txt",
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",

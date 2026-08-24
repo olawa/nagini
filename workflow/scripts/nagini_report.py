@@ -630,6 +630,12 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     write_xlsx(output, sheets)
 
 
+def _first_or_str(val):
+    if isinstance(val, (list, tuple)):
+        return str(val[0]) if val else ""
+    return str(val) if val else ""
+
+
 def run_from_snakemake(snakemake):
     generate_report(
         output=str(snakemake.output.xlsx),
@@ -637,12 +643,12 @@ def run_from_snakemake(snakemake):
         sample_type=str(snakemake.wildcards.type),
         reference_build=str(snakemake.params.reference_build),
         annotation=str(snakemake.params.snv_annotation),
-        snv_vcf=str(snakemake.input.snv_vcf),
-        sv_tsv=str(snakemake.input.sv),
-        translocations_tsv=str(snakemake.input.translocations),
-        wgs_coverage=str(snakemake.input.wgs_coverage),
-        target_coverage=str(snakemake.input.target_coverage),
-        cramino=str(snakemake.input.cramino),
+        snv_vcf=_first_or_str(getattr(snakemake.input, "snv_vcf", "")),
+        sv_tsv=_first_or_str(getattr(snakemake.input, "sv", "")),
+        translocations_tsv=_first_or_str(getattr(snakemake.input, "translocations", "")),
+        wgs_coverage=_first_or_str(getattr(snakemake.input, "wgs_coverage", "")),
+        target_coverage=_first_or_str(getattr(snakemake.input, "target_coverage", "")),
+        cramino=_first_or_str(getattr(snakemake.input, "cramino", "")),
         cytoband=str(getattr(snakemake.params, "cytoband", "") or ""),
         caller=str(getattr(snakemake.params, "small_variant_caller", "") or ""),
         design_bed=str(getattr(snakemake.params, "design_bed", "") or ""),

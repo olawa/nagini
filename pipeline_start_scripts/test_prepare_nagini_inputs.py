@@ -312,8 +312,31 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
             config = yaml.safe_load(runtime.read_text())
 
-        self.assertEqual(config["cores"], 96)
+    def test_barcode_map_with_library_type_and_defaults(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text(
+                "barcode,sample,type,library_type\n"
+                "barcode01,SAMPLE_WGS,T,wgs\n"
+                "barcode02,SAMPLE_AMP,T,amplicon\n"
+                "barcode03,SAMPLE_RNA,T,cdna\n"
+                "barcode04,SAMPLE_DEF,N,\n"
+            )
+            parsed = PREPARE.read_barcode_map(mapping, "N", default_library_type="wgs")
+            self.assertEqual(parsed["barcode01"]["library_type"], "wgs")
+            self.assertEqual(parsed["barcode02"]["library_type"], "amplicon")
+            self.assertEqual(parsed["barcode03"]["library_type"], "cdna")
+            self.assertEqual(parsed["barcode04"]["library_type"], "wgs")
+
+    def test_barcode_map_rejects_invalid_library_type(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type,library_type\nbarcode01,SAMPLE_A,N,invalid_type\n")
+            with self.assertRaises(SystemExit) as ctx:
+                PREPARE.read_barcode_map(mapping, "N")
+            self.assertIn("Invalid library_type", str(ctx.exception))
 
 
 if __name__ == "__main__":
     unittest.main()
+

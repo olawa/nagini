@@ -41,6 +41,9 @@ properties:
     type: string
   lane:
     type: string
+  library_type:
+    type: string
+    enum: ["wgs", "amplicon", "cdna", ""]
 required:
   - sample
   - type

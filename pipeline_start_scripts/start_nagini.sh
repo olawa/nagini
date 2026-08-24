@@ -21,6 +21,7 @@ reference_files=""
 library_root=""
 input_type=""
 sample_type="N"
+library_type="wgs"
 sequence_id=""
 sample_regex=""
 barcode_map=""
@@ -63,6 +64,7 @@ Options:
   --profile PATH                Snakemake profile (default: profiles/<site>).
   --input-type TYPE             minknow, fastq, unmapped_bam, or aligned_bam.
   --sample-type TYPE            N, T, or R (default: N).
+  --library-type TYPE           Default library type: wgs, amplicon, or cdna (default: wgs).
   --sequenceid ID               Run identifier; defaults to inbox directory name.
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
   --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed input.
@@ -170,6 +172,11 @@ while [[ $# -gt 0 ]]; do
         --sample-type)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             sample_type="$2"
+            shift 2
+            ;;
+        --library-type)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            library_type="$2"
             shift 2
             ;;
         --sequenceid|--sequence-id)
@@ -397,6 +404,7 @@ prepare_cmd=(
     --reference-files "$reference_files"
     --input-type "$input_type"
     --sample-type "$sample_type"
+    --library-type "$library_type"
     --sequence-id "$sequence_id"
     --barcode "$barcode"
     --run-id "$run_id"
@@ -431,6 +439,7 @@ input_type: "$input_type"
 source_input_dir: "$source_input_dir"
 source_input_type: "$source_input_type"
 sample_type: "$sample_type"
+library_type: "$library_type"
 site: "$site"
 pipeline_path: "$pipeline_path"
 base_config: "$base_config"

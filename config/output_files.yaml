@@ -25,33 +25,43 @@ files:
   - name: target region coverage summary
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+    when: has_design_bed
   - name: target region per-base coverage BED
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz"
+    when: has_design_bed
   - name: target coverage distribution
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+    when: has_design_bed
   - name: target region distribution
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+    when: has_design_bed
   - name: Sniffles2 structural variant VCF
     input: null
     output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
+    when: sv_calling
   - name: Sniffles2 structural variant index
     input: null
     output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
+    when: sv_calling
   - name: Sniffles2 SNF evidence
     input: null
     output: "cnv_sv/sniffles2_call/{sample}_{type}.snf"
+    when: sv_calling
   - name: structural variant summary
     input: null
     output: "reports/sv_summary/{sample}_{type}.tsv"
+    when: sv_calling
   - name: translocation summary
     input: null
     output: "reports/sv_summary/{sample}_{type}.translocations.tsv"
+    when: sv_calling
   - name: structural variant summary JSON
     input: null
     output: "reports/sv_summary/{sample}_{type}.json"
+    when: sv_calling
   - name: ClairS-TO concatenated VCF
     input: null
     output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
