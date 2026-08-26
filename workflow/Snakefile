@@ -226,9 +226,12 @@ use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
         bed=config["reference"]["design_bed"],
     params:
         extra=config.get("clairs_to_call", {}).get("extra", ""),
-        platform=config.get("clairs_to_call", {}).get("platform", ""),
-        snv_min_af=config.get("clairs_to_call", {}).get("snv_min_af", 0.05),
-        indel_min_af=config.get("clairs_to_call", {}).get("indel_min_af", 0.1),
+        # The error model follows the sample's basecalling model, and the
+        # allele-fraction floors follow its assay: a 20 000x amplicon and a 30x
+        # genome cannot share them.
+        platform=lambda wildcards: get_clairs_to_platform(wildcards),
+        snv_min_af=lambda wildcards: get_clairs_to_snv_min_af(wildcards),
+        indel_min_af=lambda wildcards: get_clairs_to_indel_min_af(wildcards),
         outdir=lambda w, output: os.path.dirname(output[0]),
 
 
@@ -307,6 +310,12 @@ def get_multiqc_input_files(wildcards):
     template_files = report_cfg.get("qc_files", [])
     included_types = set(report_cfg.get("included_unit_types", ["N", "T", "R"]))
     resolved = []
+    # Run-level QC belongs to the flowcell, not to a sample, so it is listed
+    # separately and only when the run actually produced it.
+    for run_file in report_cfg.get("run_files", []):
+        if "dorado_demux" in run_file and not dorado_barcodes:
+            continue
+        resolved.append(run_file)
     for _, row in units.iterrows():
         sample = str(row.get("sample", "")).strip()
         unit_type = str(row.get("type", "")).strip()

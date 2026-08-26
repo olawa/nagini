@@ -94,8 +94,17 @@ cramino:
   container: "docker://hydragenetics/cramino:0.14.5"
 small_variant_caller: "clairs_to"
 clairs_to_call:
-  container: "docker://hkubal/clairs-to:latest"
-  platform: "ont_r10_dorado_hac_4khz"
+  container: "{{CLAIRS_TO_CONTAINER}}"
+  # Leave platform empty to derive the ClairS-TO error model from each sample's
+  # basecalling_model in units.tsv. Setting it here overrides that for every
+  # sample. An unrecognised model warns and falls back to default_platform.
+  platform: ""
+  default_platform: "ont_r10_dorado_sup_5khz"
+  # Extra "chemistry,accuracy,sampling: platform" entries, for models newer
+  # than this release. Example: "r10,sup,5khz": "ont_r10_dorado_sup_5khz"
+  platform_map: {}
+  # Floors for whole-genome depth. Targeted assays lower them through their
+  # assay definition rather than here; see the assays block above.
   snv_min_af: 0.05
   indel_min_af: 0.1
   extra: ""

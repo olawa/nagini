@@ -255,3 +255,50 @@ rule dorado_demux_fastq:
         samtools fastq -@ {threads} {params.extra} {input.bam:q} 2> {log} \
             | gzip -c > {output.fastq:q}
         """
+
+
+rule dorado_demux_qc:
+    """Aggregate the per-read demux summary into a barcode yield table.
+
+    Run level rather than per sample, because the question it answers -- which
+    barcode got no reads, and how much went unclassified -- is about the
+    flowcell.
+    """
+    input:
+        summary="basecalling/dorado_demux/demux_summary.tsv",
+        units=config["units"],
+    output:
+        mqc="qc/dorado_demux/dorado_demux_mqc.tsv",
+    params:
+        script=os.path.join(SCRIPTS, "dorado_demux_summary.py"),
+        kit=config.get("dorado", {}).get("kit", ""),
+    log:
+        "logs/dorado/demux_qc.log",
+    benchmark:
+        repeat(
+            "benchmarks/dorado/demux_qc.tsv",
+            config.get("dorado", {}).get("benchmark_repeats", 1),
+        )
+    threads: 1
+    resources:
+        mem_mb=config.get("dorado_demux_qc", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("dorado_demux_qc", {}).get(
+            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
+        ),
+        partition=config.get("dorado_demux_qc", {}).get(
+            "partition", config["default_resources"]["partition"]
+        ),
+        threads=1,
+        time=config.get("dorado_demux_qc", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("dorado_demux_qc", {}).get("container", config["default_container"])
+    message:
+        "{rule}: summarise reads per barcode for the run report"
+    shell:
+        """
+        python3 {params.script} \
+            --summary {input.summary:q} \
+            --units {input.units:q} \
+            --kit {params.kit:q} \
+            --output {output.mqc:q} &> {log}
+        """

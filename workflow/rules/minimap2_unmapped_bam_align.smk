@@ -8,7 +8,7 @@ rule minimap2_unmapped_bam_align:
     """Convert an unmapped BAM to FASTQ and align it with minimap2."""
     input:
         bam=lambda wildcards: get_unit_input(wildcards, "bam"),
-        target=get_reference_index(),
+        target=lambda wildcards: get_reference_target_for_unit(wildcards),
     output:
         bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam",
         bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam.bai",

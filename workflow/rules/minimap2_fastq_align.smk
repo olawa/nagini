@@ -8,7 +8,7 @@ rule minimap2_fastq_align:
     """Align a FASTQ unit with the Hydra minimap2 index."""
     input:
         fastq1=lambda wildcards: get_unit_input(wildcards, "fastq1"),
-        target=get_reference_index(),
+        target=lambda wildcards: get_reference_target_for_unit(wildcards),
     output:
         bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam",
         bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam.bai",

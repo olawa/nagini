@@ -37,6 +37,10 @@ VEP_CACHE: ""
 SNPEFF_DB: ""
 SIMPLE_SV_PANEL: ""
 SIMPLE_SV_FUSION_PAIRS: ""
+# ClairS-TO ships no versioned tag we can rely on being present offline.
+# Pin this to a digest or a released tag per site before clinical use; the
+# floating tag below is a development default, not a validated one.
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
 
 site: "{{SITE_ID}}"
 hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
@@ -185,8 +189,17 @@ cramino:
 small_variant_caller: "clairs_to"
 
 clairs_to_call:
-  container: "docker://hkubal/clairs-to:latest"
-  platform: "ont_r10_dorado_hac_4khz"
+  container: "{{CLAIRS_TO_CONTAINER}}"
+  # Leave platform empty to derive the ClairS-TO error model from each sample's
+  # basecalling_model in units.tsv. Setting it here overrides that for every
+  # sample. An unrecognised model warns and falls back to default_platform.
+  platform: ""
+  default_platform: "ont_r10_dorado_sup_5khz"
+  # Extra "chemistry,accuracy,sampling: platform" entries, for models newer
+  # than this release. Example: "r10,sup,5khz": "ont_r10_dorado_sup_5khz"
+  platform_map: {}
+  # Floors for whole-genome depth. Targeted assays lower them through their
+  # assay definition rather than here; see the assays block above.
   snv_min_af: 0.05
   indel_min_af: 0.1
   extra: ""
@@ -251,6 +264,9 @@ multiqc:
   reports:
     nanopore:
       included_unit_types: [N, T, R]
+      # Flowcell-level QC, included only when the run demultiplexed barcodes.
+      run_files:
+        - "qc/dorado_demux/dorado_demux_mqc.tsv"
       qc_files:
         - "qc/cramino/{sample}_{type}.txt"
         - "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"

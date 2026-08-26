@@ -27,7 +27,7 @@ if _dorado_aligner == "minimap2":
         """Align the exported per-barcode FASTQ with minimap2."""
         input:
             fastq=lambda wildcards: get_unit_dorado_fastq(wildcards),
-            target=get_reference_index(),
+            target=lambda wildcards: get_reference_target_for_unit(wildcards),
         output:
             bam=_dorado_alignment_raw,
         params:
@@ -92,7 +92,7 @@ else:
         """Align a demultiplexed BAM directly with Dorado aligner."""
         input:
             bam=lambda wildcards: get_unit_dorado_bam(wildcards),
-            target=get_reference_index(),
+            target=lambda wildcards: get_reference_target_for_unit(wildcards),
         output:
             bam=_dorado_alignment_raw,
         params:
