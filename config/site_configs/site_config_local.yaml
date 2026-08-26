@@ -1,8 +1,8 @@
 ---
-# Local Linux/workstation runtime settings.
-# Paths are deliberately relative to the Nagini checkout unless documented as
-# an external asset. Prepare the reference bundle below references/ before a
-# full run.
+# Local development: runtime settings only.
+#
+# Reference paths live in config/reference_files/reference_files_local.yaml.
+# Set a variable here only to override the inventory for this site.
 SITE_ID: local
 REFERENCE_ROOT: references
 CONTAINER_CACHE: vendor/containers
@@ -10,37 +10,12 @@ HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources.yaml
 DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
-HG38_FASTA: references/hg38/GRCh38.fa
-HG38_FAI: references/hg38/GRCh38.fa.fai
-HG38_DICT: references/hg38/GRCh38.dict
-HG38_MMI: ""
-HG38_DESIGN_BED: references/hg38/targets.bed
-HG38_SV_ANNOTATION_BED: ""
-HG38_TANDEM_REPEATS: ""
-HG38_CLINVAR: ""
-HG38_CYTOBAND: ""
-HG38_GTF: ""
-HG38_ANNOTATIONS: ""
-
 # The checkout-relative local profile does not ship an hs1/T2T bundle.
-HS1_FASTA: references/hs1/chm13v2.0.fa
-HS1_FAI: references/hs1/chm13v2.0.fa.fai
-HS1_DICT: references/hs1/chm13v2.0.dict
-HS1_MMI: ""
-HS1_DESIGN_BED: references/hs1/targets.bed
-HS1_SV_ANNOTATION_BED: ""
-HS1_TANDEM_REPEATS: ""
-HS1_CLINVAR: ""
-HS1_CYTOBAND: ""
-HS1_GTF: ""
-HS1_ANNOTATIONS: ""
-
-VEP_CACHE: ""
-SNPEFF_DB: ""
-SIMPLE_SV_PANEL: ""
-SIMPLE_SV_FUSION_PAIRS: ""
 
 # Informational values retained in the run snapshot. The local profile owns
 # the actual Snakemake container options.
 container_runtime: singularity
 singularity_binds: []
+
+# Pin before clinical use.
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"

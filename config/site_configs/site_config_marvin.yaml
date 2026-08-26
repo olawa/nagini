@@ -1,6 +1,8 @@
 ---
-# Marvin runtime settings. These paths follow the existing CGU/Fluffy Marvin
-# configuration and are intentionally kept out of the shared pipeline config.
+# Marvin cluster: runtime settings only.
+#
+# Reference paths live in config/reference_files/reference_files_marvin.yaml.
+# Set a variable here only to override the inventory for this site.
 SITE_ID: marvin
 REFERENCE_ROOT: /beegfs-storage/data/ref_genomes
 CONTAINER_CACHE: /beegfs-storage/projects/wp4/nobackup/singularity_cache
@@ -8,35 +10,7 @@ HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources_marvin.yaml
 DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
-HG38_FASTA: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
-HG38_FAI: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
-HG38_DICT: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
-HG38_MMI: ""
-HG38_DESIGN_BED: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed
-HG38_SV_ANNOTATION_BED: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-HG38_TANDEM_REPEATS: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-HG38_CLINVAR: ""
-HG38_CYTOBAND: ""
-HG38_GTF: ""
-HG38_ANNOTATIONS: ""
-
 # No verified hs1/T2T path was present in the Marvin configuration.
-HS1_FASTA: references/hs1/chm13v2.0.fa
-HS1_FAI: references/hs1/chm13v2.0.fa.fai
-HS1_DICT: references/hs1/chm13v2.0.dict
-HS1_MMI: ""
-HS1_DESIGN_BED: references/hs1/targets.bed
-HS1_SV_ANNOTATION_BED: ""
-HS1_TANDEM_REPEATS: ""
-HS1_CLINVAR: ""
-HS1_CYTOBAND: ""
-HS1_GTF: ""
-HS1_ANNOTATIONS: ""
-
-VEP_CACHE: /data/ref_genomes/VEP
-SNPEFF_DB: /data/ref_genomes/GRCh38/snpeff/data/GRCh38.99
-SIMPLE_SV_PANEL: /data/ref_genomes/GRCh38/simple_sv_annotation/az-cancer-panel.txt
-SIMPLE_SV_FUSION_PAIRS: /data/ref_genomes/GRCh38/simple_sv_annotation/fusion_pairs.txt
 
 # These annotation branches were enabled by the previous Marvin composite
 # config and remain site-specific because their databases are not part of a
@@ -55,3 +29,6 @@ singularity_binds:
   - /home
   - /data
   - /projects
+
+# Pin before clinical use.
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"

@@ -1,7 +1,12 @@
 ---
-# Marvin reference registry. Paths mirror site_config_marvin.yaml and are
-# retained with the run as provenance; the runtime config remains the active
-# Snakemake input.
+# Reference inventory for the marvin site.
+#
+# This is where a reference path is declared. The launcher flattens it into
+# the {{VARIABLE}} names used by config/config.yaml, so the site config only
+# needs to override a path when it genuinely differs from the inventory.
+#
+# type: file | directory | optional. Empty checksums are not verified;
+# fill them in and run the launcher with --verify-references to check them.
 site: marvin
 reference_builds:
   hg38:
@@ -9,55 +14,131 @@ reference_builds:
       path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
-      checksum: ""
+      checksum: ''
     fai:
       path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
-      checksum: ""
+      checksum: ''
     dict:
       path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
-      checksum: ""
+      checksum: ''
     minimap2_index:
-      path: ""
+      path: ''
       type: optional
-      url: ""
-      checksum: ""
+      url: ''
+      checksum: ''
     design_bed:
       path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed
-      checksum: ""
-    tandem_repeats:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-      type: file
-      url: file:/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-      checksum: ""
+      checksum: ''
     sv_annotation_bed:
       path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-      checksum: ""
+      checksum: ''
+    tandem_repeats:
+      path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
+      type: file
+      url: file:/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
+      checksum: ''
+    clinvar:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    cytoband:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    gene_annotation:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    annotations:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+  hs1:
+    fasta:
+      path: references/hs1/chm13v2.0.fa
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: references/hs1/chm13v2.0.fa.fai
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: references/hs1/chm13v2.0.dict
+      type: file
+      url: ''
+      checksum: ''
+    minimap2_index:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    design_bed:
+      path: references/hs1/targets.bed
+      type: file
+      url: ''
+      checksum: ''
+    sv_annotation_bed:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    tandem_repeats:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    clinvar:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    cytoband:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    gene_annotation:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    annotations:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
 annotations:
   vep_cache:
     path: /data/ref_genomes/VEP
     type: directory
     url: file:/data/ref_genomes/VEP
-    checksum: ""
+    checksum: ''
   snpeff_db:
     path: /data/ref_genomes/GRCh38/snpeff/data/GRCh38.99
     type: directory
     url: file:/data/ref_genomes/GRCh38/snpeff/data/GRCh38.99
-    checksum: ""
+    checksum: ''
   simple_sv_panel:
     path: /data/ref_genomes/GRCh38/simple_sv_annotation/az-cancer-panel.txt
     type: file
     url: file:/data/ref_genomes/GRCh38/simple_sv_annotation/az-cancer-panel.txt
-    checksum: ""
+    checksum: ''
   simple_sv_fusion_pairs:
     path: /data/ref_genomes/GRCh38/simple_sv_annotation/fusion_pairs.txt
     type: file
     url: file:/data/ref_genomes/GRCh38/simple_sv_annotation/fusion_pairs.txt
-    checksum: ""
+    checksum: ''

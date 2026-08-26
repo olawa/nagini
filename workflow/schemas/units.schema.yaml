@@ -43,7 +43,14 @@ properties:
     type: string
   library_type:
     type: string
-    enum: ["wgs", "amplicon", "cdna", ""]
+    enum: ["wgs", "amplicon", "cdna", "direct_rna", ""]
+  assay:
+    description: >
+      What the sample was sequenced for. Decides which analysis runs, while
+      library_type decides how the reads are aligned. Values are validated
+      against the assay registry in the config, not here, so that a site can
+      declare a new assay without editing this schema.
+    type: string
 required:
   - sample
   - type

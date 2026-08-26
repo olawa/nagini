@@ -1,6 +1,12 @@
 ---
-# Workstation reference registry.  Checksums are intentionally left empty
-# until the installed bundle has been verified on the workstation.
+# Reference inventory for the workstation site.
+#
+# This is where a reference path is declared. The launcher flattens it into
+# the {{VARIABLE}} names used by config/config.yaml, so the site config only
+# needs to override a path when it genuinely differs from the inventory.
+#
+# type: file | directory | optional. Empty checksums are not verified;
+# fill them in and run the launcher with --verify-references to check them.
 site: workstation
 reference_root: /data/references
 reference_builds:
@@ -9,86 +15,136 @@ reference_builds:
       path: /data/references/GRCh38_no_alt_analysis_set.fasta
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.fasta
-      checksum: ""
+      checksum: ''
     fai:
       path: /data/references/GRCh38_no_alt_analysis_set.fasta.fai
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.fasta.fai
-      checksum: ""
+      checksum: ''
     dict:
       path: /data/references/GRCh38_no_alt_analysis_set.dict
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.dict
-      checksum: ""
+      checksum: ''
     minimap2_index:
       path: /data/references/GRCh38_no_alt_analysis_set.mmi
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.mmi
-      checksum: ""
+      checksum: ''
     design_bed:
       path: /data/references/ReadUntil_Final_Extra_30kb_hg38_v5.bed
       type: file
       url: file:/data/references/ReadUntil_Final_Extra_30kb_hg38_v5.bed
-      checksum: ""
+      checksum: ''
+    sv_annotation_bed:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
     tandem_repeats:
       path: /data/references/human_GRCh38_no_alt_analysis_set.trf.bed
       type: file
       url: file:/data/references/human_GRCh38_no_alt_analysis_set.trf.bed
-      checksum: ""
+      checksum: ''
     clinvar:
       path: /data/references/clinvar.vcf.gz
       type: file
       url: file:/data/references/clinvar.vcf.gz
-      checksum: ""
+      checksum: ''
     clinvar_index:
       path: /data/references/clinvar.vcf.gz.tbi
       type: file
       url: file:/data/references/clinvar.vcf.gz.tbi
-      checksum: ""
+      checksum: ''
     cytoband:
-      path: ""
+      path: ''
       type: optional
-      url: ""
-      checksum: ""
+      url: ''
+      checksum: ''
     gene_annotation:
       path: /data/references/gencode.v46.annotation.sorted.gtf
       type: file
       url: file:/data/references/gencode.v46.annotation.sorted.gtf
-      checksum: ""
+      checksum: ''
     annotations:
       path: /data/references/annotations
       type: file
       url: file:/data/references/annotations
-      checksum: ""
+      checksum: ''
   hs1:
     fasta:
       path: /data/references/hs1.fa
       type: file
       url: file:/data/references/hs1.fa
-      checksum: ""
+      checksum: ''
     fai:
       path: /data/references/hs1.fa.fai
       type: file
       url: file:/data/references/hs1.fa.fai
-      checksum: ""
+      checksum: ''
     dict:
       path: /data/references/hs1.dict
       type: file
       url: file:/data/references/hs1.dict
-      checksum: ""
+      checksum: ''
     minimap2_index:
       path: /data/references/hs1.mmi
       type: file
       url: file:/data/references/hs1.mmi
-      checksum: ""
+      checksum: ''
     design_bed:
-      path: ""
+      path: ''
       type: optional
-      url: ""
-      checksum: ""
+      url: ''
+      checksum: ''
+    sv_annotation_bed:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    tandem_repeats:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    clinvar:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    cytoband:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    gene_annotation:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
+    annotations:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
 annotations:
   vep_cache:
     path: /data/references/vep_cache
     type: directory
     url: file:/data/references/vep_cache
-    checksum: ""
+    checksum: ''
+  snpeff_db:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''
+  simple_sv_panel:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''
+  simple_sv_fusion_pairs:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''

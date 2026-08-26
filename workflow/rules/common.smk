@@ -44,6 +44,12 @@ from hydra_genetics.utils.software_versions import touch_pipeline_version_file_n
 from hydra_genetics.utils.software_versions import touch_software_version_file
 from hydra_genetics.utils.software_versions import use_container
 
+# Routing lives in a plain module so that it can be unit tested without
+# Snakemake.  workflow.basedir is workflow/, so scripts/ sits next to rules/.
+SCRIPTS = os.path.join(workflow.basedir, "scripts")
+sys.path.insert(0, SCRIPTS)
+import nagini_routing
+
 
 hydra_min_version("3.3.0")
 min_version("7.8.0")
@@ -378,6 +384,31 @@ def get_reference_index():
     return "alignment/minimap2_index/{}.{}.mmi".format(fasta_name, preset)
 
 
+def get_index_preset():
+    """The preset the available minimap2 index was built with."""
+
+    return str(
+        config.get("minimap2_align", {}).get(
+            "index_preset", config.get("minimap2_align", {}).get("preset", "map-ont")
+        )
+    ).strip()
+
+
+def get_reference_target_for_unit(wildcards):
+    """The minimap2 target for a unit: the index when it matches, else the FASTA.
+
+    A prebuilt index carries its own -k/-w, and minimap2 silently keeps them:
+    aligning with -x splice against a map-ont index runs the splice model on
+    map-ont seeding.  Rather than align on parameters nobody chose, spliced
+    units are pointed at the FASTA and minimap2 indexes as it goes.
+    """
+
+    preset = get_minimap2_preset_for_unit(wildcards)
+    if preset == get_index_preset():
+        return get_reference_index()
+    return config["reference"]["fasta"]
+
+
 def _optional_reference_path(key):
     """Return an optional selected-reference asset only when it is readable."""
 
@@ -442,40 +473,90 @@ reference_chromosomes = get_reference_chromosomes()
 
 
 # ---------------------------------------------------------------------------
-# Library type routing
+# Sample routing
 # ---------------------------------------------------------------------------
+#
+# Two independent facts decide what runs for a sample:
+#
+#   library_type  what the molecules are, and therefore how they align
+#   assay         what the sample was sequenced for, and therefore what runs
+#
+# The logic lives in workflow/scripts/nagini_routing.py so that it is testable
+# without Snakemake.  The wrappers below bind it to this workflow's `units`
+# table and resolved assay registry.
 
-VALID_LIBRARY_TYPES = {"wgs", "amplicon", "cdna"}
+try:
+    assays = nagini_routing.resolve_assays(config)
+except nagini_routing.RoutingError as error:
+    raise WorkflowError(str(error))
+
+VALID_LIBRARY_TYPES = set(nagini_routing.LIBRARY_TYPES)
+VALID_ASSAYS = set(assays)
+
+
+def _routing_call(function, *args):
+    """Turn a routing error into a Snakemake error with the same message."""
+
+    try:
+        return function(*args)
+    except nagini_routing.RoutingError as error:
+        raise WorkflowError(str(error))
+
+
+def get_assay(sample):
+    """Return the assay name for a sample."""
+
+    return _routing_call(nagini_routing.get_assay, units, sample, assays)
+
+
+def get_assay_definition(sample):
+    return _routing_call(nagini_routing.get_assay_definition, units, sample, assays)
 
 
 def get_library_type(sample):
-    """Return the library type for a sample from units.tsv (default: wgs)."""
-    col = "library_type"
-    if col not in units.columns:
-        return "wgs"
-    types = sorted(
-        {
-            str(val).strip().lower()
-            for val in units.loc[units["sample"] == sample, col].tolist()
-            if str(val).strip() and str(val).strip().lower() not in ("nan", "none", "")
-        }
-    )
-    return types[0] if types else "wgs"
+    """Return the library type for a sample (units.tsv wins over the assay)."""
+
+    return _routing_call(nagini_routing.get_library_type, units, sample, assays)
 
 
 def sample_needs_dna_variant_calling(sample):
-    """WGS and amplicon samples get SNV/indel calling."""
-    return get_library_type(sample) in ("wgs", "amplicon")
+    """Whether SNV/indel calling runs for this sample."""
+
+    return _routing_call(nagini_routing.sample_needs_snv_calling, units, sample, assays)
 
 
 def sample_needs_sv_calling(sample):
-    """Only WGS samples get structural variant calling (Sniffles2)."""
-    return get_library_type(sample) == "wgs"
+    """Whether structural variant calling runs for this sample."""
+
+    return _routing_call(nagini_routing.sample_needs_sv_calling, units, sample, assays)
 
 
 def sample_needs_rna_analysis(sample):
-    """cDNA samples get RNA-specific analysis."""
-    return get_library_type(sample) == "cdna"
+    """Whether the library is spliced and needs RNA-aware handling."""
+
+    return nagini_routing.library_type_is_spliced(get_library_type(sample))
+
+
+def sample_is_target_restricted(sample):
+    """Whether analysis for this sample is confined to the design BED."""
+
+    return _routing_call(nagini_routing.sample_is_target_restricted, units, sample, assays)
+
+
+def sample_has_assay_module(sample, module):
+    """Whether an assay-specific analysis module runs for this sample."""
+
+    return _routing_call(nagini_routing.sample_has_module, units, sample, assays, module)
+
+
+def samples_with_assay_module(module):
+    """Every sample whose assay declares this module."""
+
+    return [
+        str(sample).strip()
+        for sample in get_samples(samples)
+        if sample_has_assay_module(str(sample).strip(), module)
+    ]
 
 
 def has_design_bed():
@@ -485,11 +566,96 @@ def has_design_bed():
 
 
 def get_minimap2_preset_for_unit(wildcards):
-    """Return minimap2 preset based on library type."""
-    lt = get_library_type(wildcards.sample)
-    if lt in ("cdna", "direct_rna"):
-        return "splice"
-    return config.get("minimap2_align", {}).get("preset", "map-ont")
+    """Return the minimap2 preset for a unit, from its library type."""
+
+    return nagini_routing.minimap2_preset(
+        get_library_type(wildcards.sample),
+        config.get("minimap2_align", {}).get("preset", "map-ont"),
+    )
+
+
+def get_assay_setting(sample, section, key, default=None):
+    """A tool setting for a sample, with its assay's override applied."""
+
+    return _routing_call(
+        nagini_routing.assay_setting, units, sample, assays, section, key, default
+    )
+
+
+def get_clairs_to_platform(wildcards):
+    """Derive the ClairS-TO error model from the sample's basecalling model."""
+
+    configured = str(config.get("clairs_to_call", {}).get("platform", "") or "").strip()
+    if configured:
+        # An explicit platform in the config is an override, not a suggestion.
+        return configured
+    model = nagini_routing.get_basecalling_model(units, wildcards.sample)
+    platform, _warning = nagini_routing.clairs_to_platform(
+        model,
+        config.get("clairs_to_call", {}).get("platform_map", {}),
+        config.get("clairs_to_call", {}).get("default_platform", ""),
+    )
+    return platform
+
+
+def get_clairs_to_snv_min_af(wildcards):
+    return get_assay_setting(
+        wildcards.sample,
+        "clairs_to_call",
+        "snv_min_af",
+        config.get("clairs_to_call", {}).get("snv_min_af", 0.05),
+    )
+
+
+def get_clairs_to_indel_min_af(wildcards):
+    return get_assay_setting(
+        wildcards.sample,
+        "clairs_to_call",
+        "indel_min_af",
+        config.get("clairs_to_call", {}).get("indel_min_af", 0.1),
+    )
+
+
+if clairs_to_enabled() and not has_design_bed():
+    _needs_calling = [
+        str(sample).strip()
+        for sample in get_samples(samples)
+        if sample_needs_dna_variant_calling(str(sample).strip())
+    ]
+    if _needs_calling:
+        raise WorkflowError(
+            "ClairS-TO needs reference.design_bed, which is not set or not readable "
+            "({!r}), but these samples are routed to variant calling: {}. Configure a "
+            "design BED, or route them to an assay with snv_calling: false.".format(
+                config.get("reference", {}).get("design_bed", ""), ", ".join(_needs_calling)
+            )
+        )
+
+
+# Fail early on an unroutable sample sheet rather than midway through the DAG,
+# and surface a library_type that disagrees with its assay as a warning.
+_routing_summary = _routing_call(
+    nagini_routing.routing_summary, units, list(get_samples(samples)), assays
+)
+for _warning in _routing_call(
+    nagini_routing.routing_warnings, units, list(get_samples(samples)), assays
+):
+    sys.stderr.write(f"WARNING: {_warning}\n")
+
+if not str(config.get("clairs_to_call", {}).get("platform", "") or "").strip():
+    _seen_models = set()
+    for _sample in get_samples(samples):
+        _model = nagini_routing.get_basecalling_model(units, str(_sample).strip())
+        if _model in _seen_models:
+            continue
+        _seen_models.add(_model)
+        _platform, _model_warning = nagini_routing.clairs_to_platform(
+            _model,
+            config.get("clairs_to_call", {}).get("platform_map", {}),
+            config.get("clairs_to_call", {}).get("default_platform", ""),
+        )
+        if _model_warning:
+            sys.stderr.write(f"WARNING: {_model_warning}\n")
 
 
 def get_small_variant_caller():
@@ -556,6 +722,84 @@ def get_unit_types_for_sample(sample):
     return sorted(set(units.loc[units["sample"] == sample, "type"]))
 
 
+# Conditions understood by `when:` in config/output_files.yaml.  Pipeline-level
+# ones are evaluated once; sample-level ones are evaluated per sample.  Any
+# other value falls back to a plain config flag lookup, which is how the
+# existing annotate_* switches work.
+_PIPELINE_CONDITIONS = {
+    "annotate_small_variants_with_vep": lambda: vep_enabled(),
+    "clairs_to_enabled": lambda: clairs_to_enabled(),
+    "clairs_to_vep_enabled": lambda: clairs_to_enabled() and vep_enabled(),
+    "mutect2_enabled": lambda: mutect2_enabled(),
+    "mutect2_vep_enabled": lambda: mutect2_enabled() and vep_enabled(),
+    "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
+    "annotate_svs": lambda: bool(config.get("annotate_svs", False)),
+    "has_design_bed": lambda: has_design_bed(),
+}
+
+_SAMPLE_CONDITIONS = {
+    "clairs_to_enabled": sample_needs_dna_variant_calling,
+    "clairs_to_vep_enabled": sample_needs_dna_variant_calling,
+    "mutect2_enabled": sample_needs_dna_variant_calling,
+    "mutect2_vep_enabled": sample_needs_dna_variant_calling,
+    "annotate_small_variants": sample_needs_dna_variant_calling,
+    "annotate_small_variants_with_vep": sample_needs_dna_variant_calling,
+    "sample_needs_dna_variant_calling": sample_needs_dna_variant_calling,
+    "sv_calling": sample_needs_sv_calling,
+    "annotate_svs": sample_needs_sv_calling,
+    "sample_needs_sv_calling": sample_needs_sv_calling,
+    "sample_needs_rna_analysis": sample_needs_rna_analysis,
+    "target_restricted": sample_is_target_restricted,
+}
+
+
+def _pipeline_condition_met(condition):
+    """Whether a `when:` condition holds for the run as a whole."""
+
+    if not condition:
+        return True
+    if condition in _PIPELINE_CONDITIONS:
+        return _PIPELINE_CONDITIONS[condition]()
+    if condition.startswith(("assay:", "assay_module:")):
+        # Resolved per sample; nothing to decide at pipeline level.
+        return True
+    if condition in _SAMPLE_CONDITIONS:
+        return True
+    return bool(config.get(condition, False))
+
+
+def _sample_condition_met(condition, sample):
+    """Whether a `when:` condition holds for one sample."""
+
+    if not condition:
+        return True
+    if condition.startswith("assay_module:"):
+        return sample_has_assay_module(sample, condition.split(":", 1)[1])
+    if condition.startswith("assay:"):
+        return get_assay(sample) == nagini_routing.normalize(condition.split(":", 1)[1])
+    predicate = _SAMPLE_CONDITIONS.get(condition)
+    return predicate(sample) if predicate else True
+
+
+# A typo in `when:` used to fall through to a config lookup and silently drop
+# the output.  Fail at parse time instead.
+_unknown_conditions = nagini_routing.unknown_conditions(output_spec, assays)
+if _unknown_conditions:
+    raise WorkflowError(
+        "Unknown `when:` condition(s) in {}: {}. Valid values: a config flag, "
+        "one of {}, or assay:<name> / assay_module:<name>.".format(
+            config["output"],
+            ", ".join(_unknown_conditions),
+            ", ".join(
+                sorted(
+                    nagini_routing.PIPELINE_CONDITION_NAMES
+                    | nagini_routing.SAMPLE_CONDITION_NAMES
+                )
+            ),
+        )
+    )
+
+
 def compile_output_file_list(wildcards):
     outdir = pathlib.Path(output_spec.get("directory", "./"))
     output_files = []
@@ -563,47 +807,13 @@ def compile_output_file_list(wildcards):
         condition = file_definition.get("when")
         allowed_types = file_definition.get("types")
 
-        if condition == "annotate_small_variants_with_vep" and not vep_enabled():
+        if not _pipeline_condition_met(condition):
             continue
-        elif condition == "clairs_to_enabled" and not clairs_to_enabled():
-            continue
-        elif condition == "clairs_to_vep_enabled" and not (clairs_to_enabled() and vep_enabled()):
-            continue
-        elif condition == "mutect2_enabled" and not mutect2_enabled():
-            continue
-        elif condition == "mutect2_vep_enabled" and not (mutect2_enabled() and vep_enabled()):
-            continue
-        elif condition == "annotate_small_variants" and not bool(config.get("annotate_small_variants", False)):
-            continue
-        elif condition == "annotate_svs" and not bool(config.get("annotate_svs", False)):
-            continue
-        elif condition == "has_design_bed" and not has_design_bed():
-            continue
-        elif condition and condition not in (
-            "clairs_to_enabled", "clairs_to_vep_enabled", "mutect2_enabled",
-            "mutect2_vep_enabled", "annotate_small_variants", "annotate_svs",
-            "annotate_small_variants_with_vep", "has_design_bed", "sv_calling",
-            "sample_needs_dna_variant_calling", "sample_needs_sv_calling",
-            "sample_needs_rna_analysis"
-        ):
-            if not bool(config.get(condition, False)):
-                continue
 
         for sample in get_samples(samples):
             clean_sample = str(sample).strip()
-
-            if condition in (
-                "clairs_to_enabled", "clairs_to_vep_enabled", "mutect2_enabled",
-                "mutect2_vep_enabled", "annotate_small_variants", "sample_needs_dna_variant_calling"
-            ):
-                if not sample_needs_dna_variant_calling(clean_sample):
-                    continue
-            elif condition in ("sv_calling", "annotate_svs", "sample_needs_sv_calling"):
-                if not sample_needs_sv_calling(clean_sample):
-                    continue
-            elif condition == "sample_needs_rna_analysis":
-                if not sample_needs_rna_analysis(clean_sample):
-                    continue
+            if not _sample_condition_met(condition, clean_sample):
+                continue
 
             for unit_type in get_unit_types_for_sample(sample):
                 if allowed_types and unit_type not in allowed_types:
@@ -620,6 +830,7 @@ def compile_output_file_list(wildcards):
 
     if dorado_barcodes:
         output_files.append(outdir / "basecalling/dorado_demux/demux_summary.tsv")
+        output_files.append(outdir / "qc/dorado_demux/dorado_demux_mqc.tsv")
         if dorado_demux_output_format in ("bam", "both"):
             output_files.extend(
                 outdir / f"basecalling/dorado_demux/{barcode}.bam"

@@ -90,11 +90,37 @@ references:
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
 
+# ---------------------------------------------------------------------------
+# Assay registry
+# ---------------------------------------------------------------------------
+# Which analysis runs for a sample is decided by its `assay` column in
+# units.tsv; how its reads are aligned is decided by `library_type`. Keeping
+# those apart is what lets a cDNA amplicon be spliced *and* variant called.
+#
+# The definitions below are merged over the built-in ones in
+# workflow/scripts/nagini_routing.py, so adding an assay is a config edit:
+#
+#   assays:
+#     my_panel:
+#       library_type: amplicon      # wgs | amplicon | cdna | direct_rna
+#       snv_calling: true
+#       sv_calling: false
+#       target_restricted: true     # confine analysis to reference.design_bed
+#       modules: [my_panel]         # assay-specific rules to switch on
+#
+# Built in already: wgs, adaptive, amplicon, cdna, bcr_abl. Override any of
+# them here; anything not listed keeps its built-in definition.
+assays: {}
+
 # Passed verbatim to minimap2. Add/remove methylation- or SAM-related flags
 # here, for example --MD or -y, according to the basecaller and downstream
 # modification workflow. The alignment rule also adds an @RG line by default.
 minimap2_align:
   preset: "map-ont"
+  # The preset a site-provided reference.mmi was built with. Units needing a
+  # different preset (cDNA needs splice) are aligned against the FASTA instead,
+  # because a prebuilt index silently keeps its own -k/-w.
+  index_preset: "map-ont"
   extra: "-y -Y --MD"
   read_group: ""
   container: "docker://hydragenetics/minimap2:2.26"

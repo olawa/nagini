@@ -1,45 +1,18 @@
 ---
-# CGU Linux workstation reference bundle.
+# CGU Linux workstation: runtime settings only.
 #
-# The paths below follow the workstation layout described in the development
-# notes: all shared reference assets live below /data/references.  VEP is
-# deliberately disabled until the offline cache has finished synchronising;
-# set annotate_small_variants_with_vep=true and vep.skip=false when it is ready.
+# Reference paths live in config/reference_files/reference_files_workstation.yaml.
+# Set a variable here only to override the inventory for this site.
+#
+# VEP is deliberately disabled until the offline cache has finished
+# synchronising; set annotate_small_variants_with_vep=true and vep.skip=false
+# when it is ready.
 SITE_ID: workstation
 REFERENCE_ROOT: /data/references
 CONTAINER_CACHE: vendor/containers
 HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources_workstation.yaml
 DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
-
-HG38_FASTA: /data/references/GRCh38_no_alt_analysis_set.fasta
-HG38_FAI: /data/references/GRCh38_no_alt_analysis_set.fasta.fai
-HG38_DICT: /data/references/GRCh38_no_alt_analysis_set.dict
-HG38_MMI: /data/references/GRCh38_no_alt_analysis_set.mmi
-HG38_DESIGN_BED: /data/references/ReadUntil_Final_Extra_30kb_hg38_v5.bed
-HG38_SV_ANNOTATION_BED: ""
-HG38_TANDEM_REPEATS: /data/references/human_GRCh38_no_alt_analysis_set.trf.bed
-HG38_CLINVAR: /data/references/clinvar.vcf.gz
-HG38_CYTOBAND: ""
-HG38_GTF: /data/references/gencode.v46.annotation.sorted.gtf
-HG38_ANNOTATIONS: /data/references/annotations
-
-HS1_FASTA: /data/references/hs1.fa
-HS1_FAI: /data/references/hs1.fa.fai
-HS1_DICT: /data/references/hs1.dict
-HS1_MMI: /data/references/hs1.mmi
-HS1_DESIGN_BED: ""
-HS1_SV_ANNOTATION_BED: ""
-HS1_TANDEM_REPEATS: ""
-HS1_CLINVAR: ""
-HS1_CYTOBAND: ""
-HS1_GTF: ""
-HS1_ANNOTATIONS: ""
-
-VEP_CACHE: /data/references/vep_cache
-SNPEFF_DB: ""
-SIMPLE_SV_PANEL: ""
-SIMPLE_SV_FUSION_PAIRS: ""
 
 # The initial workstation test can run without VEP.  ClinVar is wired into
 # the VEP command and will be used automatically once this switch is enabled.
@@ -52,3 +25,6 @@ annotate_svs: false
 container_runtime: singularity
 singularity_binds:
   - /data
+
+# Pin before clinical use.
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"

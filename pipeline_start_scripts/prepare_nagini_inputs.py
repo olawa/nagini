@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import os
 import re
 import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -38,8 +41,44 @@ BASE_UNIT_COLUMNS = [
     "run_id",
     "basecalling_model",
     "library_type",
+    "assay",
 ]
 DEFAULT_SAMPLE_REGEX = r"(?P<sample>[^_]+)(?:_.*)?\.(?:fastq|fq)(?:\.gz)?$"
+
+
+def _pipeline_root(args) -> Path:
+    """The checkout to import the routing module from.
+
+    Falls back to this file's own checkout so that the table builders stay
+    callable without a fully populated argument namespace.
+    """
+
+    root = getattr(args, "pipeline_root", None)
+    return Path(root).resolve() if root else Path(__file__).resolve().parents[1]
+
+
+def _routing_module(pipeline_root: Path):
+    """Import the workflow's routing module so the launcher validates the same
+    vocabulary the pipeline will use, rather than a second copy of it."""
+
+    scripts = (pipeline_root / "workflow" / "scripts").resolve()
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import nagini_routing
+
+    return nagini_routing
+
+
+def known_library_types(pipeline_root: Path) -> set[str]:
+    return set(_routing_module(pipeline_root).LIBRARY_TYPES)
+
+
+def known_assays(pipeline_root: Path, config: dict) -> set[str]:
+    routing = _routing_module(pipeline_root)
+    try:
+        return set(routing.resolve_assays(config))
+    except routing.RoutingError as error:
+        raise SystemExit(f"Invalid assay registry in the config: {error}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,6 +94,15 @@ def parse_args() -> argparse.Namespace:
         "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam"), required=True
     )
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
+    parser.add_argument(
+        "--assay",
+        default="",
+        help=(
+            "Default assay for every sample, for example wgs, adaptive or bcr_abl. "
+            "Validated against the assay registry in the config. A per-sample "
+            "assay column in the barcode map overrides it."
+        ),
+    )
     parser.add_argument(
         "--library-type",
         choices=("wgs", "amplicon", "cdna"),
@@ -118,6 +166,17 @@ def parse_args() -> argparse.Namespace:
         help="Number of CPU cores allocated for the pipeline run.",
     )
     parser.add_argument("--tumor-content", default=None)
+    parser.add_argument(
+        "--no-check-references",
+        dest="check_references",
+        action="store_false",
+        help="Skip the existence check on the reference registry.",
+    )
+    parser.add_argument(
+        "--verify-references",
+        action="store_true",
+        help="Also verify registry checksums. Reads every file, so it is slow.",
+    )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
@@ -138,7 +197,11 @@ def normalize_barcode(value: object) -> str:
 
 
 def read_barcode_map(
-    path: Path, default_type: str, default_library_type: str = "wgs"
+    path: Path,
+    default_type: str,
+    default_library_type: str = "wgs",
+    default_assay: str = "",
+    valid_library_types: set[str] | None = None,
 ) -> dict[str, dict[str, str]]:
     """Read a barcode-to-sample CSV/TSV mapping with strict unique barcodes."""
 
@@ -166,6 +229,7 @@ def read_barcode_map(
         sample_type = fields.get("type", fields.get("sampletype", "")) or default_type
         raw_lib = fields.get("librarytype", fields.get("library_type", "")) or default_library_type
         library_type = str(raw_lib).strip().lower()
+        assay = str(fields.get("assay", "") or default_assay).strip().lower()
         if not barcode or not re.fullmatch(r"barcode\d+", barcode):
             raise SystemExit(f"Invalid or missing barcode in {path}: {row}")
         if not sample_name:
@@ -174,9 +238,11 @@ def read_barcode_map(
             raise SystemExit(
                 f"Invalid type={sample_type!r} for {barcode}; expected N, T or R."
             )
-        if library_type not in {"wgs", "amplicon", "cdna"}:
+        allowed = valid_library_types or {"wgs", "amplicon", "cdna", "direct_rna"}
+        if library_type not in allowed:
             raise SystemExit(
-                f"Invalid library_type={library_type!r} for {barcode} in {path}; expected wgs, amplicon or cdna."
+                f"Invalid library_type={library_type!r} for {barcode} in {path}; "
+                f"expected one of {', '.join(sorted(allowed))}."
             )
         normalized_rows.append(
             {
@@ -184,6 +250,7 @@ def read_barcode_map(
                 "sample": sample_name,
                 "type": sample_type,
                 "library_type": library_type,
+                "assay": assay,
             }
         )
 
@@ -233,6 +300,8 @@ def make_bam_tables_from_barcode_map(
         args.barcode_map.resolve(),
         args.sample_type,
         getattr(args, "library_type", "wgs"),
+        getattr(args, "assay", ""),
+        known_library_types(_pipeline_root(args)),
     )
     bams_by_barcode = discover_bams_by_barcode(args.input_dir)
     if not bams_by_barcode:
@@ -284,9 +353,191 @@ def make_bam_tables_from_barcode_map(
                     "library_type": assignment.get(
                         "library_type", getattr(args, "library_type", "wgs")
                     ),
+                    "assay": assignment.get("assay", "") or getattr(args, "assay", ""),
                 }
             )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
+
+
+# ---------------------------------------------------------------------------
+# Reference registry
+# ---------------------------------------------------------------------------
+#
+# The registry is the inventory of reference assets for a site: where each file
+# is, whether it is required, and what it should hash to.  It is flattened into
+# the same {{VARIABLE}} names the shared config templates use, so a reference
+# path is declared once, in the registry, rather than twice.
+#
+# Precedence is base config < registry < site config, so a site can still pin
+# one path without taking over the whole inventory.
+
+REGISTRY_BUILD_VARIABLES = {
+    "fasta": "FASTA",
+    "fai": "FAI",
+    "dict": "DICT",
+    "mmi": "MMI",
+    "minimap2_index": "MMI",
+    "design_bed": "DESIGN_BED",
+    "sv_annotation_bed": "SV_ANNOTATION_BED",
+    "tandem_repeats": "TANDEM_REPEATS",
+    "clinvar": "CLINVAR",
+    "clinvar_index": "CLINVAR_INDEX",
+    "cytoband": "CYTOBAND",
+    "gene_annotation": "GTF",
+    "annotations": "ANNOTATIONS",
+}
+
+REGISTRY_ANNOTATION_VARIABLES = {
+    "vep_cache": "VEP_CACHE",
+    "snpeff_db": "SNPEFF_DB",
+    "simple_sv_panel": "SIMPLE_SV_PANEL",
+    "simple_sv_fusion_pairs": "SIMPLE_SV_FUSION_PAIRS",
+}
+
+
+class ReferenceEntry:
+    """One asset: the variable it fills, its path, and how to check it."""
+
+    __slots__ = ("variable", "path", "kind", "checksum", "source")
+
+    def __init__(self, variable, path, kind="file", checksum="", source=""):
+        self.variable = variable
+        self.path = path
+        self.kind = (kind or "file").strip().lower()
+        self.checksum = (checksum or "").strip()
+        self.source = source
+
+    @property
+    def required(self) -> bool:
+        return self.kind not in ("optional", "") and bool(self.path)
+
+
+def _registry_entry(variable, value, reference_root, source):
+    """Accept either a bare path or a {path, type, url, checksum} mapping."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        path, kind, checksum = value.strip(), "file", ""
+    elif isinstance(value, dict):
+        path = str(value.get("path", "") or "").strip()
+        kind = str(value.get("type", "file") or "file").strip().lower()
+        checksum = str(value.get("checksum", "") or "").strip()
+    else:
+        raise SystemExit(
+            f"{source}: expected a path or a mapping, got {type(value).__name__}."
+        )
+    if path and reference_root and not os.path.isabs(path):
+        path = os.path.join(reference_root, path)
+    return ReferenceEntry(variable, path, kind, checksum, source)
+
+
+def flatten_reference_registry(registry: dict) -> list[ReferenceEntry]:
+    """Turn a registry into the {{VARIABLE}} entries the config templates use."""
+
+    if not registry:
+        return []
+    reference_root = str(registry.get("reference_root", "") or "").strip()
+    entries: list[ReferenceEntry] = []
+
+    for build, assets in (registry.get("reference_builds") or {}).items():
+        if not isinstance(assets, dict):
+            raise SystemExit(f"reference_builds.{build} must be a mapping.")
+        prefix = str(build).strip().upper()
+        for key, value in assets.items():
+            suffix = REGISTRY_BUILD_VARIABLES.get(str(key).strip().lower())
+            if not suffix:
+                continue
+            entry = _registry_entry(
+                f"{prefix}_{suffix}", value, reference_root, f"reference_builds.{build}.{key}"
+            )
+            if entry:
+                entries.append(entry)
+
+    for key, value in (registry.get("annotations") or {}).items():
+        variable = REGISTRY_ANNOTATION_VARIABLES.get(str(key).strip().lower())
+        if not variable:
+            continue
+        entry = _registry_entry(variable, value, reference_root, f"annotations.{key}")
+        if entry:
+            entries.append(entry)
+    return entries
+
+
+def registry_variables(registry: dict) -> dict[str, str]:
+    """Every variable the registry declares, empty paths included.
+
+    An entry with no path is a statement that the asset is not installed here,
+    which has to override the shared config's default rather than fall through
+    to it.
+    """
+
+    return {entry.variable: entry.path for entry in flatten_reference_registry(registry)}
+
+
+def _md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_reference_registry(
+    registry: dict, verify_checksums: bool = False, strict: bool = False
+) -> None:
+    """Check the inventory before Snakemake builds a DAG against it.
+
+    Reports rather than raises by default: the shipped registries describe more
+    assets than every site installs, and a launcher that refuses to start over
+    an unused reference would be worse than one that says what is missing.
+    ``--verify-references`` makes it strict and adds checksums.
+    """
+
+    entries = flatten_reference_registry(registry)
+    missing = []
+    wrong_kind = []
+    bad_checksum = []
+    checked = 0
+
+    for entry in entries:
+        if not entry.path:
+            if entry.required:
+                missing.append(f"{entry.source} has no path")
+            continue
+        path = Path(entry.path)
+        if entry.kind == "directory":
+            if not path.is_dir():
+                (missing if entry.required else wrong_kind).append(
+                    f"{entry.source}: not a directory: {path}"
+                )
+                continue
+        elif not path.exists():
+            if entry.required:
+                missing.append(f"{entry.source}: {path}")
+            continue
+        elif path.is_dir() and entry.kind == "file":
+            wrong_kind.append(f"{entry.source}: expected a file, found a directory: {path}")
+            continue
+
+        if verify_checksums and entry.checksum and path.is_file():
+            actual = _md5(path)
+            checked += 1
+            if actual != entry.checksum:
+                bad_checksum.append(
+                    f"{entry.source}: {path} is {actual}, registry says {entry.checksum}"
+                )
+
+    problems = missing + wrong_kind + bad_checksum
+    if problems:
+        message = "Reference registry problems:\n  " + "\n  ".join(problems)
+        if strict or bad_checksum:
+            # A wrong checksum is never tolerable: the file is not the one the
+            # registry describes, whatever else is true.
+            raise SystemExit(message)
+        print("WARNING: " + message, file=sys.stderr)
+    if verify_checksums:
+        print(f"Verified {checked} reference checksum(s).")
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
@@ -393,6 +644,7 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
                 "run_id": run_id,
                 "basecalling_model": args.basecalling_model,
                 "library_type": getattr(args, "library_type", "wgs"),
+                "assay": getattr(args, "assay", ""),
             }
         )
     samples = [{"sample": sample} for sample in sorted(counters)]
@@ -406,6 +658,8 @@ def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]],
         args.barcode_map.resolve(),
         args.sample_type,
         getattr(args, "library_type", "wgs"),
+        getattr(args, "assay", ""),
+        known_library_types(_pipeline_root(args)),
     )
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
@@ -433,6 +687,7 @@ def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]],
                 "library_type": assignment.get(
                     "library_type", getattr(args, "library_type", "wgs")
                 ),
+                "assay": assignment.get("assay", "") or getattr(args, "assay", ""),
             }
         )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
@@ -493,6 +748,7 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
                 "run_id": run_id,
                 "basecalling_model": args.basecalling_model,
                 "library_type": getattr(args, "library_type", "wgs"),
+                "assay": getattr(args, "assay", ""),
             }
         )
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
@@ -536,17 +792,25 @@ def resolve_config_path(value: object, base_dir: Path) -> object:
 def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     base_config = args.base_config.resolve()
     config = read_yaml(base_config)
-    if args.site_config:
-        site_config = args.site_config.resolve()
-        if not site_config.is_file():
-            raise SystemExit(f"Site config does not exist: {site_config}")
-        config = deep_merge(config, read_yaml(site_config))
+
     reference_registry = None
     if args.reference_files:
         reference_path = args.reference_files.resolve()
         if not reference_path.is_file():
             raise SystemExit(f"Reference registry does not exist: {reference_path}")
         reference_registry = read_yaml(reference_path)
+
+    # base config defaults < registry inventory < site config. The registry is
+    # where a reference path is declared; the site config can still pin one
+    # without taking over the whole inventory.
+    if reference_registry:
+        config = deep_merge(config, registry_variables(reference_registry))
+
+    if args.site_config:
+        site_config = args.site_config.resolve()
+        if not site_config.is_file():
+            raise SystemExit(f"Site config does not exist: {site_config}")
+        config = deep_merge(config, read_yaml(site_config))
 
     context: dict[str, str] = {
         str(key): str(value)
@@ -577,6 +841,11 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             raise SystemExit(
                 "Reference registry site does not match selected site: "
                 f"{registry_site!r} != {config.get('site')!r}"
+            )
+        if getattr(args, "check_references", True):
+            _verify = bool(getattr(args, "verify_references", False))
+            validate_reference_registry(
+                reference_registry, verify_checksums=_verify, strict=_verify
             )
 
     # Nagini's checked-in configs use paths relative to the repository root,
@@ -730,6 +999,96 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     return runtime_config
 
 
+def validate_assays(args: argparse.Namespace, units: list[dict[str, str]]) -> None:
+    """Reject an unknown assay here rather than midway through the DAG."""
+
+    requested = sorted(
+        {
+            str(row.get("assay", "") or "").strip().lower()
+            for row in units
+            if str(row.get("assay", "") or "").strip()
+        }
+    )
+    if not requested:
+        return
+    config = read_yaml(args.base_config.resolve())
+    if args.site_config and args.site_config.is_file():
+        config = deep_merge(config, read_yaml(args.site_config.resolve()))
+    valid = known_assays(_pipeline_root(args), config)
+    unknown = [assay for assay in requested if assay not in valid]
+    if unknown:
+        raise SystemExit(
+            "Unknown assay(s): {}. Known assays: {}. Declare a new one under "
+            "config['assays'] in the pipeline or site config.".format(
+                ", ".join(unknown), ", ".join(sorted(valid))
+            )
+        )
+    print(f"Assays in this run: {', '.join(requested)}")
+
+
+def validate_barcode_kit(args: argparse.Namespace, units: list[dict[str, str]]) -> None:
+    """Catch a barcode the kit cannot produce before anything is queued."""
+
+    kit = str(getattr(args, "dorado_kit", "") or "").strip()
+    if not kit:
+        return
+    routing = _routing_module(_pipeline_root(args))
+    size = routing.barcode_kit_size(kit)
+    if size is None:
+        print(
+            f"NOTE: barcode count for kit {kit} is unknown; barcodes are not checked.",
+            file=sys.stderr,
+        )
+        return
+    barcodes = sorted(
+        {
+            str(row.get("barcode_name", "") or "").strip()
+            for row in units
+            if str(row.get("barcode_name", "") or "").strip()
+        }
+    )
+    outside = routing.barcodes_outside_kit(barcodes, kit)
+    if outside:
+        raise SystemExit(
+            "Barcode(s) outside kit {} ({} barcodes): {}. Check the barcode map "
+            "or the --barcode-kit value.".format(
+                kit, size, ", ".join(name for name, _ in outside)
+            )
+        )
+    if barcodes:
+        print(f"{len(barcodes)} barcode(s) checked against kit {kit} ({size} barcodes).")
+
+
+def warn_about_model_download(args: argparse.Namespace) -> None:
+    """A model that has to be fetched fails after the GPU job has started.
+
+    Say so at launch instead, where it costs nothing to fix.
+    """
+
+    if getattr(args, "input_type", "") != "minknow":
+        return
+    model = str(getattr(args, "dorado_model", "") or getattr(args, "basecalling_model", "") or "").strip()
+    directory = getattr(args, "dorado_models_directory", None)
+    if not directory:
+        print(
+            f"WARNING: no --dorado-models-directory given, so Dorado will try to "
+            f"download {model or 'the basecalling model'} when the job starts. On a "
+            "host without outbound network that fails after basecalling is queued.",
+            file=sys.stderr,
+        )
+        return
+    directory = Path(directory)
+    if model and "/" not in model and not (directory / model).exists():
+        available = sorted(child.name for child in directory.iterdir() if child.is_dir())
+        print(
+            "WARNING: model {!r} is not present in {}. Dorado will try to download it. "
+            "Models found there: {}".format(
+                model, directory, ", ".join(available[:8]) or "none"
+            ),
+            file=sys.stderr,
+        )
+
+
 def main() -> None:
     args = parse_args()
     args.input_dir = args.input_dir.resolve()
@@ -765,6 +1124,9 @@ def main() -> None:
         for row in samples:
             row["tumor_content"] = args.tumor_content
     validate_tables(samples, units, allow_deferred_inputs=args.input_type == "minknow")
+    validate_assays(args, units)
+    validate_barcode_kit(args, units)
+    warn_about_model_download(args)
 
     sample_columns = list(samples[0]) if samples else ["sample"]
     unit_columns = list(BASE_UNIT_COLUMNS)

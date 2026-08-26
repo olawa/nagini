@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -335,6 +337,299 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 PREPARE.read_barcode_map(mapping, "N")
             self.assertIn("Invalid library_type", str(ctx.exception))
+
+
+class AssayRoutingTest(unittest.TestCase):
+    """The assay column decides analysis; library_type decides alignment."""
+
+    PIPELINE_ROOT = Path(__file__).parents[1]
+
+    def _args(self, tmpdir, mapping, **overrides):
+        args = type("Args", (), {})()
+        args.input_dir = Path(tmpdir)
+        args.barcode_map = mapping
+        args.sample_type = "N"
+        args.input_type = "minknow"
+        args.sequence_id = "run-1"
+        args.run_id = ""
+        args.methylation = "No"
+        args.basecalling_model = "hac"
+        args.library_type = "wgs"
+        args.assay = ""
+        args.pipeline_root = self.PIPELINE_ROOT
+        args.base_config = self.PIPELINE_ROOT / "config/config.yaml"
+        args.site_config = None
+        for key, value in overrides.items():
+            setattr(args, key, value)
+        return args
+
+    def test_per_sample_assay_column_reaches_units(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text(
+                "barcode,sample,type,library_type,assay\n"
+                "barcode01,WGS_SAMPLE,N,wgs,adaptive\n"
+                "barcode02,BCR_SAMPLE,T,cdna,bcr_abl\n"
+            )
+            args = self._args(tmpdir, mapping)
+            samples, units = PREPARE.make_minknow_tables(args)
+
+        by_sample = {row["sample"]: row for row in units}
+        self.assertEqual(by_sample["WGS_SAMPLE"]["assay"], "adaptive")
+        self.assertEqual(by_sample["WGS_SAMPLE"]["library_type"], "wgs")
+        self.assertEqual(by_sample["BCR_SAMPLE"]["assay"], "bcr_abl")
+        self.assertEqual(by_sample["BCR_SAMPLE"]["library_type"], "cdna")
+        self.assertEqual(len(samples), 2)
+
+    def test_cli_assay_is_the_default_when_the_map_omits_it(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type\nbarcode01,S1,N\n")
+            args = self._args(tmpdir, mapping, assay="adaptive")
+            _, units = PREPARE.make_minknow_tables(args)
+        self.assertEqual(units[0]["assay"], "adaptive")
+
+    def test_assay_column_is_written_to_units_tsv(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "units.tsv"
+            PREPARE.write_tsv(
+                path,
+                [{"sample": "S1", "assay": "bcr_abl", "library_type": "cdna"}],
+                PREPARE.BASE_UNIT_COLUMNS,
+            )
+            header = path.read_text().splitlines()[0].split("\t")
+        self.assertIn("assay", header)
+        self.assertIn("library_type", header)
+
+    def test_unknown_assay_is_rejected_with_the_valid_names(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = self._args(tmpdir, None)
+            with self.assertRaises(SystemExit) as raised:
+                PREPARE.validate_assays(args, [{"sample": "S1", "assay": "bcrabl"}])
+        message = str(raised.exception)
+        self.assertIn("Unknown assay", message)
+        self.assertIn("bcr_abl", message)
+
+    def test_builtin_assays_pass_validation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = self._args(tmpdir, None)
+            PREPARE.validate_assays(
+                args,
+                [
+                    {"sample": "S1", "assay": "wgs"},
+                    {"sample": "S2", "assay": "adaptive"},
+                    {"sample": "S3", "assay": "bcr_abl"},
+                ],
+            )
+
+    def test_an_unsupported_library_type_names_the_supported_ones(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type,library_type\nbarcode01,S1,N,rna\n")
+            args = self._args(tmpdir, mapping)
+            with self.assertRaises(SystemExit) as raised:
+                PREPARE.make_minknow_tables(args)
+        self.assertIn("direct_rna", str(raised.exception))
+
+
+class PreflightTest(unittest.TestCase):
+    """Catch a bad sample sheet at launch, not after the GPU job has run."""
+
+    PIPELINE_ROOT = Path(__file__).parents[1]
+
+    def _args(self, **overrides):
+        args = type("Args", (), {})()
+        args.pipeline_root = self.PIPELINE_ROOT
+        args.dorado_kit = "SQK-NBD114-24"
+        args.input_type = "minknow"
+        args.dorado_model = "dna_r10.4.1_e8.2_400bps_sup@v5.2.0"
+        args.basecalling_model = args.dorado_model
+        args.dorado_models_directory = None
+        for key, value in overrides.items():
+            setattr(args, key, value)
+        return args
+
+    def test_a_barcode_beyond_the_kit_is_rejected(self):
+        units = [
+            {"sample": "S1", "barcode_name": "barcode01"},
+            {"sample": "S2", "barcode_name": "barcode30"},
+        ]
+        with self.assertRaises(SystemExit) as raised:
+            PREPARE.validate_barcode_kit(self._args(), units)
+        message = str(raised.exception)
+        self.assertIn("barcode30", message)
+        self.assertIn("SQK-NBD114-24", message)
+
+    def test_barcodes_within_the_kit_pass(self):
+        units = [{"sample": "S1", "barcode_name": f"barcode{n:02d}"} for n in (1, 12, 24)]
+        PREPARE.validate_barcode_kit(self._args(), units)
+
+    def test_an_unknown_kit_skips_the_check(self):
+        units = [{"sample": "S1", "barcode_name": "barcode30"}]
+        PREPARE.validate_barcode_kit(self._args(dorado_kit="SQK-LSK114"), units)
+
+    def test_no_kit_skips_the_check(self):
+        PREPARE.validate_barcode_kit(
+            self._args(dorado_kit=""), [{"sample": "S1", "barcode_name": "barcode30"}]
+        )
+
+    def test_a_missing_models_directory_warns(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            PREPARE.warn_about_model_download(self._args())
+        self.assertIn("download", buffer.getvalue())
+
+    def test_a_model_absent_from_the_directory_warns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "dna_r10.4.1_e8.2_400bps_hac@v5.0.0").mkdir()
+            buffer = io.StringIO()
+            with contextlib.redirect_stderr(buffer):
+                PREPARE.warn_about_model_download(
+                    self._args(dorado_models_directory=Path(tmpdir))
+                )
+        text = buffer.getvalue()
+        self.assertIn("not present", text)
+        self.assertIn("hac@v5.0.0", text)
+
+    def test_a_present_model_is_silent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "dna_r10.4.1_e8.2_400bps_sup@v5.2.0").mkdir()
+            buffer = io.StringIO()
+            with contextlib.redirect_stderr(buffer):
+                PREPARE.warn_about_model_download(
+                    self._args(dorado_models_directory=Path(tmpdir))
+                )
+        self.assertEqual(buffer.getvalue(), "")
+
+    def test_non_minknow_input_is_not_checked_for_models(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            PREPARE.warn_about_model_download(self._args(input_type="fastq"))
+        self.assertEqual(buffer.getvalue(), "")
+
+
+class ReferenceRegistryTest(unittest.TestCase):
+    """The registry is where a reference path is declared."""
+
+    PIPELINE_ROOT = Path(__file__).parents[1]
+
+    def test_builds_and_annotations_flatten_to_config_variables(self):
+        registry = {
+            "site": "x",
+            "reference_builds": {
+                "hg38": {
+                    "fasta": {"path": "/r/genome.fa", "type": "file"},
+                    "minimap2_index": {"path": "/r/genome.mmi", "type": "file"},
+                    "gene_annotation": {"path": "/r/genes.gtf", "type": "file"},
+                },
+                "hs1": {"fasta": {"path": "/r/hs1.fa", "type": "file"}},
+            },
+            "annotations": {"vep_cache": {"path": "/r/vep", "type": "directory"}},
+        }
+        variables = PREPARE.registry_variables(registry)
+        self.assertEqual(variables["HG38_FASTA"], "/r/genome.fa")
+        self.assertEqual(variables["HG38_MMI"], "/r/genome.mmi")
+        self.assertEqual(variables["HG38_GTF"], "/r/genes.gtf")
+        self.assertEqual(variables["HS1_FASTA"], "/r/hs1.fa")
+        self.assertEqual(variables["VEP_CACHE"], "/r/vep")
+
+    def test_relative_paths_are_joined_to_reference_root(self):
+        registry = {
+            "reference_root": "/refs",
+            "reference_builds": {"hg38": {"fasta": {"path": "sub/genome.fa"}}},
+        }
+        self.assertEqual(PREPARE.registry_variables(registry)["HG38_FASTA"], "/refs/sub/genome.fa")
+
+    def test_absolute_paths_ignore_reference_root(self):
+        registry = {
+            "reference_root": "/refs",
+            "reference_builds": {"hg38": {"fasta": {"path": "/elsewhere/genome.fa"}}},
+        }
+        self.assertEqual(
+            PREPARE.registry_variables(registry)["HG38_FASTA"], "/elsewhere/genome.fa"
+        )
+
+    def test_a_bare_path_is_accepted_as_well_as_a_mapping(self):
+        registry = {"reference_builds": {"hg38": {"fasta": "/r/genome.fa"}}}
+        self.assertEqual(PREPARE.registry_variables(registry)["HG38_FASTA"], "/r/genome.fa")
+
+    def test_an_empty_path_overrides_the_shared_default(self):
+        """Declaring an asset with no path says it is not installed here."""
+
+        registry = {"reference_builds": {"hs1": {"design_bed": {"path": "", "type": "optional"}}}}
+        self.assertEqual(PREPARE.registry_variables(registry)["HS1_DESIGN_BED"], "")
+
+    def test_unknown_keys_are_ignored_rather_than_fatal(self):
+        registry = {"reference_builds": {"hg38": {"something_new": {"path": "/r/x"}}}}
+        self.assertEqual(PREPARE.registry_variables(registry), {})
+
+    def test_missing_required_files_are_reported_but_not_fatal(self):
+        registry = {"reference_builds": {"hg38": {"fasta": {"path": "/nope/genome.fa", "type": "file"}}}}
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            PREPARE.validate_reference_registry(registry)
+        self.assertIn("/nope/genome.fa", buffer.getvalue())
+
+    def test_strict_mode_refuses_to_continue(self):
+        registry = {"reference_builds": {"hg38": {"fasta": {"path": "/nope/genome.fa", "type": "file"}}}}
+        with self.assertRaises(SystemExit):
+            PREPARE.validate_reference_registry(registry, strict=True)
+
+    def test_optional_assets_are_not_required(self):
+        registry = {"reference_builds": {"hg38": {"cytoband": {"path": "", "type": "optional"}}}}
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            PREPARE.validate_reference_registry(registry)
+        self.assertEqual(buffer.getvalue(), "")
+
+    def test_a_wrong_checksum_always_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset = Path(tmpdir) / "genome.fa"
+            asset.write_text(">chr1\nACGT\n")
+            registry = {
+                "reference_builds": {
+                    "hg38": {"fasta": {"path": str(asset), "type": "file", "checksum": "0" * 32}}
+                }
+            }
+            with self.assertRaises(SystemExit) as raised:
+                PREPARE.validate_reference_registry(registry, verify_checksums=True)
+        self.assertIn("registry says", str(raised.exception))
+
+    def test_a_matching_checksum_passes(self):
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset = Path(tmpdir) / "genome.fa"
+            asset.write_bytes(b">chr1\nACGT\n")
+            digest = hashlib.md5(asset.read_bytes()).hexdigest()
+            registry = {
+                "reference_builds": {
+                    "hg38": {"fasta": {"path": str(asset), "type": "file", "checksum": digest}}
+                }
+            }
+            PREPARE.validate_reference_registry(registry, verify_checksums=True)
+
+    def test_shipped_registries_and_site_configs_do_not_both_own_a_path(self):
+        """After the migration, a reference path is declared in one place."""
+
+        reference_variables = set(PREPARE.REGISTRY_ANNOTATION_VARIABLES.values())
+        for build in ("HG38", "HS1"):
+            for suffix in set(PREPARE.REGISTRY_BUILD_VARIABLES.values()):
+                reference_variables.add(f"{build}_{suffix}")
+        for site in ("local", "workstation", "marvin"):
+            site_config = PREPARE.read_yaml(
+                self.PIPELINE_ROOT / f"config/site_configs/site_config_{site}.yaml"
+            )
+            overlap = sorted(reference_variables & set(site_config))
+            self.assertEqual(overlap, [], f"{site} still declares {overlap}")
+
+    def test_every_shipped_registry_matches_its_site(self):
+        for site in ("local", "workstation", "marvin"):
+            registry = PREPARE.read_yaml(
+                self.PIPELINE_ROOT / f"config/reference_files/reference_files_{site}.yaml"
+            )
+            self.assertEqual(registry.get("site"), site)
+            self.assertTrue(PREPARE.registry_variables(registry), f"{site} registry is empty")
 
 
 if __name__ == "__main__":

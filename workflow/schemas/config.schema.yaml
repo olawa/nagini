@@ -151,6 +151,40 @@ properties:
     type: object
   default_resources:
     type: object
+  assays:
+    description: >
+      Assay registry, merged over the built-in definitions in
+      workflow/scripts/nagini_routing.py. Each entry decides what analysis runs
+      for samples carrying that assay in units.tsv.
+    type: object
+    additionalProperties:
+      type: object
+      properties:
+        description:
+          type: string
+        library_type:
+          type: string
+          enum: ["wgs", "amplicon", "cdna", "direct_rna"]
+        snv_calling:
+          type: boolean
+        sv_calling:
+          type: boolean
+        target_restricted:
+          type: boolean
+        modules:
+          type: array
+          items:
+            type: string
+        config_overrides:
+          description: >
+            Tool settings that differ for this assay, as {section: {key: value}}.
+            Applied on top of the corresponding top-level config section for
+            samples carrying this assay.
+          type: object
+          additionalProperties:
+            type: object
+      additionalProperties: false
+
 additionalProperties: true
 definitions:
   tool_config:

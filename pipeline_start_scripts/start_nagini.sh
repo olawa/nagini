@@ -22,6 +22,7 @@ library_root=""
 input_type=""
 sample_type="N"
 library_type="wgs"
+assay=""
 sequence_id=""
 sample_regex=""
 barcode_map=""
@@ -64,7 +65,11 @@ Options:
   --profile PATH                Snakemake profile (default: profiles/<site>).
   --input-type TYPE             minknow, fastq, unmapped_bam, or aligned_bam.
   --sample-type TYPE            N, T, or R (default: N).
-  --library-type TYPE           Default library type: wgs, amplicon, or cdna (default: wgs).
+  --library-type TYPE           Default library type: wgs, amplicon, cdna, or direct_rna
+                                (default: wgs). Decides how reads are aligned.
+  --assay NAME                  Default assay: wgs, adaptive, bcr_abl, or one declared in
+                                config assays. Decides which analysis runs. A per-sample
+                                assay column in the barcode map overrides it.
   --sequenceid ID               Run identifier; defaults to inbox directory name.
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
   --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed input.
@@ -172,6 +177,11 @@ while [[ $# -gt 0 ]]; do
         --sample-type)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             sample_type="$2"
+            shift 2
+            ;;
+        --assay)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            assay="$2"
             shift 2
             ;;
         --library-type)
@@ -411,6 +421,7 @@ prepare_cmd=(
     --basecalling-model "$basecalling_model"
     --methylation "$methylation"
 )
+[[ -n "$assay" ]] && prepare_cmd+=(--assay "$assay")
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
@@ -440,6 +451,7 @@ source_input_dir: "$source_input_dir"
 source_input_type: "$source_input_type"
 sample_type: "$sample_type"
 library_type: "$library_type"
+assay: "${assay:-}"
 site: "$site"
 pipeline_path: "$pipeline_path"
 base_config: "$base_config"
