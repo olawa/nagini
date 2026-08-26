@@ -1,7 +1,9 @@
-"""Create a dependency-free XLSX summary for a nagini analysis.
+"""Create the XLSX summary for a nagini analysis.
 
-The writer uses only Python's standard library.  This keeps report generation
-available in the same offline runtime as the other pipeline helper scripts.
+Sheets are built as plain lists of rows and handed to xlsxwriter, the same
+writer the other Clinical Genomics Uppsala pipelines use.  A cell is either a
+value or a ``(value, style_id)`` pair; the style vocabulary is defined next to
+the writer below.
 """
 
 import argparse
@@ -11,9 +13,9 @@ import csv
 import gzip
 import os
 import re
-import zipfile
 from datetime import datetime, timezone
-from xml.sax.saxutils import escape
+
+import xlsxwriter
 
 
 def open_text(path):
@@ -286,12 +288,41 @@ def table(columns, records):
     return [columns] + [[record.get(column, "") for column in columns] for record in records]
 
 
-def excel_column(index):
-    name = ""
-    while index:
-        index, remainder = divmod(index - 1, 26)
-        name = chr(65 + remainder) + name
-    return name
+# ---------------------------------------------------------------------------
+# Workbook writing
+# ---------------------------------------------------------------------------
+#
+# Style ids are referenced directly by the sheet builders below, so they are a
+# small stable vocabulary rather than an implementation detail:
+#
+#   0 plain      1 table header   2 title banner   3 section header
+#   4 alert      5 good           6 warning        7 field label
+#   8 highlight  9 secondary alert               10 bold plain
+
+_BASE = {"font_name": "Calibri", "font_size": 11}
+_BORDER = {"border": 1, "border_color": "#D9D9D9"}
+
+STYLE_SPECS = {
+    0: {**_BASE, **_BORDER},
+    1: {**_BASE, **_BORDER, "bold": True, "font_color": "#FFFFFF", "bg_color": "#1F4E78"},
+    2: {**_BASE, "bold": True, "font_color": "#FFFFFF", "bg_color": "#14324F", "font_size": 13},
+    3: {**_BASE, **_BORDER, "bold": True, "font_color": "#1F4E78", "bg_color": "#D9E1F2"},
+    4: {**_BASE, **_BORDER, "bold": True, "font_color": "#9C0006", "bg_color": "#FFC7CE"},
+    5: {**_BASE, **_BORDER, "bold": True, "font_color": "#006100", "bg_color": "#C6EFCE"},
+    6: {**_BASE, **_BORDER, "bold": True, "font_color": "#9C6500", "bg_color": "#FFEB9C"},
+    7: {**_BASE, **_BORDER, "bold": True, "font_color": "#1F4E78", "bg_color": "#F2F2F2"},
+    8: {**_BASE, **_BORDER, "bold": True, "font_color": "#371485", "bg_color": "#EDEDF9"},
+    9: {**_BASE, **_BORDER, "bold": True, "font_color": "#9C0006", "bg_color": "#FCE4D6"},
+    10: {**_BASE, **_BORDER, "bold": True, "font_color": "#1F4E78"},
+}
+
+# Sheets that lay out a report rather than tabulate rows get no autofilter and
+# no frozen header; a filter dropdown on a title banner is just noise.
+LAYOUT = "layout"
+TABLE = "table"
+
+_ILLEGAL_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 
 
 def _cell_value_and_style(cell, row_index, column_index, default_header_style=1):
@@ -311,188 +342,90 @@ def _cell_value_and_style(cell, row_index, column_index, default_header_style=1)
     return cell, 0
 
 
-def _cell_xml(reference, value, style=0):
-    style_attr = f' s="{style}"' if style else ""
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return f'<c r="{reference}"{style_attr}><v>{value}</v></c>'
-    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", "" if value is None else str(value))
-    text = escape(text)
-    preserve = ' xml:space="preserve"' if text != text.strip() else ""
-    return f'<c r="{reference}" t="inlineStr"{style_attr}><is><t{preserve}>{text}</t></is></c>'
+def safe_sheet_name(name, used=None):
+    """Excel rejects some characters and anything past 31 chars."""
+
+    cleaned = _ILLEGAL_SHEET_CHARS.sub("-", str(name)).strip() or "Sheet"
+    cleaned = cleaned[:31]
+    if used is None:
+        return cleaned
+    candidate, suffix = cleaned, 2
+    while candidate in used:
+        tail = f"_{suffix}"
+        candidate = cleaned[: 31 - len(tail)] + tail
+        suffix += 1
+    used.add(candidate)
+    return candidate
 
 
-def worksheet_xml(rows):
+def _column_widths(rows):
     widths = []
     max_cols = max((len(row) for row in rows), default=0)
-    for col_idx in range(max_cols):
-        col_vals = []
+    for column_index in range(max_cols):
+        lengths = []
         for row in rows:
-            if col_idx < len(row):
-                val = row[col_idx]
-                if isinstance(val, tuple) and len(val) == 2:
-                    val = val[0]
-                col_vals.append(str(val))
-        width = max((len(v) for v in col_vals), default=8)
-        widths.append(min(max(width + 2, 10), 45))
-
-    cols = "".join(
-        f'<col min="{index}" max="{index}" width="{width}" customWidth="1"/>'
-        for index, width in enumerate(widths, 1)
-    )
-    row_xml = []
-    for row_index, row in enumerate(rows, 1):
-        cells = []
-        for column_index, cell in enumerate(row, 1):
-            val, style_id = _cell_value_and_style(cell, row_index, column_index)
-            ref = f"{excel_column(column_index)}{row_index}"
-            cells.append(_cell_xml(ref, val, style_id))
-        row_xml.append(f'<row r="{row_index}">{"".join(cells)}</row>')
-
-    max_col_name = excel_column(max_cols or 1)
-    auto_filter = f'<autoFilter ref="A1:{max_col_name}{len(rows)}"/>' if len(rows) > 1 else ""
-    return (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" '
-        'activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-        f'<cols>{cols}</cols><sheetData>{"".join(row_xml)}</sheetData>{auto_filter}</worksheet>'
-    )
+            if column_index < len(row):
+                value = row[column_index]
+                if isinstance(value, tuple) and len(value) == 2:
+                    value = value[0]
+                lengths.append(len(str("" if value is None else value)))
+        widths.append(min(max(max(lengths, default=8) + 2, 10), 45))
+    return widths
 
 
 def write_xlsx(path, sheets):
+    """Write sheets to an XLSX workbook.
+
+    ``sheets`` is a list of ``(name, rows)`` or ``(name, rows, kind)``.  A row
+    is a list of plain values or ``(value, style_id)`` pairs.
+    """
+
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    sheet_entries = "".join(
-        f'<sheet name="{escape(name)}" sheetId="{index}" r:id="rId{index}"/>'
-        for index, (name, _rows) in enumerate(sheets, 1)
+    workbook = xlsxwriter.Workbook(
+        path, {"constant_memory": False, "default_date_format": "yyyy-mm-dd"}
     )
-    relationships = "".join(
-        f'<Relationship Id="rId{index}" '
-        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
-        f'Target="worksheets/sheet{index}.xml"/>'
-        for index in range(1, len(sheets) + 1)
-    )
-    overrides = "".join(
-        f'<Override PartName="/xl/worksheets/sheet{index}.xml" '
-        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-        for index in range(1, len(sheets) + 1)
-    )
-    timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    try:
+        workbook.set_properties(
+            {
+                "title": "nagini analysis report",
+                "author": "nagini",
+                "company": "Clinical Genomics Uppsala",
+                "created": datetime.now(timezone.utc).replace(tzinfo=None),
+            }
+        )
+        formats = {style: workbook.add_format(spec) for style, spec in STYLE_SPECS.items()}
+        used_names = set()
 
-    styles_xml_content = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<fonts count="8">'
-        '<font><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FF1F4E78"/><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FF9C0006"/><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FF006100"/><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FF9C6500"/><sz val="11"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FFFFFFFF"/><sz val="13"/><name val="Calibri"/></font>'
-        '<font><b/><color rgb="FF371485"/><sz val="11"/><name val="Calibri"/></font>'
-        '</fonts>'
-        '<fills count="11">'
-        '<fill><patternFill patternType="none"/></fill>'
-        '<fill><patternFill patternType="gray125"/></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FF14324F"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFFFEB9C"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFEDEDF9"/><bgColor indexed="64"/></patternFill></fill>'
-        '<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4D6"/><bgColor indexed="64"/></patternFill></fill>'
-        '</fills>'
-        '<borders count="2">'
-        '<border><left/><right/><top/><bottom/><diagonal/></border>'
-        '<border><left style="thin"><color rgb="FFD9D9D9"/></left>'
-        '<right style="thin"><color rgb="FFD9D9D9"/></right>'
-        '<top style="thin"><color rgb="FFD9D9D9"/></top>'
-        '<bottom style="thin"><color rgb="FFD9D9D9"/></bottom></border>'
-        '</borders>'
-        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        '<cellXfs count="11">'
-        '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"/>'
-        '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="6" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="4" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="5" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="2" fillId="8" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="7" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="3" fillId="10" borderId="1" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1"/>'
-        '</cellXfs>'
-        '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
-        '</styleSheet>'
-    )
+        for sheet in sheets:
+            name, rows = sheet[0], sheet[1]
+            kind = sheet[2] if len(sheet) > 2 else TABLE
+            worksheet = workbook.add_worksheet(safe_sheet_name(name, used_names))
 
-    parts = {
-        "[Content_Types].xml": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-            '<Default Extension="xml" ContentType="application/xml"/>'
-            '<Override PartName="/xl/workbook.xml" '
-            'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-            '<Override PartName="/xl/styles.xml" '
-            'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
-            '<Override PartName="/docProps/core.xml" '
-            'ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
-            '<Override PartName="/docProps/app.xml" '
-            'ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
-            f"{overrides}</Types>"
-        ),
-        "_rels/.rels": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
-            'Target="xl/workbook.xml"/>'
-            '<Relationship Id="rId2" '
-            'Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" '
-            'Target="docProps/core.xml"/>'
-            '<Relationship Id="rId3" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" '
-            'Target="docProps/app.xml"/>'
-            '</Relationships>'
-        ),
-        "xl/workbook.xml": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            f"<sheets>{sheet_entries}</sheets></workbook>"
-        ),
-        "xl/_rels/workbook.xml.rels": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            f'{relationships}<Relationship Id="rId{len(sheets) + 1}" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
-            'Target="styles.xml"/></Relationships>'
-        ),
-        "xl/styles.xml": styles_xml_content,
-        "docProps/core.xml": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
-            'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
-            'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-            '<dc:title>nagini analysis report</dc:title><dc:creator>nagini</dc:creator>'
-            f'<dcterms:created xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:created></cp:coreProperties>'
-        ),
-        "docProps/app.xml": (
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-            '<Application>nagini</Application></Properties>'
-        ),
-    }
-    for index, (_name, rows) in enumerate(sheets, 1):
-        parts[f"xl/worksheets/sheet{index}.xml"] = worksheet_xml(rows)
+            for column_index, width in enumerate(_column_widths(rows)):
+                worksheet.set_column(column_index, column_index, width)
 
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as workbook:
-        for name, content in parts.items():
-            workbook.writestr(name, content)
+            for row_index, row in enumerate(rows, 1):
+                for column_index, cell in enumerate(row, 1):
+                    value, style = _cell_value_and_style(cell, row_index, column_index)
+                    cell_format = formats.get(style, formats[0])
+                    if isinstance(value, bool) or value is None:
+                        worksheet.write_string(row_index - 1, column_index - 1,
+                                               "" if value is None else str(value), cell_format)
+                    elif isinstance(value, (int, float)):
+                        worksheet.write_number(row_index - 1, column_index - 1, value, cell_format)
+                    else:
+                        worksheet.write_string(
+                            row_index - 1,
+                            column_index - 1,
+                            _CONTROL_CHARS.sub("", str(value)),
+                            cell_format,
+                        )
+
+            if kind == TABLE and len(rows) > 1:
+                worksheet.freeze_panes(1, 0)
+                worksheet.autofilter(0, 0, len(rows) - 1, max(len(rows[0]) - 1, 0))
+    finally:
+        workbook.close()
 
 
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
@@ -619,7 +552,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             ])
 
     sheets = [
-        ("Overview", overview),
+        ("Overview", overview, LAYOUT),
         ("SNVs and indels", table(snv_columns, snvs)),
         ("SVs", table(sv_columns, svs)),
         ("Translocations", table(translocation_columns, translocations)),

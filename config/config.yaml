@@ -228,7 +228,8 @@ vep:
   extra: "--assembly GRCh38 --check_existing --pick --variant_class --symbol --hgvs"
 
 nagini_excel_report:
-  # The report writer uses only Python's standard library.
+  # The report is written with xlsxwriter, as in the other CGU pipelines.
+  # It is present in hydragenetics/common and in envs/nagini.yaml.
   container: "docker://hydragenetics/common:3.1.1"
 
 snpeff:
