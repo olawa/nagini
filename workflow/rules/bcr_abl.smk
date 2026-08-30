@@ -4,6 +4,21 @@ __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
 
+def _bcr_abl_resource(filename):
+    """Return absolute path to a bundled BCR-ABL1 resource file."""
+    return os.path.join(workflow.basedir, "resources", "bcr_abl", filename)
+
+
+def _branford_bed():
+    """Pick the branford positions BED that matches the configured reference build."""
+    override = config.get("bcr_abl", {}).get("branford_bed", "")
+    if override:
+        return override
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    bed_name = "branford_positions_hg19.bed" if "19" in build else "branford_positions_hg38.bed"
+    return _bcr_abl_resource(bed_name)
+
+
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
     input:
@@ -11,7 +26,7 @@ rule bcr_abl_fusion_counts:
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
         features=lambda wildcards: (
             config.get("bcr_abl", {}).get("features_json", "")
-            or os.path.join(workflow.basedir, "resources/bcr_abl/bcr_abl_features.json")
+            or _bcr_abl_resource("bcr_abl_features.json")
         ),
     output:
         tsv="reports/bcr_abl/{sample}_{type}.fusion_summary.tsv",
@@ -19,7 +34,7 @@ rule bcr_abl_fusion_counts:
     params:
         tolerance=lambda wildcards: config.get("bcr_abl", {}).get("tolerance", 150),
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
-        genome_build=lambda wildcards: config.get("reference", {}).get("build", "hg38"),
+        genome_build=lambda wildcards: config.get("reference_build", "hg38"),
     log:
         "logs/bcr_abl_fusion_counts/{sample}_{type}.log",
     threads: config.get("bcr_abl", {}).get("threads", 1)
@@ -50,21 +65,16 @@ rule bcr_abl_branford_calling:
     input:
         bam="alignment/nagini_bam/{sample}_{type}.bam",
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
-        bed=lambda wildcards: (
-            config.get("bcr_abl", {}).get("branford_bed", "")
-            or os.path.join(
-                workflow.basedir,
-                f"resources/bcr_abl/branford_positions_{'hg19' if '19' in str(config.get('reference', {}).get('build', '')).lower() else 'hg38'}.bed",
-            )
-        ),
+        bed=lambda wildcards: _branford_bed(),
         features=lambda wildcards: (
             config.get("bcr_abl", {}).get("features_json", "")
-            or os.path.join(workflow.basedir, "resources/bcr_abl/bcr_abl_features.json")
+            or _bcr_abl_resource("bcr_abl_features.json")
         ),
     output:
         all_sites="reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
         vcf="reports/bcr_abl/{sample}_{type}.branford_mutations.vcf",
+
     params:
         min_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "min_af", config.get("bcr_abl", {}).get("min_af", 0.01)),
         min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50),
