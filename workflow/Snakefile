@@ -16,6 +16,7 @@ include: "rules/mosdepth_genome.smk"
 include: "rules/mosdepth_targets.smk"
 include: "rules/sv_summary.smk"
 include: "rules/snv_postprocess.smk"
+include: "rules/bcr_abl.smk"
 include: "rules/excel_report.smk"
 include: "rules/copy_results.smk"
 
@@ -223,7 +224,7 @@ use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
         bam="alignment/nagini_bam/{sample}_{type}.bam",
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
-        bed=config["reference"]["design_bed"],
+        bed=get_clairs_to_bed,
     params:
         extra=config.get("clairs_to_call", {}).get("extra", ""),
         # The error model follows the sample's basecalling model, and the
@@ -278,6 +279,92 @@ use rule tabix from snv_indels as snv_indels_clairs_to_vep_tabix with:
             "benchmarks/clairs_to_vep_tabix/{sample}_{type}.tsv",
             config.get("tabix", {}).get("benchmark_repeats", 1),
         )
+
+
+# ===========================================================================
+# HYDRA-GENETICS MODULE: snv_indels / DeepVariant (Germline WGS)
+# ===========================================================================
+
+use rule deepvariant from snv_indels as snv_indels_deepvariant with:
+    input:
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+    output:
+        vcf=temp("snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz"),
+        tbi=temp("snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz.tbi"),
+    params:
+        model_type=config.get("deepvariant", {}).get("model_type", "ONT_R104"),
+        output_gvcf="",
+        int_res=lambda wildcards: f"snv_indels/deepvariant/{wildcards.sample}_{wildcards.type}_{wildcards.chr}",
+        regions=lambda wildcards: f" --regions {wildcards.chr} ",
+        extra=config.get("deepvariant", {}).get("extra", ""),
+
+
+use rule bcftools_concat from snv_indels as snv_indels_deepvariant_concat with:
+    input:
+        calls=expand(
+            "snv_indels/deepvariant/{{sample}}_{{type}}_{chr}.vcf.gz",
+            chr=reference_chromosomes,
+        ),
+        index=expand(
+            "snv_indels/deepvariant/{{sample}}_{{type}}_{chr}.vcf.gz.tbi",
+            chr=reference_chromosomes,
+        ),
+    output:
+        vcf="snv_indels/deepvariant/{sample}_{type}.vcf.gz",
+    params:
+        extra=config.get("bcftools_concat", {}).get("extra", ""),
+    log:
+        "logs/deepvariant_concat/{sample}_{type}.vcf.gz.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepvariant_concat/{sample}_{type}.vcf.gz.tsv",
+            config.get("bcftools_concat", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from snv_indels as snv_indels_deepvariant_tabix with:
+    input:
+        gz="snv_indels/deepvariant/{sample}_{type}.vcf.gz",
+    output:
+        tbi="snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi",
+    log:
+        "logs/deepvariant_tabix/{sample}_{type}.vcf.gz.tbi.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepvariant_tabix/{sample}_{type}.vcf.gz.tbi.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bgzip from snv_indels as snv_indels_deepvariant_vep_bgzip with:
+    input:
+        vcf="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf",
+    output:
+        gz="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    log:
+        "logs/deepvariant_vep_bgzip/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepvariant_vep_bgzip/{sample}_{type}.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from snv_indels as snv_indels_deepvariant_vep_tabix with:
+    input:
+        gz="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    output:
+        tbi="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi",
+    log:
+        "logs/deepvariant_vep_tabix/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepvariant_vep_tabix/{sample}_{type}.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
 
 
 # ===========================================================================

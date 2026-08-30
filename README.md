@@ -11,6 +11,7 @@ Nagini accepts four kinds of sample input:
 | Input | Processing |
 | --- | --- |
 | MinKNOW/POD5 folder | Dorado basecalls and demultiplexes reads per barcode; the selected aligner then maps each barcode independently. |
+| Existing barcode FASTQ folder | FASTQs are collected recursively across runs and `fastq_pass`/`fastq_fail`, merged per barcode, and aligned directly. |
 | FASTQ | Reads are aligned to the selected reference genome. |
 | Unmapped BAM | Reads are extracted, aligned, and normalized. |
 | Aligned BAM | Existing alignments are retained; the BAM is prepared, sorted, and indexed for downstream variant calling. |
@@ -18,6 +19,13 @@ Nagini accepts four kinds of sample input:
 ### MinKNOW / POD5 Input & Dorado Demux
 
 For MinKNOW/POD5 runs, the launcher accepts a Dorado model, modified basecalling flags (e.g. `5mCG_5hmCG`), and a barcode kit. It schedules basecalling and demultiplexing as part of the workflow.
+
+If a folder contains both existing FASTQ files and POD5 files, the launcher uses
+the FASTQs by default. It only schedules new basecalling when `--input-type
+minknow` is explicitly given. Barcode FASTQs can be mapped with `--barcode-map`;
+`sample_sheet*.csv/tsv` files found below the input folder are used automatically
+when they contain barcode and sample columns. By default both `fastq_pass` and
+`fastq_fail` are included; use `--fastq-status pass` for pass reads only.
 
 A barcode map CSV/TSV maps barcode identifiers (e.g. `barcode01`) to clinical sample names and types (`T` for tumor, `N` for normal). Dorado can be run via container (default) or a local binary via `--dorado-binary`.
 
@@ -45,6 +53,26 @@ pipeline_start_scripts/start_nagini.sh \
   --inbox-path /data/analysis/run_01/alignment/nagini_bam \
   --analysis-dir /data/analysis/run_01
 ```
+
+Example starting from several completed barcode FASTQ runs for one assay:
+
+```bash
+pipeline_start_scripts/start_nagini.sh \
+  --site workstation \
+  --inbox-path /data/bcr_abl_dilution_P2_run_folders \
+  --analysis-dir /data/analysis/bcr_abl_dilution_P2 \
+  --assay bcr_abl \
+  --library-type cdna \
+  --reference-build hg19 \
+  --barcode-map /data/bcr_abl/barcode_map.csv \
+  --basecalling-model sup \
+  --cores 32
+```
+
+The launcher writes one merged `input_fastq/barcodeXX.fastq.gz` and one
+`units.tsv` row per observed barcode. Omit `--barcode-map` when the exported
+sample sheets provide the mapping. Use `--input-type minknow` only when the
+POD5 data should be basecalled again.
 
 ## Analysis & Variant Calling
 

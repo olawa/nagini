@@ -121,6 +121,31 @@ reference_builds:
       type: optional
       url: ''
       checksum: ''
+  hg19:
+    # CTAT/STAR-Fusion resource bundle's own genome FASTA (GRCh37, gencode
+    # v19), verified: all 73 Branford REF alleles match this file exactly.
+    # Not pickett's own hg19.with.mt.fasta -- same coordinates (both GRCh37)
+    # but a different file, so re-verify if switching to pickett's fasta.
+    fasta:
+      path: /Users/olwal516/ref/genomes/hg19_pickett/ref_genome.fa
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: /Users/olwal516/ref/genomes/hg19_pickett/ref_genome.fa.fai
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: /Users/olwal516/ref/genomes/hg19_pickett/ref_genome.dict
+      type: file
+      url: ''
+      checksum: ''
+    mmi:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
 annotations:
   vep_cache:
     path: ''

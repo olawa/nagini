@@ -33,6 +33,15 @@ HS1_CLINVAR: ""
 HS1_CYTOBAND: ""
 HS1_GTF: ""
 HS1_ANNOTATIONS: ""
+# hg19/GRCh37, for the bcr_abl assay only. See the `references.hg19` comment
+# below for why this build cannot be produced by lifting hg38 coordinates.
+HG19_FASTA: "references/hg19/hg19.fa"
+HG19_FAI: "references/hg19/hg19.fa.fai"
+HG19_DICT: "references/hg19/hg19.dict"
+HG19_MMI: ""
+# Shipped with nagini (copied from pickett_bcr_abl_pipeline's own exon BED) so
+# this does not depend on a separate checkout being present at runtime.
+HG19_DESIGN_BED: "workflow/resources/bcr_abl/bcr_abl1_exons_hg19.bed"
 VEP_CACHE: ""
 SNPEFF_DB: ""
 SIMPLE_SV_PANEL: ""
@@ -41,6 +50,8 @@ SIMPLE_SV_FUSION_PAIRS: ""
 # Pin this to a digest or a released tag per site before clinical use; the
 # floating tag below is a development default, not a validated one.
 CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
+DEEPVARIANT_CONTAINER: "docker://google/deepvariant:1.6.0"
+
 
 site: "{{SITE_ID}}"
 hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
@@ -91,6 +102,27 @@ references:
     cytoband: "{{HS1_CYTOBAND}}"
     gene_annotation: "{{HS1_GTF}}"
     annotations: "{{HS1_ANNOTATIONS}}"
+    chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
+    skip_chrs: [chrM]
+  # hg19/GRCh37, needed only for the bcr_abl assay: pickett_bcr_abl_pipeline's
+  # Branford resistance-position list and exon BED are hg19, and a liftover
+  # would introduce a coordinate error into exactly what that assay measures.
+  # A single Snakemake run uses one reference_build for every sample, so a
+  # flowcell mixing bcr_abl with an hg38 assay currently needs two separate
+  # nagini invocations, one per build; this is a known limitation, not
+  # something this config section can fix.
+  hg19:
+    fasta: "{{HG19_FASTA}}"
+    fai: "{{HG19_FAI}}"
+    dict: "{{HG19_DICT}}"
+    mmi: "{{HG19_MMI}}"
+    design_bed: "{{HG19_DESIGN_BED}}"
+    sv_annotation_bed: ""
+    tandem_repeats: ""
+    clinvar: ""
+    cytoband: ""
+    gene_annotation: ""
+    annotations: ""
     chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
     skip_chrs: [chrM]
 
@@ -186,7 +218,7 @@ cramino:
   container: "docker://hydragenetics/cramino:0.14.5"
   extra: ""
 
-small_variant_caller: "clairs_to"
+small_variant_caller: "auto"
 
 clairs_to_call:
   container: "{{CLAIRS_TO_CONTAINER}}"
@@ -211,6 +243,18 @@ clairs_to_concat:
 bcftools_norm_clairs_to:
   container: "docker://hydragenetics/common:3.1.1"
   extra: "--multiallelics -both --check-ref w"
+
+deepvariant:
+  container: "{{DEEPVARIANT_CONTAINER}}"
+  model_type: "ONT_R104"
+  threads: 8
+  extra: ""
+  output_gvcf: false
+
+bcftools_norm_deepvariant:
+  container: "docker://hydragenetics/common:3.1.1"
+  extra: "--multiallelics -both --check-ref w"
+
 
 gatk_mutect2:
   container: "docker://hydragenetics/gatk4:4.2.2.0"

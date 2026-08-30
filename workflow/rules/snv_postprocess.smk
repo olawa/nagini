@@ -287,6 +287,104 @@ rule vep_annotate_clairs_to:
             --output_file {output.vcf} \
             --vcf \
             --force_overwrite \
+rule create_genome_contigs_bed:
+    """Create a whole-genome BED from FASTA index when no design BED is provided."""
+    input:
+        fai=config["reference"]["fai"],
+    output:
+        bed="references/genome_contigs.bed",
+    threads: 1
+    shell:
+        """
+        awk 'BEGIN {{OFS="\\t"}} {{print $1, 0, $2}}' {input.fai} > {output.bed}
+        """
+
+
+rule bcftools_norm_deepvariant:
+    """Left-align, normalize and split multiallelic DeepVariant calls."""
+    input:
+        vcf="snv_indels/deepvariant/{sample}_{type}.vcf.gz",
+        tbi="snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi",
+        ref=config["reference"]["fasta"],
+        fai=config["reference"]["fai"],
+    output:
+        vcf="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+        tbi="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+    params:
+        extra=config.get("bcftools_norm_deepvariant", {}).get("extra", "--multiallelics -both --check-ref w"),
+    log:
+        "logs/bcftools_norm_deepvariant/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcftools_norm_deepvariant/{sample}_{type}.tsv",
+            config.get("bcftools_norm_deepvariant", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("bcftools_norm_deepvariant", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("bcftools_norm_deepvariant", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("bcftools_norm_deepvariant", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("bcftools_norm_deepvariant", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("bcftools_norm_deepvariant", {}).get("threads", 1),
+        time=config.get("bcftools_norm_deepvariant", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcftools_norm_deepvariant", {}).get("container", config["default_container"])
+    conda:
+        "../../envs/nagini.yaml"
+    message:
+        "{rule}: normalize DeepVariant calls for {wildcards.sample}_{wildcards.type}"
+    shell:
+        """
+        bcftools norm \
+            --fasta-ref {input.ref} \
+            {params.extra} \
+            --output-type z \
+            --output {output.vcf} \
+            {input.vcf} &> {log}
+        bcftools index --force --tbi {output.vcf} >> {log} 2>&1
+        """
+
+
+rule vep_annotate_deepvariant:
+    """Annotate normalized DeepVariant small variants with an offline VEP cache."""
+    input:
+        vcf="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+        tbi="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+        fasta=config["reference"]["fasta"],
+        cache=lambda wildcards: config["vep"]["vep_cache"],
+    output:
+        vcf=temp("snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf"),
+        stats="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html",
+    params:
+        mode=config.get("vep", {}).get("mode", "--offline --cache"),
+        custom=get_vep_custom_annotations,
+        extra=config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
+    log:
+        "logs/vep_annotate_deepvariant/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/vep_annotate_deepvariant/{sample}_{type}.tsv",
+            config.get("vep", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("vep", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("vep", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("vep", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("vep", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("vep", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("vep", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("vep", {}).get("container", config["default_container"])
+    conda:
+        "../../envs/vep.yaml"
+    message:
+        "{rule}: VEP annotate DeepVariant calls for {wildcards.sample}_{wildcards.type}"
+    shell:
+        """
+        vep \
+            --input_file {input.vcf} \
+            --output_file {output.vcf} \
+            --vcf \
+            --force_overwrite \
             --no_progress \
             --stats_file {output.stats} \
             --dir_cache {input.cache} \
@@ -296,3 +394,4 @@ rule vep_annotate_clairs_to:
             {params.custom} \
             {params.extra} &> {log}
         """
+

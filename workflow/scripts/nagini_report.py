@@ -284,8 +284,38 @@ def _find_metric(data_dict, *keywords):
     return ""
 
 
+def parse_bcr_abl_tsv(path):
+    rows = []
+    if not path or not os.path.exists(path):
+        return rows
+    with open_text(path) as handle:
+        header = None
+        for line in handle:
+            text = line.strip()
+            if not text or text.startswith("#"):
+                continue
+            fields = text.split("\t")
+            if header is None:
+                header = fields
+                continue
+            rows.append(dict(zip(header, fields)))
+    return rows
+
+
+def _style_tki_response(val):
+    norm = str(val or "").strip().lower()
+    if norm == "resistant":
+        return 4
+    if norm in ("intermediate", "reduced"):
+        return 6
+    if norm == "sensitive":
+        return 5
+    return 0
+
+
 def table(columns, records):
     return [columns] + [[record.get(column, "") for column in columns] for record in records]
+
 
 
 # ---------------------------------------------------------------------------
@@ -428,9 +458,99 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
+def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows):
+    layout = [
+        [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
+        [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
+        [("1. BCR-ABL1 FUSION ISOFORM BREAKDOWN", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
+        [
+            ("Fusion Isoform", 1), ("Alt Name", 1), ("Protein Form", 1), ("Cluster", 1),
+            ("BCR Exon", 1), ("ABL1 Exon", 1), ("Read Count", 1), ("Percent (%)", 1), ("Status", 1), ("Description", 1)
+        ],
+    ]
+    if not fusion_rows:
+        layout.append([("No BCR-ABL1 fusion events detected", 0)] + [("", 0)] * 9)
+    else:
+        for r in fusion_rows:
+            st = str(r.get("status", "")).upper()
+            st_style = 5 if st == "PRIMARY" else (6 if st == "SECONDARY" else 0)
+            layout.append([
+                (r.get("fusion_isoform", ""), 8 if st == "PRIMARY" else 0),
+                (r.get("alt_name", ""), 0),
+                (r.get("protein_form", ""), 0),
+                (r.get("cluster", ""), 0),
+                (r.get("bcr_exon", ""), 0),
+                (r.get("abl_exon", ""), 0),
+                (int(r.get("read_count", 0)), 0),
+                (float(r.get("fraction_percent", 0.0)), 0),
+                (st, st_style),
+                (r.get("description", ""), 0),
+            ])
+
+    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+    layout.append([("2. ABL1 KINASE DOMAIN RESISTANCE MUTATIONS (BRANFORD PANEL)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+    layout.append([
+        ("Mutation", 1), ("AA Change", 1), ("Position", 1), ("Ref", 1), ("Alt", 1),
+        ("Depth", 1), ("Alt Reads", 1), ("VAF (%)", 1), ("Status", 1),
+        ("Imatinib", 1), ("Dasatinib", 1), ("Nilotinib", 1), ("Bosutinib", 1), ("Ponatinib", 1), ("Asciminib", 1)
+    ])
+    if not mutation_rows:
+        layout.append([("No candidate resistance mutations called", 0)] + [("", 0)] * 14)
+    else:
+        for r in mutation_rows:
+            mut_status = str(r.get("status", "")).upper()
+            mut_style = 4 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)
+            layout.append([
+                (r.get("mutation", ""), 8 if mut_status == "DETECTED" else 0),
+                (r.get("aa_change", ""), 0),
+                (int(r.get("pos", 0)), 0),
+                (r.get("ref", ""), 0),
+                (r.get("alt", ""), 0),
+                (int(r.get("depth", 0)), 0),
+                (int(r.get("ad_alt", 0)), 0),
+                (float(r.get("vaf_percent", 0.0)), mut_style),
+                (mut_status, mut_style),
+                (r.get("imatinib", "Unknown"), _style_tki_response(r.get("imatinib", ""))),
+                (r.get("dasatinib", "Unknown"), _style_tki_response(r.get("dasatinib", ""))),
+                (r.get("nilotinib", "Unknown"), _style_tki_response(r.get("nilotinib", ""))),
+                (r.get("bosutinib", "Unknown"), _style_tki_response(r.get("bosutinib", ""))),
+                (r.get("ponatinib", "Unknown"), _style_tki_response(r.get("ponatinib", ""))),
+                (r.get("asciminib", "Unknown"), _style_tki_response(r.get("asciminib", ""))),
+            ])
+
+    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+    layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+    layout.append([
+        ("Mutation 1", 1), ("Mutation 2", 1), ("Phase State", 1), ("Cis (%)", 1),
+        ("Cis Reads (11)", 1), ("Trans Reads (10)", 1), ("Trans Reads (01)", 1), ("WT Reads (00)", 1),
+        ("Spanning Depth", 1), ("Clinical Interpretation", 1)
+    ])
+    if not phasing_rows:
+        layout.append([("No compound mutation pairs to phase (< 2 mutations detected)", 0)] + [("", 0)] * 9)
+    else:
+        for r in phasing_rows:
+            ps = str(r.get("phase_state", ""))
+            ps_style = 4 if "CIS" in ps.upper() else (6 if "TRANS" in ps.upper() else 0)
+            layout.append([
+                (r.get("mutation_1", ""), 0),
+                (r.get("mutation_2", ""), 0),
+                (ps, ps_style),
+                (float(r.get("cis_fraction_percent", 0.0)), ps_style),
+                (int(r.get("cis_reads_11", 0)), 0),
+                (int(r.get("trans_reads_10", 0)), 0),
+                (int(r.get("trans_reads_01", 0)), 0),
+                (int(r.get("wt_reads_00", 0)), 0),
+                (int(r.get("total_spanning_reads", 0)), 0),
+                (r.get("clinical_interpretation", ""), 0),
+            ])
+
+    return layout
+
+
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
                     sv_tsv, translocations_tsv, wgs_coverage, target_coverage, cramino,
-                    cytoband="", caller="", design_bed="", platform=""):
+                    cytoband="", caller="", design_bed="", platform="",
+                    bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing=""):
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
@@ -442,6 +562,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     wgs_columns, wgs_rows = parse_tsv(wgs_coverage)
     target_columns, target_rows = parse_tsv(target_coverage)
     cramino_columns, cramino_rows = parse_cramino(cramino)
+
+    bcr_abl_fusion_rows = parse_bcr_abl_tsv(bcr_abl_fusion)
+    bcr_abl_mutation_rows = parse_bcr_abl_tsv(bcr_abl_mutations)
+    bcr_abl_phasing_rows = parse_bcr_abl_tsv(bcr_abl_phasing)
+    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows)
 
     pass_count = sum(record["Filter"] in {"PASS", "."} for record in snvs)
     pathogenic_snvs = [
@@ -520,6 +645,20 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)],
     ]
 
+    # Add BCR-ABL summary block to overview if BCR-ABL data present
+    if has_bcr_abl:
+        prim_iso = next((r["fusion_isoform"] for r in bcr_abl_fusion_rows if r.get("status") == "PRIMARY"), "None detected")
+        det_muts = [r["mutation"] for r in bcr_abl_mutation_rows if r.get("status") in ("DETECTED", "SUBCLONAL")]
+        mut_summary = ", ".join(det_muts) if det_muts else "None detected"
+        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper()]
+        phase_summary = f"CIS ({', '.join(cis_pairs)})" if cis_pairs else ("TRANS" if bcr_abl_phasing_rows else "N/A (<2 muts)")
+
+        overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
+        overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
+        overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
+        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else 0), ("ACTION REQUIRED" if det_muts else "NONE", 4 if det_muts else 5)])
+        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, 4 if cis_pairs else 0), ("COMPOUND MUTATION (CIS)" if cis_pairs else ("POLYCLONAL (TRANS)" if bcr_abl_phasing_rows else "PASS"), 4 if cis_pairs else 5)])
+
     # Add clinical findings preview tables directly on the Overview tab
     if pathogenic_snvs:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
@@ -553,13 +692,18 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     sheets = [
         ("Overview", overview, LAYOUT),
+    ]
+    if has_bcr_abl:
+        sheets.append(("BCR-ABL1", build_bcr_abl_sheet(sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows), LAYOUT))
+
+    sheets.extend([
         ("SNVs and indels", table(snv_columns, snvs)),
         ("SVs", table(sv_columns, svs)),
         ("Translocations", table(translocation_columns, translocations)),
         ("WGS coverage", table(wgs_columns, wgs_rows)),
         ("Target coverage", table(target_columns, target_rows)),
         ("Cramino QC", table(cramino_columns, cramino_rows)),
-    ]
+    ])
     write_xlsx(output, sheets)
 
 
@@ -586,6 +730,9 @@ def run_from_snakemake(snakemake):
         caller=str(getattr(snakemake.params, "small_variant_caller", "") or ""),
         design_bed=str(getattr(snakemake.params, "design_bed", "") or ""),
         platform=str(getattr(snakemake.params, "clairs_to_platform", "") or ""),
+        bcr_abl_fusion=_first_or_str(getattr(snakemake.input, "bcr_abl_fusion", "")),
+        bcr_abl_mutations=_first_or_str(getattr(snakemake.input, "bcr_abl_mutations", "")),
+        bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
     )
 
 
@@ -606,12 +753,18 @@ def main():
     parser.add_argument("--caller", default="")
     parser.add_argument("--design-bed", default="")
     parser.add_argument("--platform", default="")
+    parser.add_argument("--bcr-abl-fusion", default="")
+    parser.add_argument("--bcr-abl-mutations", default="")
+    parser.add_argument("--bcr-abl-phasing", default="")
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,
         args.snv_vcf, args.sv_tsv, args.translocations_tsv, args.wgs_coverage,
         args.target_coverage, args.cramino, args.cytoband, args.caller,
         args.design_bed, args.platform,
+        bcr_abl_fusion=args.bcr_abl_fusion,
+        bcr_abl_mutations=args.bcr_abl_mutations,
+        bcr_abl_phasing=args.bcr_abl_phasing,
     )
 
 
@@ -619,4 +772,3 @@ if "snakemake" in globals():
     run_from_snakemake(snakemake)
 elif __name__ == "__main__":
     main()
-

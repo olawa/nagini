@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -25,6 +27,7 @@ import yaml
 
 
 FASTQ_SUFFIXES = (".fastq", ".fastq.gz", ".fq", ".fq.gz")
+FASTQ_STATUS_VALUES = ("all", "pass")
 BASE_UNIT_COLUMNS = [
     "sample",
     "type",
@@ -95,6 +98,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
     parser.add_argument(
+        "--reference-build",
+        default="",
+        help=(
+            "Override config['reference_build'] for this run, e.g. hg19 for the "
+            "bcr_abl assay. Must be a key already present in config['references']."
+        ),
+    )
+    parser.add_argument(
         "--assay",
         default="",
         help=(
@@ -114,11 +125,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--barcode-map",
         type=Path,
-        help="CSV/TSV mapping barcode or barcodeXX to sample (optional for Dorado BAM input).",
+        help=(
+            "CSV/TSV mapping barcode or barcodeXX to sample for existing barcode "
+            "FASTQ/BAM input. sample_sheet*.csv/tsv is auto-detected when omitted."
+        ),
     )
     parser.add_argument("--barcode", default="NB")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--basecalling-model", default="unknown")
+    parser.add_argument(
+        "--fastq-status",
+        choices=FASTQ_STATUS_VALUES,
+        default="all",
+        help=(
+            "For existing barcode FASTQ input, include all fastq_pass and fastq_fail "
+            "files (default) or only fastq_pass files."
+        ),
+    )
     parser.add_argument("--dorado-input", type=Path)
     parser.add_argument("--dorado-model", default="")
     parser.add_argument("--dorado-kit", default="")
@@ -224,9 +247,19 @@ def read_barcode_map(
             re.sub(r"[^a-z0-9]", "", str(key or "").lower()): str(value or "").strip()
             for key, value in row.items()
         }
-        barcode = normalize_barcode(fields.get("barcode", fields.get("barcodename", "")))
-        sample_name = fields.get("sample", fields.get("sampleid", ""))
+        barcode = normalize_barcode(
+            fields.get("barcode", fields.get("barcodename", fields.get("barcodeid", "")))
+        )
+        sample_name = next(
+            (
+                fields.get(key, "")
+                for key in ("sample", "sampleid", "samplename", "alias", "name")
+                if fields.get(key, "")
+            ),
+            "",
+        )
         sample_type = fields.get("type", fields.get("sampletype", "")) or default_type
+        sample_type = sample_type.upper()
         raw_lib = fields.get("librarytype", fields.get("library_type", "")) or default_library_type
         library_type = str(raw_lib).strip().lower()
         assay = str(fields.get("assay", "") or default_assay).strip().lower()
@@ -262,33 +295,200 @@ def read_barcode_map(
     return mapping
 
 
+def _delimited_header(path: Path) -> set[str]:
+    """Return normalized column names without requiring the file to be a map."""
+
+    try:
+        with path.open(newline="") as handle:
+            sample = handle.read(4096)
+            handle.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",\t")
+            except csv.Error:
+                dialect = csv.excel_tab if path.suffix.lower() in {".tsv", ".tab"} else csv.excel
+            reader = csv.reader(handle, dialect=dialect)
+            header = next(reader, [])
+    except (OSError, UnicodeError, StopIteration):
+        return set()
+    return {
+        re.sub(r"[^a-z0-9]", "", str(column or "").lower())
+        for column in header
+    }
+
+
+def discover_barcode_map(
+    input_dir: Path,
+    default_type: str,
+    default_library_type: str = "wgs",
+    default_assay: str = "",
+    valid_library_types: set[str] | None = None,
+) -> tuple[dict[str, dict[str, str]] | None, list[Path]]:
+    """Find and combine ONT ``sample_sheet*.csv/tsv`` barcode maps.
+
+    MinKNOW/Dorado exports commonly keep the sample sheet beside the FASTQs.
+    Treating it as an implicit map makes a directory of existing runs usable
+    without first copying the rows into a second hand-written file.  Multiple
+    run sheets are allowed when they agree for every barcode.
+    """
+
+    candidates = []
+    for path in sorted(input_dir.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".csv", ".tsv", ".tab"}:
+            continue
+        if not path.name.lower().startswith("sample_sheet"):
+            continue
+        header = _delimited_header(path)
+        has_sample = bool(
+            header
+            & {"sample", "sampleid", "samplename", "alias", "name"}
+        )
+        if "barcode" in header or "barcodename" in header or "barcodeid" in header:
+            if has_sample:
+                candidates.append(path)
+
+    if not candidates:
+        return None, []
+
+    combined: dict[str, dict[str, str]] = {}
+    for path in candidates:
+        parsed = read_barcode_map(
+            path,
+            default_type,
+            default_library_type,
+            default_assay,
+            valid_library_types,
+        )
+        for barcode, row in parsed.items():
+            previous = combined.get(barcode)
+            if previous and any(
+                previous.get(column, "") != row.get(column, "")
+                for column in ("sample", "type", "library_type", "assay")
+            ):
+                raise SystemExit(
+                    f"Barcode {barcode} has conflicting assignments in sample sheets "
+                    f"({previous['sample']!r} versus {row['sample']!r}); check {path}."
+                )
+            combined[barcode] = row
+    return combined, candidates
+
+
+def _barcode_from_path(path: Path, input_dir: Path) -> str:
+    """Extract a barcode from a directory component or the filename."""
+
+    root_barcode = normalize_barcode(input_dir.name)
+    if not re.fullmatch(r"barcode\d+", root_barcode):
+        root_barcode = ""
+    relative_parts = path.relative_to(input_dir).parts[:-1]
+    for part in reversed(relative_parts):
+        candidate = normalize_barcode(part)
+        if re.fullmatch(r"barcode\d+", candidate):
+            return candidate
+
+    # Dorado demux versions may emit ``barcode01.bam``/FASTQ directly below
+    # the output directory instead of creating barcode subdirectories.
+    for token in re.findall(r"(?i)(?:barcode|bc)\d+", path.stem):
+        candidate = normalize_barcode(token)
+        if re.fullmatch(r"barcode\d+", candidate):
+            return candidate
+    return root_barcode
+
+
 def discover_bams_by_barcode(input_dir: Path) -> dict[str, list[Path]]:
     """Find BAMs below barcodeXX directories or with barcodeXX filenames."""
 
     bams: defaultdict[str, list[Path]] = defaultdict(list)
-    root_barcode = normalize_barcode(input_dir.name)
-    if not re.fullmatch(r"barcode\d+", root_barcode):
-        root_barcode = ""
     for path in sorted(input_dir.rglob("*.bam")):
-        relative_parts = path.relative_to(input_dir).parts[:-1]
-        barcode = ""
-        for part in reversed(relative_parts):
-            candidate = normalize_barcode(part)
-            if re.fullmatch(r"barcode\d+", candidate):
-                barcode = candidate
-                break
-        if not barcode:
-            # Dorado demux versions may emit ``barcode01.bam`` directly below
-            # the output directory instead of creating barcode subdirectories.
-            for token in re.findall(r"(?i)(?:barcode|bc)\d+", path.stem):
-                candidate = normalize_barcode(token)
-                if re.fullmatch(r"barcode\d+", candidate):
-                    barcode = candidate
-                    break
-        barcode = barcode or root_barcode
+        barcode = _barcode_from_path(path, input_dir)
         if barcode:
             bams[barcode].append(path.resolve())
     return dict(bams)
+
+
+def _fastq_is_allowed(path: Path, input_dir: Path, status: str) -> bool:
+    """Select all FASTQs or only files below a Dorado ``fastq_pass`` tree."""
+
+    if status == "all":
+        return True
+    parts = {part.lower() for part in path.relative_to(input_dir).parts[:-1]}
+    return "fastq_fail" not in parts
+
+
+def discover_fastqs_by_barcode(
+    input_dir: Path,
+    status: str = "all",
+    exclude_dir: Path | None = None,
+) -> dict[str, list[Path]]:
+    """Find existing barcode FASTQs across one or more run directories."""
+
+    if status not in FASTQ_STATUS_VALUES:
+        raise SystemExit(
+            f"Unsupported FASTQ status {status!r}; expected one of {', '.join(FASTQ_STATUS_VALUES)}."
+        )
+    fastqs: defaultdict[str, list[Path]] = defaultdict(list)
+    excluded = exclude_dir.resolve() if exclude_dir else None
+    for path in sorted(input_dir.rglob("*")):
+        if not path.is_file() or not path.name.lower().endswith(FASTQ_SUFFIXES):
+            continue
+        resolved = path.resolve()
+        if excluded and (resolved == excluded or excluded in resolved.parents):
+            continue
+        if not _fastq_is_allowed(path, input_dir, status):
+            continue
+        barcode = _barcode_from_path(path, input_dir)
+        if barcode:
+            fastqs[barcode].append(resolved)
+    return dict(fastqs)
+
+
+def discover_fastq_files(
+    input_dir: Path,
+    status: str = "all",
+    exclude_dir: Path | None = None,
+) -> list[Path]:
+    """Find FASTQ files while applying the same pass/fail selection as barcode mode."""
+
+    if status not in FASTQ_STATUS_VALUES:
+        raise SystemExit(
+            f"Unsupported FASTQ status {status!r}; expected one of {', '.join(FASTQ_STATUS_VALUES)}."
+        )
+    excluded = exclude_dir.resolve() if exclude_dir else None
+    files = []
+    for path in sorted(input_dir.rglob("*")):
+        if not path.is_file() or not path.name.lower().endswith(FASTQ_SUFFIXES):
+            continue
+        resolved = path.resolve()
+        if excluded and (resolved == excluded or excluded in resolved.parents):
+            continue
+        if _fastq_is_allowed(path, input_dir, status):
+            files.append(resolved)
+    return files
+
+
+def merge_fastq_files(input_files: list[Path], output: Path) -> None:
+    """Concatenate FASTQ inputs into one gzip stream without loading them in memory."""
+
+    if not input_files:
+        raise SystemExit(f"Cannot create merged FASTQ {output}: no input files.")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    try:
+        if all(path.name.lower().endswith(".gz") for path in input_files):
+            # Concatenated gzip members are valid and are understood by samtools,
+            # minimap2 and gzip. This keeps merging large runs effectively I/O-only.
+            with temporary.open("wb") as destination:
+                for path in input_files:
+                    with path.open("rb") as source:
+                        shutil.copyfileobj(source, destination, length=1024 * 1024)
+        else:
+            with gzip.open(temporary, "wb") as destination:
+                for path in input_files:
+                    opener = gzip.open if path.name.lower().endswith(".gz") else open
+                    with opener(path, "rb") as source:
+                        shutil.copyfileobj(source, destination, length=1024 * 1024)
+        os.replace(temporary, output)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def make_bam_tables_from_barcode_map(
@@ -612,14 +812,110 @@ def sample_from_fastq(path: Path, pattern: re.Pattern[str]) -> str:
     return sample
 
 
+def make_barcode_fastq_tables(
+    args: argparse.Namespace,
+    mapping: dict[str, dict[str, str]],
+    fastqs_by_barcode: dict[str, list[Path]] | None = None,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Merge all run/chunk FASTQs for each barcode and create one unit per barcode."""
+
+    merged_dir = Path(args.analysis_dir).resolve() / "input_fastq"
+    fastqs_by_barcode = fastqs_by_barcode or discover_fastqs_by_barcode(
+        args.input_dir,
+        getattr(args, "fastq_status", "all"),
+        exclude_dir=merged_dir,
+    )
+    if not fastqs_by_barcode:
+        raise SystemExit(f"No barcode FASTQ files found below {args.input_dir}.")
+
+    observed = set(fastqs_by_barcode)
+    expected = set(mapping)
+    unmapped = sorted(observed - expected)
+    if unmapped:
+        raise SystemExit(
+            "Barcode FASTQ directories/files are absent from the barcode map: "
+            + ", ".join(unmapped)
+            + ". Add them to the map or remove them from the input directory."
+        )
+    missing = sorted(expected - observed)
+    if missing:
+        print(
+            "WARNING: barcode map contains barcodes with no selected FASTQ files: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+
+    run_id = args.run_id or args.sequence_id or args.input_dir.name
+    samples_by_name: dict[str, dict[str, str]] = {}
+    units: list[dict[str, str]] = []
+    for barcode in sorted(observed):
+        assignment = mapping[barcode]
+        sample_name = assignment["sample"]
+        samples_by_name.setdefault(sample_name, {"sample": sample_name})
+        source_files = sorted(fastqs_by_barcode[barcode])
+        merged_fastq = merged_dir / f"{barcode}.fastq.gz"
+        merge_fastq_files(source_files, merged_fastq)
+        units.append(
+            {
+                "sample": sample_name,
+                "type": assignment["type"],
+                "platform": "ONT",
+                "machine": "unknown",
+                "processing_unit": f"{barcode}_merged",
+                "barcode": "BC",
+                "barcode_name": barcode,
+                "input_type": "fastq",
+                "fastq1": str(merged_fastq),
+                "fastq2": "UNUSED",
+                "bam": "UNUSED",
+                "methylation": args.methylation,
+                "run_id": run_id,
+                "basecalling_model": args.basecalling_model,
+                "library_type": assignment.get(
+                    "library_type", getattr(args, "library_type", "wgs")
+                ),
+                "assay": assignment.get("assay", "") or getattr(args, "assay", ""),
+            }
+        )
+    return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
+
+
 def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    files = sorted(
-        path.resolve()
-        for path in args.input_dir.rglob("*")
-        if path.is_file() and path.name.lower().endswith(FASTQ_SUFFIXES)
+    merged_dir = Path(getattr(args, "analysis_dir", args.input_dir)).resolve() / "input_fastq"
+    files = discover_fastq_files(
+        args.input_dir,
+        getattr(args, "fastq_status", "all"),
+        exclude_dir=merged_dir,
     )
     if not files:
         raise SystemExit(f"No FASTQ files found below {args.input_dir}.")
+
+    mapping = None
+    map_sources: list[Path] = []
+    if getattr(args, "barcode_map", None):
+        mapping = read_barcode_map(
+            args.barcode_map.resolve(),
+            args.sample_type,
+            getattr(args, "library_type", "wgs"),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+        map_sources = [args.barcode_map.resolve()]
+    else:
+        mapping, map_sources = discover_barcode_map(
+            args.input_dir,
+            args.sample_type,
+            getattr(args, "library_type", "wgs"),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+    if mapping:
+        if map_sources and not getattr(args, "barcode_map", None):
+            print(
+                "Auto-detected barcode map(s): "
+                + ", ".join(str(path) for path in map_sources)
+            )
+        return make_barcode_fastq_tables(args, mapping)
 
     pattern = re.compile(args.sample_regex)
     counters: defaultdict[str, int] = defaultdict(int)
@@ -811,6 +1107,19 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         if not site_config.is_file():
             raise SystemExit(f"Site config does not exist: {site_config}")
         config = deep_merge(config, read_yaml(site_config))
+
+    # An explicit --reference-build wins over the config default: a single
+    # nagini run uses one build for every sample, so switching assay (bcr_abl
+    # needs hg19; wgs/adaptive need hg38) means switching this per invocation.
+    reference_build = getattr(args, "reference_build", "") or ""
+    if reference_build:
+        available = sorted((config.get("references") or {}))
+        if reference_build not in available:
+            raise SystemExit(
+                f"--reference-build {reference_build!r} is not defined in config['references']. "
+                f"Available: {', '.join(available)}."
+            )
+        config["reference_build"] = reference_build
 
     context: dict[str, str] = {
         str(key): str(value)

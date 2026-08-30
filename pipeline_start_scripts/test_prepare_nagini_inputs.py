@@ -1,4 +1,5 @@
 import contextlib
+import gzip
 import importlib.util
 import io
 import tempfile
@@ -118,6 +119,94 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             found = PREPARE.discover_bams_by_barcode(root)
 
         self.assertEqual(sorted(found), ["barcode01", "barcode02"])
+
+    def test_existing_barcode_fastq_runs_are_merged_and_mapped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "bcr_abl_runs"
+            mapping_rows = "barcode,sample,type,library_type,assay\n"
+            mapping_rows += "barcode01,BCR_SAMPLE,T,cdna,bcr_abl\n"
+            mapping_rows += "barcode02,CONTROL,N,cdna,bcr_abl\n"
+
+            for run_number in (1, 2):
+                run = root / f"run_{run_number}"
+                for status in ("fastq_pass", "fastq_fail"):
+                    for barcode in ("barcode01", "barcode02"):
+                        directory = run / status / barcode
+                        directory.mkdir(parents=True, exist_ok=True)
+                        path = directory / f"reads_{run_number}_{status}_{barcode}.fastq.gz"
+                        with gzip.open(path, "wt") as handle:
+                            handle.write(
+                                f"@{run_number}_{status}_{barcode}\nACGT\n+\nIIII\n"
+                            )
+                (run / f"sample_sheet_run_{run_number}.csv").write_text(mapping_rows)
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.analysis_dir = Path(tmpdir) / "analysis"
+            args.barcode_map = None
+            args.sample_type = "N"
+            args.input_type = "fastq"
+            args.sequence_id = "combined"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.library_type = "cdna"
+            args.assay = "bcr_abl"
+            args.sample_regex = PREPARE.DEFAULT_SAMPLE_REGEX
+            args.fastq_status = "all"
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_fastq_tables(args)
+            PREPARE.validate_tables(samples, units)
+
+            merged = {
+                row["barcode_name"]: Path(row["fastq1"])
+                for row in units
+            }
+            sequences = {
+                barcode: gzip.open(path, "rt").read().count("\n")
+                for barcode, path in merged.items()
+            }
+
+        self.assertEqual(samples, [{"sample": "BCR_SAMPLE"}, {"sample": "CONTROL"}])
+        self.assertEqual(len(units), 2)
+        self.assertEqual(sequences, {"barcode01": 16, "barcode02": 16})
+        self.assertTrue(all(row["input_type"] == "fastq" for row in units))
+        self.assertTrue(all(row["assay"] == "bcr_abl" for row in units))
+
+    def test_existing_barcode_fastq_can_select_pass_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "run"
+            for status in ("fastq_pass", "fastq_fail"):
+                directory = root / status / "barcode01"
+                directory.mkdir(parents=True)
+                with gzip.open(directory / f"reads_{status}.fastq.gz", "wt") as handle:
+                    handle.write(f"@{status}\nACGT\n+\nIIII\n")
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type\nbarcode01,SAMPLE_A,T\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.analysis_dir = Path(tmpdir) / "analysis"
+            args.barcode_map = mapping
+            args.sample_type = "N"
+            args.input_type = "fastq"
+            args.sequence_id = "run-1"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "hac"
+            args.library_type = "cdna"
+            args.assay = "bcr_abl"
+            args.fastq_status = "pass"
+            args.pipeline_root = Path(__file__).parents[1]
+            args.sample_regex = PREPARE.DEFAULT_SAMPLE_REGEX
+
+            _, units = PREPARE.make_fastq_tables(args)
+            with gzip.open(units[0]["fastq1"], "rt") as handle:
+                contents = handle.read()
+
+        self.assertIn("fastq_pass", contents)
+        self.assertNotIn("fastq_fail", contents)
 
     def test_minknow_tables_defer_dorado_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -634,4 +723,3 @@ class ReferenceRegistryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

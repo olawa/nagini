@@ -292,7 +292,10 @@ För ONT-BAM anropas Hydra-Genetics `create-input-files`, som läser metadata ur
 BAM-read groups. Scriptet kompletterar därefter tabellen med Naginis
 `input_type` och oanvända FASTQ-kolumner. För FASTQ skapas samma Hydra-stil
 direkt; ange en regex som fångar sample-namnet om filnamnet inte följer
-standardmönstret.
+standardmönstret. Om FASTQ-filerna ligger under `barcodeXX`-mappar och en
+barcode-map anges (eller `sample_sheet*.csv/tsv` hittas automatiskt), samlas
+alla filer för samma barcode över hela inboxen i en gzip-fil under
+`input_fastq/`, och en unit skapas för barcodet.
 
 ### Dorado `bam_pass` och barcode-mappning
 
@@ -325,6 +328,33 @@ ursprungliga Dorado-ID:t sparas i `barcode_name`. Alla BAM-filer under ett barco
 sample; Nagini slår ihop dem senare. Ommappade barcode-mappar ger ett fel för
 att undvika tyst dataförlust. `unclassified` ignoreras eftersom den inte är en
 sample-mappning.
+
+### Flera färdiga Dorado-körningar
+
+En inbox kan innehålla flera run-mappar med till exempel
+`fastq_pass/barcode01/*.fastq.gz` och `fastq_fail/barcode01/*.fastq.gz`.
+Startscriptet prioriterar befintlig FASTQ framför POD5 vid autodetektering,
+även om samma inbox innehåller båda. Standard är att slå ihop både pass- och
+fail-FASTQ; använd `--fastq-status pass` om endast pass-läsningar ska tas med.
+Alla barcode-mappar som inte finns i mappen ger ett fel, medan mappade barcodes
+utan valda FASTQ bara ger en varning. Oanvända `unclassified` och `mixed`
+filer blir inte provinput.
+
+Exempel:
+
+```bash
+pipeline_start_scripts/start_nagini.sh \
+  --site workstation \
+  --inbox-path /data/bcr_abl_dilution_P2_run_folders \
+  --analysis-dir /data/analysis/bcr_abl_dilution_P2 \
+  --assay bcr_abl --library-type cdna --reference-build hg19 \
+  --barcode-map /data/bcr_abl/barcode_map.csv \
+  --basecalling-model sup --cores 32 --dry-run
+```
+
+Ny basecalling kräver ett explicit `--input-type minknow` tillsammans med
+Dorado-inställningarna. Det gör att en katalog med redan producerade FASTQ-filer
+inte oavsiktligt använder GPU för en ny basecalling.
 
 ### MinKNOW/POD5, demultiplexering och alignment
 

@@ -1,0 +1,5 @@
+Copied verbatim from pickett_bcr_abl_pipeline's
+config/annotations_hg19/bcr_abl1.bed (exon boundaries for ABL1 NM_005157.6/
+NM_007313.2 and BCR NM_004327.4). Shipped here so the bcr_abl assay's
+reference.design_bed does not depend on pickett's checkout being present at
+runtime. Update by re-copying from pickett if that file changes.

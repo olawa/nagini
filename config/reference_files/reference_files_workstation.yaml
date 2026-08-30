@@ -127,6 +127,30 @@ reference_builds:
       type: optional
       url: ''
       checksum: ''
+  hg19:
+    # PLACEHOLDER: not verified against any file on this machine. Confirm this
+    # path exists and re-run with --verify-references before first use.
+    # Needed only for the bcr_abl assay's reference_build.
+    fasta:
+      path: /data/references/hg19/hg19.fa
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: /data/references/hg19/hg19.fa.fai
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: /data/references/hg19/hg19.dict
+      type: file
+      url: ''
+      checksum: ''
+    mmi:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
 annotations:
   vep_cache:
     path: /data/references/vep_cache

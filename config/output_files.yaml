@@ -90,6 +90,34 @@ files:
     input: null
     output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: clairs_to_vep_enabled
+  - name: DeepVariant concatenated VCF
+    input: null
+    output: "snv_indels/deepvariant/{sample}_{type}.vcf.gz"
+    when: deepvariant_enabled
+  - name: DeepVariant concatenated VCF index
+    input: null
+    output: "snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi"
+    when: deepvariant_enabled
+  - name: DeepVariant normalized VCF
+    input: null
+    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    when: deepvariant_enabled
+  - name: DeepVariant normalized VCF index
+    input: null
+    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    when: deepvariant_enabled
+  - name: DeepVariant VEP annotation
+    input: null
+    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    when: deepvariant_vep_enabled
+  - name: DeepVariant VEP annotation index
+    input: null
+    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    when: deepvariant_vep_enabled
+  - name: DeepVariant VEP statistics
+    input: null
+    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    when: deepvariant_vep_enabled
   - name: Mutect2 merged unfiltered VCF
     input: null
     output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
@@ -146,9 +174,38 @@ files:
     input: null
     output: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.ss_annotated.vcf"
     when: annotate_svs
+  - name: BCR-ABL1 fusion summary TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.fusion_summary.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 fusion summary JSON
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.fusion_summary.json"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 all Branford sites TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 detected resistance mutations TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.branford_mutations.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 detected resistance mutations VCF
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.branford_mutations.vcf"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 compound mutation phasing TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.phasing.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 compound mutation phasing JSON
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.phasing.json"
+    when: "assay_module:bcr_abl"
   - name: MultiQC Nanopore report
     input: null
     output: "qc/multiqc/multiqc_nanopore.html"
   - name: Nagini Excel report
     input: null
     output: "reports/{sample}_{type}.nagini_report.xlsx"
+

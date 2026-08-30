@@ -1,0 +1,425 @@
+{
+  "description": "BCR-ABL1 Fusion, Breakpoint, and Kinase Domain Resistance Database",
+  "version": "1.1",
+  "build": "hg38",
+  "breakpoint_clusters": [
+    {
+      "name": "M-BCR",
+      "chrom": "chr22",
+      "start": 23289491,
+      "end": 23292664,
+      "type": "major",
+      "protein": "p210",
+      "description": "Major breakpoint cluster (e13a2, e14a2), common in CML"
+    },
+    {
+      "name": "m-BCR",
+      "chrom": "chr22",
+      "start": 23180958,
+      "end": 23254000,
+      "type": "minor",
+      "protein": "p190",
+      "description": "Minor breakpoint cluster (e1a2), associated with Ph+ ALL"
+    },
+    {
+      "name": "mu-BCR",
+      "chrom": "chr22",
+      "start": 23311732,
+      "end": 23313035,
+      "type": "micro",
+      "protein": "p230",
+      "description": "Micro breakpoint cluster (e19a2), associated with CNL"
+    },
+    {
+      "name": "ABL1_breakpoint_zone",
+      "chrom": "chr9",
+      "start": 130699582,
+      "end": 130855101,
+      "type": "gene_partner",
+      "protein": "",
+      "description": "ABL1 intron 1-2 breakpoint region"
+    }
+  ],
+  "fusions": [
+    {
+      "name": "e14a2",
+      "alt_name": "b3a2",
+      "protein": "p210",
+      "cluster": "M-BCR",
+      "bcr_exon": "e14",
+      "abl_exon": "a2",
+      "bcr_ref_pos_hg38": 23290413,
+      "abl_ref_pos_hg38": 130854065,
+      "bcr_ref_pos_hg19": 23632600,
+      "abl_ref_pos_hg19": 133729452,
+      "junction": "BCR exon 14 -> ABL1 exon 2",
+      "description": "Major CML fusion isoform (p210)"
+    },
+    {
+      "name": "e13a2",
+      "alt_name": "b2a2",
+      "protein": "p210",
+      "cluster": "M-BCR",
+      "bcr_exon": "e13",
+      "abl_exon": "a2",
+      "bcr_ref_pos_hg38": 23289621,
+      "abl_ref_pos_hg38": 130854065,
+      "bcr_ref_pos_hg19": 23631808,
+      "abl_ref_pos_hg19": 133729452,
+      "junction": "BCR exon 13 -> ABL1 exon 2",
+      "description": "Major CML fusion isoform (p210)"
+    },
+    {
+      "name": "e1a2",
+      "alt_name": "",
+      "protein": "p190",
+      "cluster": "m-BCR",
+      "bcr_exon": "e1",
+      "abl_exon": "a2",
+      "bcr_ref_pos_hg38": 23182239,
+      "abl_ref_pos_hg38": 130854065,
+      "bcr_ref_pos_hg19": 23524426,
+      "abl_ref_pos_hg19": 133729452,
+      "junction": "BCR exon 1 -> ABL1 exon 2",
+      "description": "Minor Ph+ ALL fusion isoform (p190)"
+    },
+    {
+      "name": "e19a2",
+      "alt_name": "",
+      "protein": "p230",
+      "cluster": "mu-BCR",
+      "bcr_exon": "e19",
+      "abl_exon": "a2",
+      "bcr_ref_pos_hg38": 23311800,
+      "abl_ref_pos_hg38": 130854065,
+      "bcr_ref_pos_hg19": 23653987,
+      "abl_ref_pos_hg19": 133729452,
+      "junction": "BCR exon 19 -> ABL1 exon 2",
+      "description": "Micro CNL fusion isoform (p230)",
+      "_unverified": "BCR exon not present in pickett's exon BED; not cross-checked against RefSeq."
+    },
+    {
+      "name": "e13a3",
+      "alt_name": "b2a3",
+      "protein": "p205",
+      "cluster": "M-BCR",
+      "bcr_exon": "e13",
+      "abl_exon": "a3",
+      "bcr_ref_pos_hg38": 23289621,
+      "abl_ref_pos_hg38": 130854802,
+      "bcr_ref_pos_hg19": 23631808,
+      "abl_ref_pos_hg19": 133730189,
+      "junction": "BCR exon 13 -> ABL1 exon 3",
+      "description": "Atypical CML fusion isoform"
+    },
+    {
+      "name": "e14a3",
+      "alt_name": "b3a3",
+      "protein": "p205",
+      "cluster": "M-BCR",
+      "bcr_exon": "e14",
+      "abl_exon": "a3",
+      "bcr_ref_pos_hg38": 23290413,
+      "abl_ref_pos_hg38": 130854802,
+      "bcr_ref_pos_hg19": 23632600,
+      "abl_ref_pos_hg19": 133730189,
+      "junction": "BCR exon 14 -> ABL1 exon 3",
+      "description": "Atypical CML fusion isoform"
+    },
+    {
+      "name": "e1a3",
+      "alt_name": "",
+      "protein": "p185",
+      "cluster": "m-BCR",
+      "bcr_exon": "e1",
+      "abl_exon": "a3",
+      "bcr_ref_pos_hg38": 23182239,
+      "abl_ref_pos_hg38": 130854802,
+      "bcr_ref_pos_hg19": 23524426,
+      "abl_ref_pos_hg19": 133730189,
+      "junction": "BCR exon 1 -> ABL1 exon 3",
+      "description": "Atypical ALL fusion isoform"
+    },
+    {
+      "name": "e6a2",
+      "alt_name": "",
+      "protein": "p195",
+      "cluster": "atypical",
+      "bcr_exon": "e6",
+      "abl_exon": "a2",
+      "bcr_ref_pos_hg38": 23253500,
+      "abl_ref_pos_hg38": 130854065,
+      "bcr_ref_pos_hg19": 23595687,
+      "abl_ref_pos_hg19": 133729452,
+      "junction": "BCR exon 6 -> ABL1 exon 2",
+      "description": "Atypical fusion isoform",
+      "_unverified": "BCR exon not present in pickett's exon BED; not cross-checked against RefSeq."
+    }
+  ],
+  "tki_profiles": {
+    "T315I": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Resistant",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "T315A": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Resistant",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "Y253H": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "Y253F": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E255K": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E255V": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F359V": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F359I": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F359C": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Resistant",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "G250E": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F317L": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F317V": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F317I": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F317C": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "V299L": {
+      "Imatinib": "Sensitive",
+      "Dasatinib": "Resistant",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Resistant",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "M244V": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "L248V": {
+      "Imatinib": "Resistant",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "Q252H": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "Q252R": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "D276G": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E279K": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F311I": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "F311L": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Intermediate",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Intermediate",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "M351T": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E355G": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "V379I": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "L387M": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "L387F": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Intermediate",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "H396R": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "H396P": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E450K": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E450G": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    },
+    "E459K": {
+      "Imatinib": "Intermediate",
+      "Dasatinib": "Sensitive",
+      "Nilotinib": "Sensitive",
+      "Bosutinib": "Sensitive",
+      "Ponatinib": "Sensitive",
+      "Asciminib": "Sensitive"
+    }
+  }
+}

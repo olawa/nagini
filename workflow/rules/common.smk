@@ -616,22 +616,6 @@ def get_clairs_to_indel_min_af(wildcards):
     )
 
 
-if clairs_to_enabled() and not has_design_bed():
-    _needs_calling = [
-        str(sample).strip()
-        for sample in get_samples(samples)
-        if sample_needs_dna_variant_calling(str(sample).strip())
-    ]
-    if _needs_calling:
-        raise WorkflowError(
-            "ClairS-TO needs reference.design_bed, which is not set or not readable "
-            "({!r}), but these samples are routed to variant calling: {}. Configure a "
-            "design BED, or route them to an assay with snv_calling: false.".format(
-                config.get("reference", {}).get("design_bed", ""), ", ".join(_needs_calling)
-            )
-        )
-
-
 # Fail early on an unroutable sample sheet rather than midway through the DAG,
 # and surface a library_type that disagrees with its assay as a warning.
 _routing_summary = _routing_call(
@@ -658,30 +642,66 @@ if not str(config.get("clairs_to_call", {}).get("platform", "") or "").strip():
             sys.stderr.write(f"WARNING: {_model_warning}\n")
 
 
-def get_small_variant_caller():
-    caller = str(config.get("small_variant_caller", "clairs_to")).strip().lower()
-    return caller if caller in ("clairs_to", "mutect2", "both") else "clairs_to"
+def get_small_variant_caller(sample=None, unit_type=None):
+    """Determine the small variant caller for a sample/unit or the run default."""
+    if sample is None:
+        configured = str(config.get("small_variant_caller", "auto")).strip().lower()
+        return configured if configured in ("clairs_to", "deepvariant", "deepsomatic", "mutect2", "both", "auto") else "auto"
+    return _routing_call(
+        nagini_routing.get_sample_caller,
+        units,
+        sample,
+        assays,
+        config.get("small_variant_caller", "auto"),
+        unit_type or "",
+    )
 
 
-def clairs_to_enabled():
-    return get_small_variant_caller() in ("clairs_to", "both")
+def deepvariant_enabled(sample=None, unit_type=None):
+    caller = get_small_variant_caller(sample, unit_type)
+    return caller in ("deepvariant", "both", "auto")
 
 
-def mutect2_enabled():
-    return get_small_variant_caller() in ("mutect2", "both")
+def clairs_to_enabled(sample=None, unit_type=None):
+    caller = get_small_variant_caller(sample, unit_type)
+    return caller in ("clairs_to", "both", "auto")
+
+
+def mutect2_enabled(sample=None, unit_type=None):
+    caller = get_small_variant_caller(sample, unit_type)
+    return caller in ("mutect2", "both")
+
+
+def get_clairs_to_bed(wildcards):
+    """Return the design BED if configured, otherwise whole-genome contigs BED."""
+    if has_design_bed():
+        return config["reference"]["design_bed"]
+    return "references/genome_contigs.bed"
+
+
+# For target-restricted panels, alert if design_bed is missing
+for _sample in get_samples(samples):
+    _s_str = str(_sample).strip()
+    if sample_is_target_restricted(_s_str) and sample_needs_dna_variant_calling(_s_str) and not has_design_bed():
+        sys.stderr.write(
+            f"WARNING: Sample {_s_str} is target_restricted but no reference.design_bed is configured.\n"
+        )
 
 
 def get_small_variant_report_vcf(wildcards):
     """Return the normalized VCF, preferring VEP annotation when enabled."""
     suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-    caller_dir = (
-        "snv_indels/clairs_to_postprocess"
-        if clairs_to_enabled()
-        else "snv_indels/mutect2_postprocess"
-    )
+    caller = get_small_variant_caller(wildcards.sample, wildcards.type)
+    if caller == "deepvariant":
+        caller_dir = "snv_indels/deepvariant_postprocess"
+    elif caller == "mutect2":
+        caller_dir = "snv_indels/mutect2_postprocess"
+    else:
+        caller_dir = "snv_indels/clairs_to_postprocess"
     sample = str(wildcards.sample).strip()
     unit_type = str(wildcards.type).strip()
     return f"{caller_dir}/{sample}_{unit_type}{suffix}"
+
 
 
 def get_small_variant_report_vcf_index(wildcards):
@@ -718,6 +738,24 @@ def get_report_target_coverage(wildcards):
     return []
 
 
+def get_report_bcr_abl_fusion(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl"):
+        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_summary.tsv"
+    return []
+
+
+def get_report_bcr_abl_mutations(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl"):
+        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.branford_mutations.tsv"
+    return []
+
+
+def get_report_bcr_abl_phasing(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl"):
+        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.phasing.tsv"
+    return []
+
+
 def get_unit_types_for_sample(sample):
     return sorted(set(units.loc[units["sample"] == sample, "type"]))
 
@@ -730,6 +768,10 @@ _PIPELINE_CONDITIONS = {
     "annotate_small_variants_with_vep": lambda: vep_enabled(),
     "clairs_to_enabled": lambda: clairs_to_enabled(),
     "clairs_to_vep_enabled": lambda: clairs_to_enabled() and vep_enabled(),
+    "deepvariant_enabled": lambda: deepvariant_enabled(),
+    "deepvariant_vep_enabled": lambda: deepvariant_enabled() and vep_enabled(),
+    "deepsomatic_enabled": lambda: get_small_variant_caller() in ("deepsomatic", "both", "auto"),
+    "deepsomatic_vep_enabled": lambda: get_small_variant_caller() in ("deepsomatic", "both", "auto") and vep_enabled(),
     "mutect2_enabled": lambda: mutect2_enabled(),
     "mutect2_vep_enabled": lambda: mutect2_enabled() and vep_enabled(),
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
@@ -738,10 +780,14 @@ _PIPELINE_CONDITIONS = {
 }
 
 _SAMPLE_CONDITIONS = {
-    "clairs_to_enabled": sample_needs_dna_variant_calling,
-    "clairs_to_vep_enabled": sample_needs_dna_variant_calling,
-    "mutect2_enabled": sample_needs_dna_variant_calling,
-    "mutect2_vep_enabled": sample_needs_dna_variant_calling,
+    "clairs_to_enabled": lambda s: clairs_to_enabled(s) and sample_needs_dna_variant_calling(s),
+    "clairs_to_vep_enabled": lambda s: clairs_to_enabled(s) and sample_needs_dna_variant_calling(s),
+    "deepvariant_enabled": lambda s: deepvariant_enabled(s) and sample_needs_dna_variant_calling(s),
+    "deepvariant_vep_enabled": lambda s: deepvariant_enabled(s) and sample_needs_dna_variant_calling(s),
+    "deepsomatic_enabled": lambda s: sample_needs_dna_variant_calling(s),
+    "deepsomatic_vep_enabled": lambda s: sample_needs_dna_variant_calling(s),
+    "mutect2_enabled": lambda s: mutect2_enabled(s) and sample_needs_dna_variant_calling(s),
+    "mutect2_vep_enabled": lambda s: mutect2_enabled(s) and sample_needs_dna_variant_calling(s),
     "annotate_small_variants": sample_needs_dna_variant_calling,
     "annotate_small_variants_with_vep": sample_needs_dna_variant_calling,
     "sample_needs_dna_variant_calling": sample_needs_dna_variant_calling,

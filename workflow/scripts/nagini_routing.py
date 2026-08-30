@@ -283,6 +283,40 @@ def sample_is_target_restricted(units, sample: str, assays: dict) -> bool:
     return bool(get_assay_definition(units, sample, assays)["target_restricted"])
 
 
+def get_sample_caller(units, sample: str, assays: dict, global_caller: str = "auto", unit_type: str = "") -> str:
+    """Determine the small variant caller for a given sample and unit type.
+
+    Precedence:
+    1. Assay config override: config_overrides.<section>.small_variant_caller or caller
+    2. Global config setting: if not 'auto', uses the specified caller
+    3. Auto resolution:
+       - 'N' (Normal/Germline) -> 'deepvariant'
+       - 'T' (Tumor) -> 'clairs_to'
+       - amplicon / cdna -> 'clairs_to'
+       - wgs -> 'deepvariant'
+    """
+    overrides = get_assay_definition(units, sample, assays).get("config_overrides", {})
+    for sec_data in overrides.values():
+        if isinstance(sec_data, dict):
+            if "small_variant_caller" in sec_data:
+                return normalize(sec_data["small_variant_caller"])
+            if "caller" in sec_data:
+                return normalize(sec_data["caller"])
+    norm_global = normalize(global_caller or "auto")
+    if norm_global != "auto":
+        return norm_global
+    if str(unit_type).upper() == "N":
+        return "deepvariant"
+    if str(unit_type).upper() == "T":
+        return "clairs_to"
+    lib = get_library_type(units, sample, assays)
+    if lib in ("amplicon", "cdna"):
+        return "clairs_to"
+    return "deepvariant"
+
+
+
+
 def sample_modules(units, sample: str, assays: dict) -> list:
     return list(get_assay_definition(units, sample, assays)["modules"])
 
@@ -352,6 +386,10 @@ PIPELINE_CONDITION_NAMES = {
     "annotate_small_variants_with_vep",
     "clairs_to_enabled",
     "clairs_to_vep_enabled",
+    "deepvariant_enabled",
+    "deepvariant_vep_enabled",
+    "deepsomatic_enabled",
+    "deepsomatic_vep_enabled",
     "mutect2_enabled",
     "mutect2_vep_enabled",
     "annotate_small_variants",
@@ -362,6 +400,10 @@ PIPELINE_CONDITION_NAMES = {
 SAMPLE_CONDITION_NAMES = {
     "clairs_to_enabled",
     "clairs_to_vep_enabled",
+    "deepvariant_enabled",
+    "deepvariant_vep_enabled",
+    "deepsomatic_enabled",
+    "deepsomatic_vep_enabled",
     "mutect2_enabled",
     "mutect2_vep_enabled",
     "annotate_small_variants",

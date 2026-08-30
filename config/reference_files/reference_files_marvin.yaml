@@ -121,6 +121,34 @@ reference_builds:
       type: optional
       url: ''
       checksum: ''
+  hg19:
+    # UNVERIFIED: inferred from pickett_bcr_abl_pipeline's own reference
+    # registry (its "url" field, which points at the shared reference tree
+    # rather than its project-local cache) and this file's own hg38 entry's
+    # path convention (/beegfs-storage/data/ref_genomes/...). Confirm this
+    # path exists on marvin and re-run with --verify-references before first
+    # use; consider pointing this at pickett's exact hg19.with.mt.fasta
+    # instead if that is what BCR-ABL1 BAMs on marvin are already aligned to.
+    fasta:
+      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.fasta
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.fasta.fai
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.dict
+      type: file
+      url: ''
+      checksum: ''
+    mmi:
+      path: ''
+      type: optional
+      url: ''
+      checksum: ''
 annotations:
   vep_cache:
     path: /data/ref_genomes/VEP

@@ -367,5 +367,69 @@ class BarcodeKitTest(unittest.TestCase):
         )
 
 
+class CallerResolutionTest(unittest.TestCase):
+    def setUp(self):
+        self.assays = routing.resolve_assays({})
+
+    def test_auto_routes_normal_to_deepvariant_and_tumor_to_clairs_to(self):
+        units = units_frame([
+            {"sample": "S_NORM", "assay": "wgs", "type": "N"},
+            {"sample": "S_TUMOR", "assay": "wgs", "type": "T"},
+        ])
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_NORM", self.assays, "auto", "N"),
+            "deepvariant",
+        )
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_TUMOR", self.assays, "auto", "T"),
+            "clairs_to",
+        )
+
+    def test_amplicon_and_bcr_abl_route_to_clairs_to(self):
+        units = units_frame([
+            {"sample": "S_AMP", "assay": "amplicon"},
+            {"sample": "S_BCR", "assay": "bcr_abl"},
+        ])
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_AMP", self.assays, "auto"),
+            "clairs_to",
+        )
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_BCR", self.assays, "auto"),
+            "clairs_to",
+        )
+
+    def test_explicit_global_caller_overrides_auto(self):
+        units = units_frame([
+            {"sample": "S_WGS", "assay": "wgs"},
+        ])
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_WGS", self.assays, "deepvariant", "T"),
+            "deepvariant",
+        )
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_WGS", self.assays, "clairs_to", "N"),
+            "clairs_to",
+        )
+
+    def test_assay_override_takes_precedence(self):
+        assays = routing.resolve_assays({
+            "assays": {
+                "custom_wgs": {
+                    "library_type": "wgs",
+                    "snv_calling": True,
+                    "config_overrides": {"snv_indels": {"small_variant_caller": "mutect2"}},
+                }
+            }
+        })
+        units = units_frame([{"sample": "S_CUST", "assay": "custom_wgs"}])
+        self.assertEqual(
+            routing.get_sample_caller(units, "S_CUST", assays, "auto", "N"),
+            "mutect2",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
+
+

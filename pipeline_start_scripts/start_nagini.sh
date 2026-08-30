@@ -23,6 +23,7 @@ input_type=""
 sample_type="N"
 library_type="wgs"
 assay=""
+reference_build=""
 sequence_id=""
 sample_regex=""
 barcode_map=""
@@ -30,6 +31,7 @@ barcode="NB"
 barcode_kit=""
 run_id=""
 basecalling_model="unknown"
+fastq_status="all"
 dorado_device=""
 dorado_models_directory=""
 dorado_container=""
@@ -70,14 +72,20 @@ Options:
   --assay NAME                  Default assay: wgs, adaptive, bcr_abl, or one declared in
                                 config assays. Decides which analysis runs. A per-sample
                                 assay column in the barcode map overrides it.
+  --reference-build BUILD       Override config['reference_build'] for this run, e.g. hg19
+                                for --assay bcr_abl (default: whatever config.yaml says,
+                                normally hg38). One run uses one build for every sample.
   --sequenceid ID               Run identifier; defaults to inbox directory name.
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
-  --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed input.
+  --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed FASTQ/BAM.
+                                sample_sheet*.csv/tsv is auto-detected for existing FASTQ when omitted.
   --barcode-kit KIT             Dorado barcode kit used for demultiplexing minknow input.
   --default-barcode BARCODE     Barcode for FASTQ and BAM rows (default: NB).
   --run-id ID                   Run ID for generated FASTQ rows.
   --basecalling-model MODEL     Basecalling model (also used by Dorado for minknow input).
   --dorado-model MODEL          Alias for --basecalling-model.
+  --fastq-status all|pass       Existing FASTQ input: include pass and fail reads (default: all),
+                                or only fastq_pass reads.
   --dorado-device DEVICE        Dorado device, for example cuda:all or cuda:0.
   --dorado-models-directory DIR Directory containing downloaded Dorado models.
   --dorado-container IMAGE      Override default Dorado Docker/Singularity image (or 'none' for local binary).
@@ -184,6 +192,11 @@ while [[ $# -gt 0 ]]; do
             assay="$2"
             shift 2
             ;;
+        --reference-build)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            reference_build="$2"
+            shift 2
+            ;;
         --library-type)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             library_type="$2"
@@ -227,6 +240,11 @@ while [[ $# -gt 0 ]]; do
         --dorado-model)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             basecalling_model="$2"
+            shift 2
+            ;;
+        --fastq-status)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            fastq_status="$2"
             shift 2
             ;;
         --dorado-device)
@@ -358,12 +376,15 @@ if [[ -z "$input_type" ]]; then
     bam_count="$(find "$input_dir" -type f -name '*.bam' | wc -l | tr -d ' ')"
     fastq_count="$(find "$input_dir" -type f \( -name '*.fastq' -o -name '*.fastq.gz' -o -name '*.fq' -o -name '*.fq.gz' \) | wc -l | tr -d ' ')"
     pod5_count="$(find "$input_dir" -type f -iname '*.pod5' | wc -l | tr -d ' ')"
-    if [[ "$pod5_count" -gt 0 ]]; then
-        input_type="minknow"
-    elif [[ "$bam_count" -gt 0 && "$fastq_count" -eq 0 ]]; then
-        input_type="unmapped_bam"
-    elif [[ "$fastq_count" -gt 0 && "$bam_count" -eq 0 ]]; then
+    # A completed Dorado export often contains both POD5 and barcode FASTQ.
+    # Prefer the reusable FASTQ unless the caller explicitly selects minknow;
+    # this avoids silently spending GPU time on a second basecalling pass.
+    if [[ "$fastq_count" -gt 0 ]]; then
         input_type="fastq"
+    elif [[ "$pod5_count" -gt 0 ]]; then
+        input_type="minknow"
+    elif [[ "$bam_count" -gt 0 ]]; then
+        input_type="unmapped_bam"
     else
         die "Could not infer input type; pass --input-type minknow, fastq, unmapped_bam, or aligned_bam."
     fi
@@ -381,6 +402,10 @@ esac
 case "$dorado_aligner" in
     minimap2|dorado) ;;
     *) die "--dorado-aligner must be minimap2 or dorado" ;;
+esac
+case "$fastq_status" in
+    all|pass) ;;
+    *) die "--fastq-status must be all or pass" ;;
 esac
 source_input_dir="$input_dir"
 source_input_type="$input_type"
@@ -419,9 +444,11 @@ prepare_cmd=(
     --barcode "$barcode"
     --run-id "$run_id"
     --basecalling-model "$basecalling_model"
+    --fastq-status "$fastq_status"
     --methylation "$methylation"
 )
 [[ -n "$assay" ]] && prepare_cmd+=(--assay "$assay")
+[[ -n "$reference_build" ]] && prepare_cmd+=(--reference-build "$reference_build")
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
@@ -460,6 +487,7 @@ reference_files: "$reference_files"
 barcode_map: "${barcode_map:-}"
 barcode_kit: "${barcode_kit:-}"
 basecalling_model: "$basecalling_model"
+fastq_status: "$fastq_status"
 dorado_device: "${dorado_device:-}"
 dorado_models_directory: "${dorado_models_directory:-}"
 dorado_demux_output_format: "$dorado_demux_output_format"

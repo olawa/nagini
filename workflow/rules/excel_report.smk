@@ -14,6 +14,9 @@ rule nagini_excel_report:
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
         target_coverage=get_report_target_coverage,
         cramino="qc/cramino/{sample}_{type}.txt",
+        bcr_abl_fusion=get_report_bcr_abl_fusion,
+        bcr_abl_mutations=get_report_bcr_abl_mutations,
+        bcr_abl_phasing=get_report_bcr_abl_phasing,
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:

@@ -39,17 +39,18 @@ properties:
   library_root:
     type: string
   reference_build:
+    description: >
+      Which entry of `references` to use. Validated against the keys actually
+      present there rather than a fixed list, so a site can add a build (hg19
+      for the BCR-ABL1 panel, for instance) without editing this schema.
     type: string
-    enum: [hg38, hs1]
+    minLength: 1
   references:
     type: object
     description: Reference paths keyed by reference_build.
-    properties:
-      hg38:
-        $ref: "#/definitions/reference"
-      hs1:
-        $ref: "#/definitions/reference"
-    required: [hg38, hs1]
+    minProperties: 1
+    additionalProperties:
+      $ref: "#/definitions/reference"
   modules:
     type: object
     description: Pinned Hydra-Genetics module tags.
