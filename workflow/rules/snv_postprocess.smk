@@ -287,6 +287,17 @@ rule vep_annotate_clairs_to:
             --output_file {output.vcf} \
             --vcf \
             --force_overwrite \
+            --no_progress \
+            --stats_file {output.stats} \
+            --dir_cache {input.cache} \
+            --fasta {input.fasta} \
+            --fork {threads} \
+            {params.mode} \
+            {params.custom} \
+            {params.extra} &> {log}
+        """
+
+
 rule create_genome_contigs_bed:
     """Create a whole-genome BED from FASTA index when no design BED is provided."""
     input:

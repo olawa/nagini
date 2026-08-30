@@ -47,6 +47,26 @@ BASE_UNIT_COLUMNS = [
     "assay",
 ]
 DEFAULT_SAMPLE_REGEX = r"(?P<sample>[^_]+)(?:_.*)?\.(?:fastq|fq)(?:\.gz)?$"
+DEFAULT_BASECALLING_MODEL = "dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
+
+
+def resolve_library_type_for_assay(
+    assay: str, explicit_lib: str = "", default_lib: str = ""
+) -> str:
+    """Determine library_type from assay defaults unless an explicit type is provided."""
+    explicit = str(explicit_lib or "").strip().lower()
+    if explicit:
+        return explicit
+    norm_assay = str(assay or "").strip().lower()
+    if norm_assay in ("bcr_abl", "cdna"):
+        return "cdna"
+    if norm_assay == "amplicon":
+        return "amplicon"
+    if norm_assay in ("wgs", "adaptive"):
+        return "wgs"
+    default_clean = str(default_lib or "").strip().lower()
+    return default_clean if default_clean else "wgs"
+
 
 
 def _pipeline_root(args) -> Path:
@@ -116,9 +136,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--library-type",
-        choices=("wgs", "amplicon", "cdna"),
-        default="wgs",
-        help="Default library type when not specified in barcode map (default: wgs).",
+        choices=("wgs", "amplicon", "cdna", ""),
+        default="",
+        help="Default library type when not specified in barcode map (default: derived from assay or wgs).",
     )
     parser.add_argument("--sequence-id", default="")
     parser.add_argument("--sample-regex", default=DEFAULT_SAMPLE_REGEX)
@@ -132,7 +152,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--barcode", default="NB")
     parser.add_argument("--run-id", default="")
-    parser.add_argument("--basecalling-model", default="unknown")
+    parser.add_argument("--basecalling-model", default=DEFAULT_BASECALLING_MODEL)
     parser.add_argument(
         "--fastq-status",
         choices=FASTQ_STATUS_VALUES,
@@ -142,6 +162,7 @@ def parse_args() -> argparse.Namespace:
             "files (default) or only fastq_pass files."
         ),
     )
+
     parser.add_argument("--dorado-input", type=Path)
     parser.add_argument("--dorado-model", default="")
     parser.add_argument("--dorado-kit", default="")
@@ -260,10 +281,15 @@ def read_barcode_map(
         )
         sample_type = fields.get("type", fields.get("sampletype", "")) or default_type
         sample_type = sample_type.upper()
-        raw_lib = fields.get("librarytype", fields.get("library_type", "")) or default_library_type
-        library_type = str(raw_lib).strip().lower()
+        raw_lib = fields.get("librarytype", fields.get("library_type", ""))
         assay = str(fields.get("assay", "") or default_assay).strip().lower()
+        library_type = resolve_library_type_for_assay(
+            assay,
+            explicit_lib=raw_lib,
+            default_lib=default_library_type,
+        )
         if not barcode or not re.fullmatch(r"barcode\d+", barcode):
+
             raise SystemExit(f"Invalid or missing barcode in {path}: {row}")
         if not sample_name:
             raise SystemExit(f"Missing sample/sample_id for {barcode} in {path}.")
@@ -905,7 +931,7 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
         mapping, map_sources = discover_barcode_map(
             args.input_dir,
             args.sample_type,
-            getattr(args, "library_type", "wgs"),
+            getattr(args, "library_type", ""),
             getattr(args, "assay", ""),
             known_library_types(_pipeline_root(args)),
         )
@@ -938,11 +964,14 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
                 "bam": "UNUSED",
                 "methylation": args.methylation,
                 "run_id": run_id,
-                "basecalling_model": args.basecalling_model,
-                "library_type": getattr(args, "library_type", "wgs"),
+                "basecalling_model": args.basecalling_model or DEFAULT_BASECALLING_MODEL,
+                "library_type": resolve_library_type_for_assay(
+                    getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
+                ),
                 "assay": getattr(args, "assay", ""),
             }
         )
+
     samples = [{"sample": sample} for sample in sorted(counters)]
     return samples, units
 
@@ -1405,6 +1434,9 @@ def main() -> None:
     args.analysis_dir.mkdir(parents=True, exist_ok=True)
     if not args.input_dir.is_dir():
         raise SystemExit(f"Input directory does not exist: {args.input_dir}")
+    if not getattr(args, "basecalling_model", None) or str(args.basecalling_model).strip().lower() in ("unknown", "", "none"):
+        args.basecalling_model = DEFAULT_BASECALLING_MODEL
+
 
     samples_path = args.analysis_dir / "samples.tsv"
     units_path = args.analysis_dir / "units.tsv"
