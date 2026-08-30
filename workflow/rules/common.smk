@@ -701,11 +701,11 @@ def get_sample_type_path(wildcards, directory, suffix):
     unit_type = str(wildcards.type).strip()
     if not sample or not unit_type:
         raise WorkflowError(
-            f"Cannot build a report path with empty sample/type: {sample!r}/{unit_type!r}."
+            f"Cannot build a report path with empty sample/type: {sample}/{unit_type}."
         )
     if any(character.isspace() for character in directory + suffix):
         raise WorkflowError(
-            f"Internal whitespace in report path components: {directory!r}, {suffix!r}."
+            f"Internal whitespace in report path components: {directory}, {suffix}."
         )
     return f"{directory}/{sample}_{unit_type}{suffix}"
 
