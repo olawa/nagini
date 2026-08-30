@@ -20,7 +20,10 @@ rule nagini_excel_report:
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
-        reference_build=config["reference"]["build"],
+        # The selected build is a run-level setting.  Use the source value
+        # directly instead of depending on common.smk's convenience copy under
+        # config["reference"].
+        reference_build=config.get("reference_build", "hg38"),
         snv_annotation=(
             "VEP" if vep_enabled() else "none"
         ),

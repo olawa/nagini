@@ -688,6 +688,28 @@ for _sample in get_samples(samples):
         )
 
 
+def get_sample_type_path(wildcards, directory, suffix):
+    """Build report paths from normalized sample/type components.
+
+    Keep path construction in one place.  In particular, never use implicit
+    multiline string concatenation for these paths: indentation or a visual
+    separator such as ``" _ "`` would become a literal filename character and
+    Snakemake would only report the problem later as a missing input.
+    """
+
+    sample = str(wildcards.sample).strip()
+    unit_type = str(wildcards.type).strip()
+    if not sample or not unit_type:
+        raise WorkflowError(
+            f"Cannot build a report path with empty sample/type: {sample!r}/{unit_type!r}."
+        )
+    if any(character.isspace() for character in directory + suffix):
+        raise WorkflowError(
+            f"Internal whitespace in report path components: {directory!r}, {suffix!r}."
+        )
+    return f"{directory}/{sample}_{unit_type}{suffix}"
+
+
 def get_small_variant_report_vcf(wildcards):
     """Return the normalized VCF, preferring VEP annotation when enabled."""
     suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
@@ -698,9 +720,7 @@ def get_small_variant_report_vcf(wildcards):
         caller_dir = "snv_indels/mutect2_postprocess"
     else:
         caller_dir = "snv_indels/clairs_to_postprocess"
-    sample = str(wildcards.sample).strip()
-    unit_type = str(wildcards.type).strip()
-    return f"{caller_dir}/{sample}_{unit_type}{suffix}"
+    return get_sample_type_path(wildcards, caller_dir, suffix)
 
 
 
@@ -722,37 +742,45 @@ def get_report_snv_tbi(wildcards):
 
 def get_report_sv_tsv(wildcards):
     if sample_needs_sv_calling(wildcards.sample):
-        return f"reports/sv_summary/{wildcards.sample}_{wildcards.type}.tsv"
+        return get_sample_type_path(wildcards, "reports/sv_summary", ".tsv")
     return []
 
 
 def get_report_translocations_tsv(wildcards):
     if sample_needs_sv_calling(wildcards.sample):
-        return f"reports/sv_summary/{wildcards.sample}_{wildcards.type}.translocations.tsv"
+        return get_sample_type_path(
+            wildcards, "reports/sv_summary", ".translocations.tsv"
+        )
     return []
 
 
 def get_report_target_coverage(wildcards):
     if has_design_bed():
-        return f"qc/mosdepth_bed/{wildcards.sample}_{wildcards.type}.mosdepth.summary.txt"
+        return get_sample_type_path(
+            wildcards, "qc/mosdepth_bed", ".mosdepth.summary.txt"
+        )
     return []
 
 
 def get_report_bcr_abl_fusion(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_summary.tsv"
+        return get_sample_type_path(
+            wildcards, "reports/bcr_abl", ".fusion_summary.tsv"
+        )
     return []
 
 
 def get_report_bcr_abl_mutations(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.branford_mutations.tsv"
+        return get_sample_type_path(
+            wildcards, "reports/bcr_abl", ".branford_mutations.tsv"
+        )
     return []
 
 
 def get_report_bcr_abl_phasing(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return f"reports/bcr_abl/{wildcards.sample}_{wildcards.type}.phasing.tsv"
+        return get_sample_type_path(wildcards, "reports/bcr_abl", ".phasing.tsv")
     return []
 
 
