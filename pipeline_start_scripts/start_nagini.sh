@@ -69,6 +69,8 @@ tumor_content=""
 cores=""
 force_inputs=false
 dry_run=false
+unlock=false
+
 
 usage() {
     cat <<EOF
@@ -123,8 +125,10 @@ Options:
   --tumor-content FLOAT         Optional value added to samples.tsv.
   --cores N                     Override the profile's core count.
   --force-inputs                Recreate samples.tsv and units.tsv.
+  --unlock                      Remove a stale Snakemake directory lock before/instead of running.
   --dry-run                     Build the DAG without executing jobs.
   -h, --help                    Show this help.
+
 
 Examples:
   $(basename "$0") --inbox-path /data/run_001 --input-type unmapped_bam
@@ -339,6 +343,10 @@ while [[ $# -gt 0 ]]; do
             force_inputs=true
             shift
             ;;
+        --unlock)
+            unlock=true
+            shift
+            ;;
         --dry-run)
             dry_run=true
             shift
@@ -354,7 +362,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if $unlock && [[ -z "$input_dir" ]]; then
+    pipeline_path="$(absolute_path "$pipeline_path")"
+    analysis_dir="$(absolute_path "$analysis_dir")"
+    [[ -n "$profile" ]] || profile="$pipeline_path/profiles/${site}"
+    profile="$(absolute_path "$profile")"
+    echo "Unlocking analysis directory: $analysis_dir"
+    (
+        cd "$analysis_dir"
+        snakemake \
+            --profile "$profile" \
+            --snakefile "$pipeline_path/workflow/Snakefile" \
+            --unlock
+    )
+    exit 0
+fi
+
 [[ -n "$input_dir" ]] || { usage >&2; die "--inbox-path is required"; }
+
 pipeline_path="$(absolute_path "$pipeline_path")"
 input_dir="$(absolute_path "$input_dir")"
 analysis_dir="$(absolute_path "$analysis_dir")"
@@ -529,5 +554,19 @@ snakemake_cmd=(
 [[ -n "$cores" ]] && snakemake_cmd+=(--cores "$cores")
 $dry_run && snakemake_cmd+=(--dry-run)
 
+if $unlock; then
+
+    echo "Unlocking analysis directory: $analysis_dir"
+    (
+        cd "$analysis_dir"
+        snakemake \
+            --profile "$profile" \
+            --snakefile "$pipeline_path/workflow/Snakefile" \
+            --configfile "$analysis_dir/config.nagini.yaml" \
+            --unlock || true
+    )
+fi
+
 cd "$analysis_dir"
 "${snakemake_cmd[@]}"
+
