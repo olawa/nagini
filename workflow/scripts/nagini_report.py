@@ -101,11 +101,60 @@ def _annotation_fields(header_line, annotation_id):
     return [field.strip() for field in match.group(1).rstrip(" '").split("|")] if match else []
 
 
+def parse_mosdepth_dist(path):
+    """Parse mosdepth global.dist.txt into a depth -> proportion mapping."""
+    if not path or not os.path.exists(path):
+        return {}
+    dist = {}
+    with open_text(path) as handle:
+        for line in handle:
+            parts = line.strip().split("\t")
+            if len(parts) >= 3 and parts[0].lower() == "total":
+                try:
+                    cutoff = int(parts[1])
+                    prop = float(parts[2])
+                    dist[cutoff] = prop
+                except ValueError:
+                    continue
+    return dist
+
+
+def parse_demux_info(path, sample="", barcode=""):
+    """Extract sample/barcode demux read count and % of run from demux TSV."""
+    if not path or not os.path.exists(path):
+        return {"barcode": barcode, "reads": "", "fraction": "", "status": ""}
+    norm_sample = str(sample or "").strip().lower()
+    norm_barcode = str(barcode or "").strip().lower()
+    match_row = None
+    with open_text(path) as handle:
+        reader = csv.DictReader(
+            (line for line in handle if not line.startswith("#")),
+            delimiter="\t",
+        )
+        for row in reader:
+            r_samp = str(row.get("Sample", row.get("sample", "")) or "").strip().lower()
+            r_bar = str(row.get("Barcode", row.get("barcode", "")) or "").strip().lower()
+            if (norm_sample and r_samp == norm_sample) or (norm_barcode and r_bar == norm_barcode):
+                match_row = row
+                break
+    if match_row:
+        reads = match_row.get("Reads", match_row.get("reads", ""))
+        frac = match_row.get("Percent of run", match_row.get("percent_of_run", ""))
+        bar = match_row.get("Barcode", match_row.get("barcode", barcode))
+        return {
+            "barcode": bar or barcode,
+            "reads": reads,
+            "fraction": f"{frac}%" if frac and "%" not in str(frac) else str(frac),
+            "status": match_row.get("Status", match_row.get("status", "OK")),
+        }
+    return {"barcode": barcode, "reads": "", "fraction": "", "status": ""}
+
+
 def parse_small_variant_vcf(path, default_caller=""):
     columns = [
         "Caller", "Chromosome", "Position", "Reference", "Alternate", "Filter", "Quality",
         "VAF", "Depth", "Allele depth", "Gene", "Consequence", "Impact",
-        "HGVSc", "HGVSp", "Existing variation", "ClinVar_Significance",
+        "HGVSc", "HGVSp", "Existing variation", "gnomAD_AF", "ClinVar_Significance",
         "ClinVar_Disease", "ClinVar_Review",
     ]
     records = []
@@ -166,6 +215,15 @@ def parse_small_variant_vcf(path, default_caller=""):
                 annotation, "ClinVar_CLNREVSTAT", "CLNREVSTAT"
             ) or str(info.get("CLNREVSTAT", ""))
 
+            gnomad_af = _first_annotation_value(
+                annotation, "gnomAD_AF", "gnomADg_AF", "gnomADe_AF", "MAX_AF", "AF"
+            ) or str(info.get("gnomAD_AF", info.get("AF", "")))
+            try:
+                gnomad_float = float(str(gnomad_af).split(",")[0])
+                gnomad_display = f"{gnomad_float:.5f}"
+            except (ValueError, TypeError, AttributeError):
+                gnomad_display = gnomad_af
+
             raw_vaf = sample_values.get("AF", sample_values.get("VAF", ""))
             try:
                 vaf_float = float(str(raw_vaf).split(",")[0])
@@ -190,6 +248,7 @@ def parse_small_variant_vcf(path, default_caller=""):
                 "HGVSc": annotation.get("HGVSc", annotation.get("HGVS.c", "")),
                 "HGVSp": annotation.get("HGVSp", annotation.get("HGVS.p", "")),
                 "Existing variation": annotation.get("Existing_variation", ""),
+                "gnomAD_AF": gnomad_display,
                 "ClinVar_Significance": clinvar_significance,
                 "ClinVar_Disease": clinvar_disease,
                 "ClinVar_Review": clinvar_review,
@@ -577,6 +636,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
                     sv_tsv, translocations_tsv, wgs_coverage, target_coverage, cramino,
                     cytoband="", caller="", design_bed="", platform="",
+                    target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
                     bcr_abl_exon_coverage=""):
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
@@ -596,7 +656,6 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     bcr_abl_phasing_rows = parse_bcr_abl_tsv(bcr_abl_phasing)
     bcr_abl_exon_rows = parse_bcr_abl_tsv(bcr_abl_exon_coverage)
     has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows)
-
 
     pass_count = sum(record["Filter"] in {"PASS", "."} for record in snvs)
     pathogenic_snvs = [
@@ -635,15 +694,101 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         t_val = float(target_cov.split()[0])
         t_status, t_style = ("PASS", 5) if t_val >= 30.0 else (("BORDERLINE", 6) if t_val >= 15.0 else ("LOW", 4))
     except (ValueError, TypeError, IndexError):
+        t_val = None
         t_status, t_style = ("INFO", 0)
 
+    target_dist_map = parse_mosdepth_dist(target_dist)
+    pct_20x = target_dist_map.get(20)
+    pct_30x = target_dist_map.get(30)
+    pct_20x_str = f"{pct_20x * 100:.1f}%" if pct_20x is not None else "N/A"
+    pct_30x_str = f"{pct_30x * 100:.1f}%" if pct_30x is not None else "N/A"
+    if pct_20x is not None:
+        p20_val = pct_20x * 100.0
+        p20_status, p20_style = (
+            ("PASS", 5) if p20_val >= 90.0 else (("BORDERLINE", 6) if p20_val >= 80.0 else ("LOW", 4))
+        )
+    else:
+        p20_status, p20_style = ("INFO", 0)
+
+    # If BCR-ABL1 assay data is present, compute target coverage metrics directly from BCR-ABL1 exons
+    if has_bcr_abl and bcr_abl_exon_rows:
+        total_exon_len = sum(int(r.get("length", 0)) for r in bcr_abl_exon_rows)
+        if total_exon_len > 0:
+            avg_exon_cov = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / total_exon_len
+            target_cov = f"{avg_exon_cov:.1f}"
+            t_val = avg_exon_cov
+            t_status, t_style = ("PASS", 5) if t_val >= 100.0 else (("BORDERLINE", 6) if t_val >= 20.0 else ("LOW", 4))
+
+            pct_100x = sum(float(r.get("pct_100x", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / (total_exon_len * 100.0)
+            pct_500x = sum(float(r.get("pct_500x", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / (total_exon_len * 100.0)
+            pct_20x_str = f"{pct_100x * 100:.1f}%"
+            pct_30x_str = f"{pct_500x * 100:.1f}%"
+            p20_status, p20_style = ("PASS", 5) if pct_100x >= 0.95 else (("BORDERLINE", 6) if pct_100x >= 0.80 else ("LOW", 4))
+
+    try:
+        w_val = float(wgs_cov.split()[0])
+    except (ValueError, TypeError, IndexError):
+        w_val = None
+
+    if t_val is not None and w_val is not None and w_val > 0:
+        fold_enr = t_val / w_val
+        fold_enr_str = f"{fold_enr:.1f}x"
+        fold_enr_status, fold_enr_style = (
+            ("PASS", 5) if fold_enr >= 5.0 else (("BORDERLINE", 6) if fold_enr >= 2.0 else ("LOW", 4))
+        )
+    else:
+        fold_enr_str = "N/A"
+        fold_enr_status, fold_enr_style = ("INFO", 0)
+
+    if has_bcr_abl and bcr_abl_exon_rows:
+        low_cov_20x = []
+        for r in bcr_abl_exon_rows:
+            try:
+                m_cov = float(r.get("mean_depth", 0.0))
+            except (ValueError, TypeError):
+                continue
+            if m_cov < 100.0:
+                low_cov_20x.append((r.get("exon", ""), m_cov))
+        low_cov_20x.sort(key=lambda x: x[1])
+        low_20x_count = len(low_cov_20x)
+        low_cov_status, low_cov_style = (
+            ("PASS", 5) if low_20x_count == 0 else (("REVIEW", 6) if low_20x_count <= 2 else ("ACTION REQUIRED", 4))
+        )
+    else:
+        low_cov_20x = []
+        for r in target_rows:
+            chrom_name = str(r.get("chrom", "")).strip()
+            if not chrom_name or chrom_name.lower() == "total":
+                continue
+            try:
+                m_cov = float(str(r.get("mean", 0)).split()[0])
+            except (ValueError, TypeError):
+                continue
+            if m_cov < 20.0:
+                low_cov_20x.append((chrom_name, m_cov))
+        low_cov_20x.sort(key=lambda x: x[1])
+        low_20x_count = len(low_cov_20x)
+        low_cov_status, low_cov_style = (
+            ("PASS", 5) if low_20x_count == 0 else (("REVIEW", 6) if low_20x_count <= 5 else ("ACTION REQUIRED", 4))
+        )
+
     caller_display = detected_caller
-    if platform and "clairs" in caller_display.lower():
+    if has_bcr_abl and not snvs:
+        caller_display = "Branford Pileup Caller"
+    elif platform and "clairs" in caller_display.lower():
         caller_display = f"ClairS-TO ({platform})"
     elif not caller_display:
         caller_display = "ClairS-TO"
 
-    target_display = os.path.basename(design_bed) if design_bed else "Whole Genome (WGS)"
+    target_display = "BCR-ABL1 Target Exons" if has_bcr_abl else (os.path.basename(design_bed) if design_bed else "Whole Genome (WGS)")
+
+    demux_meta = parse_demux_info(demux_summary, sample, barcode)
+    barcode_display = demux_meta["barcode"] or barcode or "N/A"
+    demux_yield_display = (
+        f"{demux_meta['reads']} reads ({demux_meta['fraction']})"
+        if demux_meta["reads"]
+        else ("Assigned" if barcode else "N/A")
+    )
 
     # Fluffy-Style Overview Layout with rich sections and status color coding
     overview = [
@@ -652,6 +797,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("SAMPLE & PIPELINE METADATA", 3), ("", 3), ("", 3), ("", 3)],
         [("Sample ID", 7), (sample, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
         [("Sample Type", 7), (f"Tumor ({sample_type})" if sample_type == "T" else f"Normal ({sample_type})", 0), ("Reference Genome", 7), (reference_build, 0)],
+        [("Barcode / Demux ID", 7), (barcode_display, 0), ("Demux Pool Fraction", 7), (demux_yield_display, 0)],
         [("Small Variant Caller", 7), (caller_display, 0), ("Structural Variant Caller", 7), ("Sniffles2", 0)],
         [("Variant Annotation", 7), (annotation, 0), ("Target Region / Panel", 7), (target_display, 0)],
         [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
@@ -662,7 +808,10 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
         [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
         [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
-        [("Mean Target Coverage", 7), ("Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
+        [("Mean Target Coverage", 7), ("Mean depth in BCR-ABL1 exons" if has_bcr_abl else "Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
+        [("Target Fold Enrichment", 7), ("Target / WGS coverage ratio", 0), (fold_enr_str, 0), (fold_enr_status, fold_enr_style)],
+        [("Target Breadth (>=100x)" if has_bcr_abl else "Target Breadth (>=20x)", 7), ("% target bases >= 100x depth" if has_bcr_abl else "% target bases >= 20x depth", 0), (pct_20x_str, 0), (p20_status, p20_style)],
+        [("Target Breadth (>=500x)" if has_bcr_abl else "Target Breadth (>=30x)", 7), ("% target bases >= 500x depth" if has_bcr_abl else "% target bases >= 30x depth", 0), (pct_30x_str, 0), ("PASS" if (pct_30x and pct_30x != "N/A" and pct_30x != "0.0%") else "INFO", 5 if (pct_30x and pct_30x != "N/A" and pct_30x != "0.0%") else 0)],
         [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
         [("", 0), ("", 0), ("", 0), ("", 0)],
         [("VARIANT CALLING SUMMARY", 3), ("", 3), ("COUNT", 3), ("FLAG / ACTION", 3)],
@@ -673,12 +822,13 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("Total Structural Variants", 7), ("Sniffles2 SV calls", 0), (len(svs), 0), ("INFO", 0)],
         [("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)],
         [("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)],
+        [("Low-Coverage Regions (<100x)" if has_bcr_abl else "Low-Coverage Regions (<20x)", 7), ("Target exons below 100x depth" if has_bcr_abl else "Target regions below 20x depth", 0), (low_20x_count, 0), (low_cov_status, low_cov_style)],
     ]
 
     # Add BCR-ABL summary block to overview if BCR-ABL data present
     if has_bcr_abl:
         prim_iso = next((r["fusion_isoform"] for r in bcr_abl_fusion_rows if r.get("status") == "PRIMARY"), "None detected")
-        det_muts = [r["mutation"] for r in bcr_abl_mutation_rows if r.get("status") in ("DETECTED", "SUBCLONAL")]
+        det_muts = [r["mutation"] for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() == "DETECTED"]
         mut_summary = ", ".join(det_muts) if det_muts else "None detected"
         cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper()]
         phase_summary = f"CIS ({', '.join(cis_pairs)})" if cis_pairs else ("TRANS" if bcr_abl_phasing_rows else "N/A (<2 muts)")
@@ -688,6 +838,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
         overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else 0), ("ACTION REQUIRED" if det_muts else "NONE", 4 if det_muts else 5)])
         overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, 4 if cis_pairs else 0), ("COMPOUND MUTATION (CIS)" if cis_pairs else ("POLYCLONAL (TRANS)" if bcr_abl_phasing_rows else "PASS"), 4 if cis_pairs else 5)])
+
 
     # Add clinical findings preview tables directly on the Overview tab
     if pathogenic_snvs:
@@ -718,6 +869,20 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (t.get("chrom2", ""), 0),
                 (t.get("Cytogenetic_Notation", "") or t.get("svtype", ""), 8),
                 (t.get("genes", ""), 0),
+            ])
+
+    if low_cov_20x:
+        overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
+        overview.append([("LOW-COVERAGE TARGET REGIONS (<20x)", 6), ("", 6), ("", 6), ("", 6)])
+        overview.append([("Region / Target", 1), ("Mean Depth", 1), ("Status", 1), ("Description", 1)])
+        for reg, d in low_cov_20x[:15]:
+            st = "SEVERELY LOW (<10x)" if d < 10.0 else "SUBOPTIMAL (<20x)"
+            st_style = 4 if d < 10.0 else 6
+            overview.append([
+                (reg, 0),
+                (f"{d:.1f}x", st_style),
+                (st, st_style),
+                ("Target depth below 20x threshold", 0),
             ])
 
     sheets = [
@@ -760,6 +925,9 @@ def run_from_snakemake(snakemake):
         caller=str(getattr(snakemake.params, "small_variant_caller", "") or ""),
         design_bed=str(getattr(snakemake.params, "design_bed", "") or ""),
         platform=str(getattr(snakemake.params, "clairs_to_platform", "") or ""),
+        target_dist=_first_or_str(getattr(snakemake.input, "target_dist", "")),
+        demux_summary=_first_or_str(getattr(snakemake.input, "demux_summary", "")),
+        barcode=str(getattr(snakemake.params, "barcode", "") or ""),
         bcr_abl_fusion=_first_or_str(getattr(snakemake.input, "bcr_abl_fusion", "")),
         bcr_abl_mutations=_first_or_str(getattr(snakemake.input, "bcr_abl_mutations", "")),
         bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
@@ -784,6 +952,9 @@ def main():
     parser.add_argument("--caller", default="")
     parser.add_argument("--design-bed", default="")
     parser.add_argument("--platform", default="")
+    parser.add_argument("--target-dist", default="")
+    parser.add_argument("--demux-summary", default="")
+    parser.add_argument("--barcode", default="")
     parser.add_argument("--bcr-abl-fusion", default="")
     parser.add_argument("--bcr-abl-mutations", default="")
     parser.add_argument("--bcr-abl-phasing", default="")
@@ -794,6 +965,9 @@ def main():
         args.snv_vcf, args.sv_tsv, args.translocations_tsv, args.wgs_coverage,
         args.target_coverage, args.cramino, args.cytoband, args.caller,
         args.design_bed, args.platform,
+        target_dist=args.target_dist,
+        demux_summary=args.demux_summary,
+        barcode=args.barcode,
         bcr_abl_fusion=args.bcr_abl_fusion,
         bcr_abl_mutations=args.bcr_abl_mutations,
         bcr_abl_phasing=args.bcr_abl_phasing,
@@ -805,4 +979,5 @@ if "snakemake" in globals():
     run_from_snakemake(snakemake)
 elif __name__ == "__main__":
     main()
+
 

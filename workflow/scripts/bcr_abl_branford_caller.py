@@ -279,13 +279,11 @@ def main() -> None:
             ad_alt = per_base.get(alt, 0)
             vaf = (ad_alt / depth) if depth > 0 else 0.0
 
-            # Classification
+            # Classification: only candidate resistance mutations meeting thresholds are DETECTED
             if depth < args.min_depth:
                 status = "LOW_DEPTH"
             elif vaf >= args.min_af and ad_alt >= args.min_alt_reads:
                 status = "DETECTED"
-            elif vaf >= 0.002 and ad_alt >= 3:
-                status = "SUBCLONAL"
             else:
                 status = "WILDTYPE"
 
@@ -327,8 +325,9 @@ def main() -> None:
             }
             all_results.append(record)
 
-            if status in ("DETECTED", "SUBCLONAL"):
+            if status == "DETECTED":
                 detected_mutations.append(record)
+
 
     finally:
         bam.close()

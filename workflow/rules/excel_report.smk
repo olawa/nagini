@@ -13,6 +13,8 @@ rule nagini_excel_report:
         translocations=get_report_translocations_tsv,
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
         target_coverage=get_report_target_coverage,
+        target_dist=get_report_target_dist,
+        demux_summary=get_report_demux_summary,
         cramino="qc/cramino/{sample}_{type}.txt",
         bcr_abl_fusion=get_report_bcr_abl_fusion,
         bcr_abl_mutations=get_report_bcr_abl_mutations,
@@ -22,17 +24,16 @@ rule nagini_excel_report:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
 
     params:
-        # The selected build is a run-level setting.  Use the source value
-        # directly instead of depending on common.smk's convenience copy under
-        # config["reference"].
-        reference_build=config.get("reference_build", "hg38"),
+        reference_build=lambda wildcards: config.get("reference", {}).get("build", config.get("reference_build", "hg38")),
         snv_annotation=(
+
             "VEP" if vep_enabled() else "none"
         ),
         cytoband=get_cytoband_file,
         small_variant_caller=get_small_variant_caller(),
         design_bed=lambda wildcards: config.get("reference", {}).get("design_bed", ""),
         clairs_to_platform=lambda wildcards: config.get("clairs_to_call", {}).get("platform", ""),
+        barcode=get_sample_barcode_name,
     log:
         "logs/nagini_excel_report/{sample}_{type}.log",
     benchmark:
