@@ -202,8 +202,21 @@ files:
     input: null
     output: "reports/bcr_abl/{sample}_{type}.phasing.json"
     when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 Arriba fusions TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 exon coverage TSV
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.exon_coverage.tsv"
+    when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 Arriba fusion plot PDF
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.fusion_plot.pdf"
+    when: "assay_module:bcr_abl"
   - name: MultiQC Nanopore report
     input: null
+
     output: "qc/multiqc/multiqc_nanopore.html"
   - name: Nagini Excel report
     input: null

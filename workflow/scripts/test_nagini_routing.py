@@ -35,15 +35,17 @@ class AssayRegistryTest(unittest.TestCase):
                 set(definition), set(routing.ASSAY_DEFAULTS), f"{name} has odd keys"
             )
 
-    def test_bcr_abl_is_spliced_and_variant_called(self):
-        """The combination the old single-column routing could not express."""
+    def test_bcr_abl_is_spliced_and_uses_bcr_abl_module(self):
+        """BCR-ABL is spliced cDNA and handled by the dedicated bcr_abl module."""
 
         assays = routing.resolve_assays({})
         bcr_abl = assays["bcr_abl"]
         self.assertEqual(bcr_abl["library_type"], "cdna")
-        self.assertTrue(bcr_abl["snv_calling"])
+        self.assertFalse(bcr_abl["snv_calling"])
         self.assertFalse(bcr_abl["sv_calling"])
+        self.assertEqual(bcr_abl["modules"], ["bcr_abl"])
         self.assertEqual(routing.minimap2_preset(bcr_abl["library_type"]), "splice")
+
 
     def test_adaptive_is_wgs_confined_to_the_design(self):
         assays = routing.resolve_assays({})
@@ -96,11 +98,13 @@ class SampleRoutingTest(unittest.TestCase):
             {"sample": "S_WGS", "assay": "wgs"},
             {"sample": "S_ADAPT", "assay": "adaptive"},
             {"sample": "S_BCR", "assay": "bcr_abl"},
+            {"sample": "S_AMP", "assay": "amplicon"},
         ])
         self.assertTrue(routing.sample_needs_sv_calling(units, "S_WGS", self.assays))
         self.assertTrue(routing.sample_needs_sv_calling(units, "S_ADAPT", self.assays))
         self.assertFalse(routing.sample_needs_sv_calling(units, "S_BCR", self.assays))
-        self.assertTrue(routing.sample_needs_snv_calling(units, "S_BCR", self.assays))
+        self.assertFalse(routing.sample_needs_snv_calling(units, "S_BCR", self.assays))
+        self.assertTrue(routing.sample_needs_snv_calling(units, "S_AMP", self.assays))
         self.assertEqual(
             routing.get_library_type(units, "S_BCR", self.assays), "cdna"
         )
@@ -125,10 +129,11 @@ class SampleRoutingTest(unittest.TestCase):
             routing.minimap2_preset(routing.get_library_type(units, "S", self.assays)),
             "map-ont",
         )
-        self.assertTrue(routing.sample_needs_snv_calling(units, "S", self.assays))
+        self.assertFalse(routing.sample_needs_snv_calling(units, "S", self.assays))
         warnings = routing.routing_warnings(units, ["S"], self.assays)
         self.assertEqual(len(warnings), 1)
         self.assertIn("library_type=amplicon", warnings[0])
+
 
     def test_unknown_assay_names_the_valid_ones(self):
         units = units_frame([{"sample": "S", "assay": "bcrabl"}])
@@ -246,16 +251,17 @@ class AssaySettingTest(unittest.TestCase):
 
         units = units_frame([
             {"sample": "S_WGS", "assay": "wgs"},
-            {"sample": "S_BCR", "assay": "bcr_abl"},
+            {"sample": "S_AMP", "assay": "amplicon"},
         ])
         self.assertEqual(
             routing.assay_setting(units, "S_WGS", self.assays, "clairs_to_call", "snv_min_af", 0.05),
             0.05,
         )
         self.assertEqual(
-            routing.assay_setting(units, "S_BCR", self.assays, "clairs_to_call", "snv_min_af", 0.05),
-            0.005,
+            routing.assay_setting(units, "S_AMP", self.assays, "clairs_to_call", "snv_min_af", 0.05),
+            0.01,
         )
+
 
     def test_a_setting_without_an_override_falls_back_to_the_default(self):
         units = units_frame([{"sample": "S", "assay": "bcr_abl"}])

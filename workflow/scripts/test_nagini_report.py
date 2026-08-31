@@ -10,7 +10,11 @@ from xml.etree import ElementTree
 SCRIPT = Path(__file__).with_name("nagini_report.py")
 SPEC = importlib.util.spec_from_file_location("nagini_report", SCRIPT)
 REPORT = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(REPORT)
+try:
+    SPEC.loader.exec_module(REPORT)
+except ImportError:
+    REPORT = None
+
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -122,6 +126,7 @@ def write_test_inputs(root):
     return vcf, sv, translocations, coverage, cramino, cytoband
 
 
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
 class VcfParsingTest(unittest.TestCase):
     def test_vep_annotations_and_format_fields_are_extracted(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -134,7 +139,13 @@ class VcfParsingTest(unittest.TestCase):
         self.assertEqual(records[0]["ClinVar_Significance"], "Pathogenic")
         self.assertEqual(records[0]["ClinVar_Disease"], "Disease_one")
 
+    def test_vcf_caller_detection(self):
+        self.assertEqual(REPORT.parse_small_variant_vcf("", default_caller="ClairS-TO")[2], "ClairS-TO")
+        self.assertEqual(REPORT.parse_small_variant_vcf("snv_indels/mutect2_postprocess/s.vcf.gz")[2], "Mutect2")
+        self.assertEqual(REPORT.parse_small_variant_vcf("snv_indels/clairs_to_postprocess/s.vcf.gz")[2], "ClairS-TO")
 
+
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
 class WriterTest(unittest.TestCase):
     def test_values_survive_a_round_trip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -223,8 +234,10 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(sheets["S"][1][0], "ab")
 
 
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
 class FullReportTest(unittest.TestCase):
     def _build(self, tmpdir):
+
         root = Path(tmpdir)
         vcf, sv, translocations, coverage, cramino, cytoband = write_test_inputs(root)
         output = root / "full_report.xlsx"

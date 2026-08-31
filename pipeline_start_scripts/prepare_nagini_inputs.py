@@ -838,6 +838,62 @@ def sample_from_fastq(path: Path, pattern: re.Pattern[str]) -> str:
     return sample
 
 
+def infer_barcode_map_from_fastq_files(
+    args: argparse.Namespace, files: list[Path]
+) -> dict[str, dict[str, str]]:
+    """Infer barcode assignments when FASTQ names contain sample and barcode.
+
+    A MinKNOW export can contain perfectly usable barcode FASTQs without a
+    parseable sample sheet.  In that case filenames such as
+    ``PBE82562_pass_barcode23_...fastq.gz`` still provide an unambiguous
+    sample/barcode assignment.  Only infer this mapping when every observed
+    barcode has exactly one sample; ambiguous barcodes must use
+    ``--barcode-map`` instead.
+    """
+
+    pattern = re.compile(args.sample_regex)
+    input_dir = Path(args.input_dir).resolve()
+    samples_by_barcode: defaultdict[str, set[str]] = defaultdict(set)
+    for path in files:
+        barcode = _barcode_from_path(path, input_dir)
+        if not barcode:
+            continue
+        samples_by_barcode[barcode].add(sample_from_fastq(path, pattern).strip())
+
+    if not samples_by_barcode:
+        return {}
+
+    conflicts = {
+        barcode: sorted(samples)
+        for barcode, samples in samples_by_barcode.items()
+        if len(samples) != 1 or "" in samples
+    }
+    if conflicts:
+        details = "; ".join(
+            f"{barcode}: {', '.join(samples) or '<empty sample>'}"
+            for barcode, samples in sorted(conflicts.items())
+        )
+        raise SystemExit(
+            "Cannot infer a unique sample for barcode FASTQ files ("
+            + details
+            + "). Provide --barcode-map."
+        )
+
+    library_type = resolve_library_type_for_assay(
+        getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
+    )
+    return {
+        barcode: {
+            "barcode": barcode,
+            "sample": next(iter(samples)),
+            "type": str(args.sample_type).strip().upper(),
+            "library_type": library_type,
+            "assay": str(getattr(args, "assay", "") or "").strip().lower(),
+        }
+        for barcode, samples in sorted(samples_by_barcode.items())
+    }
+
+
 def make_barcode_fastq_tables(
     args: argparse.Namespace,
     mapping: dict[str, dict[str, str]],
@@ -935,11 +991,20 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
             getattr(args, "assay", ""),
             known_library_types(_pipeline_root(args)),
         )
+    inferred_mapping = False
+    if not mapping:
+        mapping = infer_barcode_map_from_fastq_files(args, files)
+        inferred_mapping = bool(mapping)
     if mapping:
         if map_sources and not getattr(args, "barcode_map", None):
             print(
                 "Auto-detected barcode map(s): "
                 + ", ".join(str(path) for path in map_sources)
+            )
+        elif inferred_mapping:
+            print(
+                "Auto-inferred barcode map from FASTQ filenames for: "
+                + ", ".join(sorted(mapping))
             )
         return make_barcode_fastq_tables(args, mapping)
 

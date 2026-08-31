@@ -51,6 +51,8 @@ SIMPLE_SV_FUSION_PAIRS: ""
 # floating tag below is a development default, not a validated one.
 CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
 DEEPVARIANT_CONTAINER: "docker://google/deepvariant:1.6.0"
+ARRIBA_CONTAINER: "docker://uhrigs/arriba:2.4.0"
+
 
 
 site: "{{SITE_ID}}"
@@ -298,6 +300,21 @@ simple_sv_annotation:
   container: "docker://hydragenetics/simple_sv_annotation:2019.02.18"
   panel: "{{SIMPLE_SV_PANEL}}"
   fusion_pairs: "{{SIMPLE_SV_FUSION_PAIRS}}"
+
+arriba:
+  container: "{{ARRIBA_CONTAINER}}"
+  extra: ""
+  protein_domains: ""
+
+bcr_abl:
+  tolerance: 150
+  min_mapq: 1
+  min_af: 0.01
+  min_depth: 50
+  min_alt_reads: 5
+  max_depth: 1000000
+  min_spanning_reads: 10
+
 
 annotate_small_variants: false
 annotate_svs: false

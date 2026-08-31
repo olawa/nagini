@@ -19,6 +19,16 @@ def _branford_bed():
     return _bcr_abl_resource(bed_name)
 
 
+def _bcr_abl_exons_bed():
+    """Pick the BCR-ABL1 exon coordinates BED that matches the configured reference build."""
+    override = config.get("bcr_abl", {}).get("exons_bed", "")
+    if override:
+        return override
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    bed_name = "bcr_abl1_exons_hg19.bed" if "19" in build else "bcr_abl1_exons_hg38.bed"
+    return _bcr_abl_resource(bed_name)
+
+
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
     input:
@@ -31,6 +41,7 @@ rule bcr_abl_fusion_counts:
     output:
         tsv="reports/bcr_abl/{sample}_{type}.fusion_summary.tsv",
         json="reports/bcr_abl/{sample}_{type}.fusion_summary.json",
+        arriba="reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv",
     params:
         tolerance=lambda wildcards: config.get("bcr_abl", {}).get("tolerance", 150),
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
@@ -55,6 +66,7 @@ rule bcr_abl_fusion_counts:
             --features-json {input.features} \
             --output {output.tsv} \
             --json-output {output.json} \
+            --arriba-output {output.arriba} \
             --tolerance {params.tolerance} \
             --min-mapq {params.min_mapq} > {log} 2>&1
         """
@@ -74,11 +86,11 @@ rule bcr_abl_branford_calling:
         all_sites="reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
         vcf="reports/bcr_abl/{sample}_{type}.branford_mutations.vcf",
-
     params:
         min_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "min_af", config.get("bcr_abl", {}).get("min_af", 0.01)),
         min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50),
         min_alt_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_alt_reads", 5),
+        max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
     threads: config.get("bcr_abl", {}).get("threads", 1)
@@ -102,7 +114,8 @@ rule bcr_abl_branford_calling:
             --features-json {input.features} \
             --min-af {params.min_af} \
             --min-depth {params.min_depth} \
-            --min-alt-reads {params.min_alt_reads} > {log} 2>&1
+            --min-alt-reads {params.min_alt_reads} \
+            --max-depth {params.max_depth} > {log} 2>&1
         """
 
 
@@ -140,3 +153,85 @@ rule bcr_abl_phasing:
             --min-spanning-reads {params.min_spanning_reads} \
             --min-mapq {params.min_mapq} > {log} 2>&1
         """
+
+
+rule bcr_abl_exon_coverage:
+    """Calculate depth and coverage metrics across BCR and ABL1 exons."""
+    input:
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bed=lambda wildcards: _bcr_abl_exons_bed(),
+    output:
+        tsv="reports/bcr_abl/{sample}_{type}.exon_coverage.tsv",
+    params:
+        min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
+        max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
+    log:
+        "logs/bcr_abl_exon_coverage/{sample}_{type}.log",
+    threads: config.get("bcr_abl", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("bcr_abl", {}).get("threads", 1),
+        time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    conda:
+        "../../envs/nagini.yaml"
+    shell:
+        """
+        python3 {workflow.basedir}/scripts/bcr_abl_exon_coverage.py \
+            --bam {input.bam} \
+            --bed {input.bed} \
+            --sample {wildcards.sample} \
+            --output {output.tsv} \
+            --min-mapq {params.min_mapq} \
+            --max-depth {params.max_depth} > {log} 2>&1
+        """
+
+
+rule bcr_abl_draw_fusions:
+    """Generate Arriba fusion diagrams using draw_fusions.R."""
+    input:
+        fusions="reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv",
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+    output:
+        pdf="reports/bcr_abl/{sample}_{type}.fusion_plot.pdf",
+    params:
+        gtf=lambda wildcards: config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", ""),
+        cytobands=lambda wildcards: config.get("reference", {}).get("cytoband", ""),
+        protein_domains=lambda wildcards: config.get("arriba", {}).get("protein_domains", ""),
+        extra=config.get("arriba", {}).get("extra", ""),
+    log:
+        "logs/bcr_abl_draw_fusions/{sample}_{type}.log",
+    threads: config.get("arriba", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("arriba", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("arriba", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("arriba", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("arriba", {}).get("threads", 1),
+        time=config.get("arriba", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("arriba", {}).get("container", config.get("ARRIBA_CONTAINER", "docker://uhrigs/arriba:2.4.0"))
+    conda:
+        "../../envs/nagini.yaml"
+    shell:
+        """
+        if [ -n "{params.gtf}" ] && [ -f "{params.gtf}" ]; then
+            CYTO_ARG=""
+            [ -n "{params.cytobands}" ] && [ -f "{params.cytobands}" ] && CYTO_ARG="--cytobands={params.cytobands}"
+            PROT_ARG=""
+            [ -n "{params.protein_domains}" ] && [ -f "{params.protein_domains}" ] && PROT_ARG="--proteinDomains={params.protein_domains}"
+
+            draw_fusions.R \
+                --fusions={input.fusions} \
+                --alignments={input.bam} \
+                --output={output.pdf} \
+                --annotation={params.gtf} \
+                $CYTO_ARG $PROT_ARG {params.extra} > {log} 2>&1 || touch {output.pdf}
+        else
+            echo "Gene annotation GTF not provided; creating placeholder PDF." > {log}
+            touch {output.pdf}
+        fi
+        """
+

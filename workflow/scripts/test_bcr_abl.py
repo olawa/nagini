@@ -20,7 +20,13 @@ def load_module(name: str):
 FUSION_COUNTER = load_module("bcr_abl_fusion_counter")
 BRANFORD_CALLER = load_module("bcr_abl_branford_caller")
 PHASER = load_module("bcr_abl_phaser")
-REPORT = load_module("nagini_report")
+EXON_COVERAGE = load_module("bcr_abl_exon_coverage")
+try:
+    REPORT = load_module("nagini_report")
+except ImportError:
+    REPORT = None
+
+
 
 
 def create_synthetic_bam(bam_path: Path, reads: list[dict], references: list[tuple[str, int]]):
@@ -229,8 +235,10 @@ class TestBcrAblFusionCounter(unittest.TestCase):
         self.assertIsNone(FUSION_COUNTER.assign_exon(750, exon_map, tolerance=50))
 
 
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
 class TestBcrAblReportIntegration(unittest.TestCase):
     def test_generates_workbook_with_bcr_abl_tab(self):
+
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             out_xlsx = tmp / "report.xlsx"
@@ -250,6 +258,12 @@ class TestBcrAblReportIntegration(unittest.TestCase):
                 "sample\tmutation_1\tmutation_2\tphase_state\tcis_fraction_percent\tcis_reads_11\ttrans_reads_10\ttrans_reads_01\twt_reads_00\tother_reads\ttotal_spanning_reads\tpos_1\tpos_2\tref_1\talt_1\tref_2\talt_2\tclinical_interpretation\n"
             )
 
+            exon_cov_tsv = tmp / "exon_cov.tsv"
+            exon_cov_tsv.write_text(
+                "sample\texon\tchrom\tstart\tend\tlength_bp\tmean_depth\tmedian_depth\tmin_depth\tmax_depth\tpct_gte_100x\tpct_gte_500x\tpct_gte_1000x\tspanning_reads\n"
+                "SAMPLE_1\tABL1_Exon2\tchr9\t130854065\t130854237\t173\t4500.0\t4500.0\t3200\t5800\t100.0\t100.0\t100.0\t4500\n"
+            )
+
             REPORT.generate_report(
                 output=str(out_xlsx),
                 sample="SAMPLE_1",
@@ -265,11 +279,95 @@ class TestBcrAblReportIntegration(unittest.TestCase):
                 bcr_abl_fusion=str(fusion_tsv),
                 bcr_abl_mutations=str(muts_tsv),
                 bcr_abl_phasing=str(phasing_tsv),
+                bcr_abl_exon_coverage=str(exon_cov_tsv),
             )
 
             self.assertTrue(out_xlsx.is_file())
             self.assertGreater(out_xlsx.stat().st_size, 1000)
 
 
+class TestBcrAblExonCoverage(unittest.TestCase):
+    def test_calculate_exon_coverage_on_synthetic_bam(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bam_path = tmp / "test_exon.bam"
+            bed_path = tmp / "exons.bed"
+            out_tsv = tmp / "exon_cov.tsv"
+
+            bed_path.write_text(
+                "chr9\t10\t50\tABL1_Exon2\n"
+                "chr9\t60\t100\tABL1_Exon3\n"
+            )
+
+            # 50 reads covering Exon 2 (10..50)
+            reads = []
+            for i in range(50):
+                reads.append({
+                    "name": f"read_e2_{i}",
+                    "chrom": "chr9",
+                    "start": 10,
+                    "seq": "A" * 40,
+                })
+            # 20 reads covering Exon 3 (60..100)
+            for i in range(20):
+                reads.append({
+                    "name": f"read_e3_{i}",
+                    "chrom": "chr9",
+                    "start": 60,
+                    "seq": "C" * 40,
+                })
+
+            create_synthetic_bam(bam_path, reads, [("chr9", 200)])
+
+            exons = EXON_COVERAGE.read_exon_bed(bed_path)
+            self.assertEqual(len(exons), 2)
+
+            results = EXON_COVERAGE.calculate_exon_coverage(
+                bam_path=bam_path,
+                exons=exons,
+                sample="EXON_TEST",
+            )
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0]["exon"], "ABL1_Exon2")
+            self.assertEqual(results[0]["mean_depth"], 50.0)
+            self.assertEqual(results[0]["spanning_reads"], 50)
+            self.assertEqual(results[1]["exon"], "ABL1_Exon3")
+            self.assertEqual(results[1]["mean_depth"], 20.0)
+            self.assertEqual(results[1]["spanning_reads"], 20)
+
+            EXON_COVERAGE.write_exon_coverage_tsv(results, out_tsv)
+            self.assertTrue(out_tsv.is_file())
+
+
+class TestBcrAblArribaOutput(unittest.TestCase):
+    def test_write_arriba_tsv(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            arriba_tsv = tmp / "arriba.tsv"
+
+            isoform_counts = {"e14a2": 500, "e13a2": 50}
+            raw_events = [
+                {"isoform": "e14a2", "bcr_pos": 23290413, "abl_pos": 130854065, "bcr_exon": "e14", "abl_exon": "a2", "read_name": "r1"},
+                {"isoform": "e13a2", "bcr_pos": 23289621, "abl_pos": 130854065, "bcr_exon": "e13", "abl_exon": "a2", "read_name": "r2"},
+            ]
+
+            FUSION_COUNTER.write_arriba_tsv(
+                sample="TEST_S",
+                isoform_counts=isoform_counts,
+                raw_events=raw_events,
+                arriba_path=arriba_tsv,
+                build="hg38",
+            )
+
+            self.assertTrue(arriba_tsv.is_file())
+            content = arriba_tsv.read_text().splitlines()
+            self.assertGreaterEqual(len(content), 3)
+            self.assertTrue(content[0].startswith("#gene1\tgene2"))
+            self.assertIn("BCR\tABL1", content[1])
+            self.assertIn("chr22:23290413", content[1])
+            self.assertIn("chr9:130854065", content[1])
+
+
 if __name__ == "__main__":
     unittest.main()
+

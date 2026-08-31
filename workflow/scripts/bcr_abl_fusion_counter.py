@@ -104,7 +104,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--features-json", type=Path, default=None, help="Optional BCR-ABL features JSON database")
     parser.add_argument("--output", required=True, type=Path, help="Output summary TSV path")
     parser.add_argument("--json-output", type=Path, default=None, help="Optional output JSON summary path")
+    parser.add_argument("--arriba-output", type=Path, default=None, help="Optional Arriba-compatible fusions TSV path for draw_fusions.R")
     parser.add_argument("--tolerance", type=int, default=150, help="Coordinate tolerance in bp to match exon junction")
+
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality for read segments")
     return parser.parse_args()
 
@@ -335,6 +337,80 @@ def write_outputs(
             json.dump(summary_payload, handle, indent=2)
 
 
+def write_arriba_tsv(
+    sample: str,
+    isoform_counts: Dict[str, int],
+    raw_events: List[Dict[str, Any]],
+    arriba_path: Path,
+    build: str,
+) -> None:
+    """Format detected fusions into Arriba standard TSV for draw_fusions.R."""
+    arriba_path.parent.mkdir(parents=True, exist_ok=True)
+    headers = [
+        "#gene1", "gene2", "strand1(gene/fusion)", "strand2(gene/fusion)",
+        "breakpoint1", "breakpoint2", "site1", "site2", "type",
+        "direction1", "direction2", "split_reads1", "split_reads2",
+        "discordant_mates", "coverage1", "coverage2", "confidence",
+        "closest_genomic_breakpoint1", "closest_genomic_breakpoint2",
+        "filters", "fusion_transcript", "reading_frame", "peptide_sequence",
+        "read_identifiers",
+    ]
+    rows = []
+    events_by_iso: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for ev in raw_events:
+        events_by_iso[ev["isoform"]].append(ev)
+
+    for iso, count in sorted(isoform_counts.items(), key=lambda x: -x[1]):
+        if count <= 0:
+            continue
+        evs = events_by_iso.get(iso, [])
+        bcr_pos_list = [e["bcr_pos"] for e in evs]
+        abl_pos_list = [e["abl_pos"] for e in evs]
+        bcr_pos = sorted(bcr_pos_list)[len(bcr_pos_list) // 2] if bcr_pos_list else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso.split("a")[0], 23632600)
+        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get("a" + iso.split("a")[1] if "a" in iso else "a2", 133729452)
+        bcr_exon = evs[0]["bcr_exon"] if evs else (iso.split("a")[0] if "a" in iso else "e14")
+        abl_exon = evs[0]["abl_exon"] if evs else ("a" + iso.split("a")[1] if "a" in iso else "a2")
+
+        bcr_chrom = "chr22"
+        abl_chrom = "chr9"
+
+        read_ids = ",".join([e["read_name"] for e in evs[:50]])
+        confidence = "high" if count >= 5 else "medium"
+
+        row = [
+            "BCR",
+            "ABL1",
+            "+/+",
+            "+/+",
+            f"{bcr_chrom}:{bcr_pos}",
+            f"{abl_chrom}:{abl_pos}",
+            f"exon/{bcr_exon}",
+            f"exon/{abl_exon}",
+            "translocation",
+            "downstream",
+            "upstream",
+            str(count),
+            "0",
+            "0",
+            str(count),
+            str(count),
+            confidence,
+            ".",
+            ".",
+            "none",
+            f"BCR({bcr_exon}):ABL1({abl_exon})",
+            "in-frame",
+            ".",
+            read_ids,
+        ]
+        rows.append(row)
+
+    with arriba_path.open("w") as handle:
+        handle.write("\t".join(headers) + "\n")
+        for row in rows:
+            handle.write("\t".join(row) + "\n")
+
+
 def main() -> None:
     args = parse_args()
     if not args.bam.is_file():
@@ -356,6 +432,14 @@ def main() -> None:
         args.json_output,
         build,
     )
+    if args.arriba_output:
+        write_arriba_tsv(
+            args.sample,
+            isoform_counts,
+            raw_events,
+            args.arriba_output,
+            build,
+        )
     print(
         f"BCR-ABL1 Fusion Counter [{args.sample}]: identified {sum(isoform_counts.values())} "
         f"fusion-spanning reads across {len(isoform_counts)} isoforms.",
@@ -365,3 +449,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

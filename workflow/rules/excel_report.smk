@@ -17,8 +17,10 @@ rule nagini_excel_report:
         bcr_abl_fusion=get_report_bcr_abl_fusion,
         bcr_abl_mutations=get_report_bcr_abl_mutations,
         bcr_abl_phasing=get_report_bcr_abl_phasing,
+        bcr_abl_exon_coverage=get_report_bcr_abl_exon_coverage,
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
+
     params:
         # The selected build is a run-level setting.  Use the source value
         # directly instead of depending on common.smk's convenience copy under

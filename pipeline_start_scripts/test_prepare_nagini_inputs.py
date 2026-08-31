@@ -208,6 +208,55 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertIn("fastq_pass", contents)
         self.assertNotIn("fastq_fail", contents)
 
+    def test_existing_barcode_fastq_infers_sample_from_filenames(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "runs"
+            for run_number in (1, 2):
+                for status in ("fastq_pass", "fastq_fail"):
+                    for barcode in ("barcode01", "barcode23"):
+                        directory = root / f"run_{run_number}" / status / barcode
+                        directory.mkdir(parents=True, exist_ok=True)
+                        path = directory / (
+                            f"PBE82562_{status.removeprefix('fastq_')}_"
+                            f"{barcode}_run{run_number}.fastq.gz"
+                        )
+                        with gzip.open(path, "wt") as handle:
+                            handle.write(f"@{run_number}_{status}_{barcode}\nACGT\n+\nIIII\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.analysis_dir = Path(tmpdir) / "analysis"
+            args.barcode_map = None
+            args.sample_type = "N"
+            args.input_type = "fastq"
+            args.sequence_id = "combined"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.library_type = "cdna"
+            args.assay = "bcr_abl"
+            args.sample_regex = PREPARE.DEFAULT_SAMPLE_REGEX
+            args.fastq_status = "all"
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_fastq_tables(args)
+            PREPARE.validate_tables(samples, units)
+
+            merged = {
+                row["barcode_name"]: Path(row["fastq1"])
+                for row in units
+            }
+            line_counts = {
+                barcode: gzip.open(path, "rt").read().count("\n")
+                for barcode, path in merged.items()
+            }
+
+        self.assertEqual(samples, [{"sample": "PBE82562"}])
+        self.assertEqual(sorted(merged), ["barcode01", "barcode23"])
+        self.assertEqual(line_counts, {"barcode01": 16, "barcode23": 16})
+        self.assertTrue(all(row["processing_unit"].endswith("_merged") for row in units))
+        self.assertTrue(all(row["assay"] == "bcr_abl" for row in units))
+
     def test_minknow_tables_defer_dorado_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "minknow"

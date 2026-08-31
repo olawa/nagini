@@ -97,18 +97,14 @@ BUILTIN_ASSAYS = {
     "bcr_abl": {
         "description": "BCR-ABL1 cDNA amplicon: fusion isoforms and kinase-domain resistance",
         "library_type": "cdna",
-        "snv_calling": True,
+        "snv_calling": False,
         "sv_calling": False,
         "target_restricted": True,
         "modules": ["bcr_abl"],
-        # Resistance clones matter at a few percent and below, and amplicon
-        # depth can resolve them.  The floor is a starting point: the real
-        # detection limit is per position and comes out of bcr_abl_af_eval.
-        "config_overrides": {
-            "clairs_to_call": {"snv_min_af": 0.005, "indel_min_af": 0.005},
-        },
+        "config_overrides": {},
     },
 }
+
 
 DEFAULT_ASSAY = "wgs"
 
@@ -305,14 +301,15 @@ def get_sample_caller(units, sample: str, assays: dict, global_caller: str = "au
     norm_global = normalize(global_caller or "auto")
     if norm_global != "auto":
         return norm_global
+    lib = get_library_type(units, sample, assays)
+    if lib in ("amplicon", "cdna"):
+        return "clairs_to"
     if str(unit_type).upper() == "N":
         return "deepvariant"
     if str(unit_type).upper() == "T":
         return "clairs_to"
-    lib = get_library_type(units, sample, assays)
-    if lib in ("amplicon", "cdna"):
-        return "clairs_to"
     return "deepvariant"
+
 
 
 

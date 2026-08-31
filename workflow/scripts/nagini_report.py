@@ -458,7 +458,7 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
-def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows):
+def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None):
     layout = [
         [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
@@ -544,13 +544,41 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows):
                 (r.get("clinical_interpretation", ""), 0),
             ])
 
+    if exon_rows:
+        layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+        layout.append([("4. BCR & ABL1 EXON COVERAGE STATISTICS", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+        layout.append([
+            ("Exon", 1), ("Chrom", 1), ("Start", 1), ("End", 1), ("Length (bp)", 1),
+            ("Mean Depth", 1), ("Median Depth", 1), ("Min Depth", 1), ("Max Depth", 1),
+            (">=100x (%)", 1), (">=500x (%)", 1), (">=1000x (%)", 1), ("Spanning Reads", 1)
+        ])
+        for r in exon_rows:
+            mean_d = float(r.get("mean_depth", 0.0))
+            d_style = 5 if mean_d >= 500 else (6 if mean_d >= 100 else 0)
+            layout.append([
+                (r.get("exon", ""), 0),
+                (r.get("chrom", ""), 0),
+                (int(r.get("start", 0)), 0),
+                (int(r.get("end", 0)), 0),
+                (int(r.get("length_bp", 0)), 0),
+                (mean_d, d_style),
+                (float(r.get("median_depth", 0.0)), 0),
+                (int(r.get("min_depth", 0)), 0),
+                (int(r.get("max_depth", 0)), 0),
+                (float(r.get("pct_gte_100x", 0.0)), 0),
+                (float(r.get("pct_gte_500x", 0.0)), 0),
+                (float(r.get("pct_gte_1000x", 0.0)), 0),
+                (int(r.get("spanning_reads", 0)), 0),
+            ])
+
     return layout
 
 
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
                     sv_tsv, translocations_tsv, wgs_coverage, target_coverage, cramino,
                     cytoband="", caller="", design_bed="", platform="",
-                    bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing=""):
+                    bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
+                    bcr_abl_exon_coverage=""):
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
@@ -566,7 +594,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     bcr_abl_fusion_rows = parse_bcr_abl_tsv(bcr_abl_fusion)
     bcr_abl_mutation_rows = parse_bcr_abl_tsv(bcr_abl_mutations)
     bcr_abl_phasing_rows = parse_bcr_abl_tsv(bcr_abl_phasing)
-    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows)
+    bcr_abl_exon_rows = parse_bcr_abl_tsv(bcr_abl_exon_coverage)
+    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows)
+
 
     pass_count = sum(record["Filter"] in {"PASS", "."} for record in snvs)
     pathogenic_snvs = [
@@ -694,7 +724,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         ("Overview", overview, LAYOUT),
     ]
     if has_bcr_abl:
-        sheets.append(("BCR-ABL1", build_bcr_abl_sheet(sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows), LAYOUT))
+        sheets.append(("BCR-ABL1", build_bcr_abl_sheet(sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows, bcr_abl_exon_rows), LAYOUT))
 
     sheets.extend([
         ("SNVs and indels", table(snv_columns, snvs)),
@@ -733,6 +763,7 @@ def run_from_snakemake(snakemake):
         bcr_abl_fusion=_first_or_str(getattr(snakemake.input, "bcr_abl_fusion", "")),
         bcr_abl_mutations=_first_or_str(getattr(snakemake.input, "bcr_abl_mutations", "")),
         bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
+        bcr_abl_exon_coverage=_first_or_str(getattr(snakemake.input, "bcr_abl_exon_coverage", "")),
     )
 
 
@@ -756,6 +787,7 @@ def main():
     parser.add_argument("--bcr-abl-fusion", default="")
     parser.add_argument("--bcr-abl-mutations", default="")
     parser.add_argument("--bcr-abl-phasing", default="")
+    parser.add_argument("--bcr-abl-exon-coverage", default="")
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,
@@ -765,6 +797,7 @@ def main():
         bcr_abl_fusion=args.bcr_abl_fusion,
         bcr_abl_mutations=args.bcr_abl_mutations,
         bcr_abl_phasing=args.bcr_abl_phasing,
+        bcr_abl_exon_coverage=args.bcr_abl_exon_coverage,
     )
 
 
@@ -772,3 +805,4 @@ if "snakemake" in globals():
     run_from_snakemake(snakemake)
 elif __name__ == "__main__":
     main()
+
