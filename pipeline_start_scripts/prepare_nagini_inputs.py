@@ -221,8 +221,38 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also verify registry checksums. Reads every file, so it is slow.",
     )
+    parser.add_argument(
+        "--filter-reads",
+        dest="filter_reads",
+        action="store_true",
+        default=None,
+        help="Enable pre-alignment read filtering (nanofilter).",
+    )
+    parser.add_argument(
+        "--no-filter-reads",
+        dest="filter_reads",
+        action="store_false",
+        help="Disable pre-alignment read filtering.",
+    )
+    parser.add_argument(
+        "--filter-qv",
+        default="",
+        help="Minimum mean read quality QV for nanofilter (e.g. 20).",
+    )
+    parser.add_argument(
+        "--filter-len",
+        default="",
+        help="Read length range for nanofilter (e.g. 500-3000).",
+    )
+    parser.add_argument(
+        "--filter-binary",
+        default="",
+        help="Path to nanofilter binary or script.",
+    )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
+
+
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -1396,7 +1426,23 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     if getattr(args, "cores", None):
         config["cores"] = int(args.cores)
 
+    read_filter_overrides = {}
+    if getattr(args, "filter_reads", None) is not None:
+        read_filter_overrides["enabled"] = bool(args.filter_reads)
+    if getattr(args, "filter_qv", ""):
+        try:
+            read_filter_overrides["min_qv"] = float(args.filter_qv)
+        except ValueError:
+            read_filter_overrides["min_qv"] = args.filter_qv
+    if getattr(args, "filter_len", ""):
+        read_filter_overrides["length_range"] = str(args.filter_len)
+    if getattr(args, "filter_binary", ""):
+        read_filter_overrides["binary"] = str(args.filter_binary)
+    if read_filter_overrides:
+        config.setdefault("read_filter", {}).update(read_filter_overrides)
+
     runtime_config = analysis_dir / "config.nagini.yaml"
+
     with runtime_config.open("w") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
     return runtime_config

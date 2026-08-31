@@ -67,9 +67,14 @@ clairs_to_container=""
 methylation="No"
 tumor_content=""
 cores=""
+filter_reads=""
+filter_qv=""
+filter_len=""
+filter_binary=""
 force_inputs=false
 dry_run=false
 unlock=false
+
 
 
 usage() {
@@ -123,8 +128,14 @@ Options:
   --clairs-to-container IMAGE   Override default ClairS-TO container image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
   --tumor-content FLOAT         Optional value added to samples.tsv.
+  --filter-reads                Enable pre-alignment read filtering (nanofilter).
+  --no-filter-reads             Disable pre-alignment read filtering.
+  --filter-qv QV                Minimum mean read quality (e.g. 20).
+  --filter-len MIN-MAX          Read length range (e.g. 500-3000).
+  --filter-binary PATH          Path to nanofilter binary or script.
   --cores N                     Override the profile's core count.
   --force-inputs                Recreate samples.tsv and units.tsv.
+
   --unlock                      Remove a stale Snakemake directory lock before/instead of running.
   --dry-run                     Build the DAG without executing jobs.
   -h, --help                    Show this help.
@@ -334,7 +345,31 @@ while [[ $# -gt 0 ]]; do
             tumor_content="$2"
             shift 2
             ;;
+        --filter-reads)
+            filter_reads=true
+            shift
+            ;;
+        --no-filter-reads)
+            filter_reads=false
+            shift
+            ;;
+        --filter-qv)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            filter_qv="$2"
+            shift 2
+            ;;
+        --filter-len)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            filter_len="$2"
+            shift 2
+            ;;
+        --filter-binary)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            filter_binary="$2"
+            shift 2
+            ;;
         --cores)
+
             [[ $# -ge 2 ]] || die "$1 requires a value"
             cores="$2"
             shift 2
@@ -511,8 +546,14 @@ prepare_cmd=(
 [[ -n "$cores" ]] && prepare_cmd+=(--cores "$cores")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
+[[ "$filter_reads" == "true" ]] && prepare_cmd+=(--filter-reads)
+[[ "$filter_reads" == "false" ]] && prepare_cmd+=(--no-filter-reads)
+[[ -n "$filter_qv" ]] && prepare_cmd+=(--filter-qv "$filter_qv")
+[[ -n "$filter_len" ]] && prepare_cmd+=(--filter-len "$filter_len")
+[[ -n "$filter_binary" ]] && prepare_cmd+=(--filter-binary "$filter_binary")
 $force_inputs && prepare_cmd+=(--force)
 "${prepare_cmd[@]}"
+
 
 cp "$site_config" "$analysis_dir/site_config.yaml"
 cp "$reference_files" "$analysis_dir/reference_files.yaml"

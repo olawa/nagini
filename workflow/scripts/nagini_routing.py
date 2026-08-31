@@ -101,8 +101,15 @@ BUILTIN_ASSAYS = {
         "sv_calling": False,
         "target_restricted": True,
         "modules": ["bcr_abl"],
-        "config_overrides": {},
+        "config_overrides": {
+            "read_filter": {
+                "enabled": True,
+                "min_qv": 20,
+                "length_range": "500-3000",
+            },
+        },
     },
+
 }
 
 

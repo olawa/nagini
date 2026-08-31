@@ -150,7 +150,17 @@ references:
 # them here; anything not listed keeps its built-in definition.
 assays: {}
 
+# Pre-alignment read filtering with nanofilter (QV, length range)
+read_filter:
+  enabled: false
+  binary: ""
+  min_qv: 20
+  length_range: "500-3000"
+  extra: ""
+  threads: 4
+
 # Passed verbatim to minimap2. Add/remove methylation- or SAM-related flags
+
 # here, for example --MD or -y, according to the basecaller and downstream
 # modification workflow. The alignment rule also adds an @RG line by default.
 minimap2_align:
