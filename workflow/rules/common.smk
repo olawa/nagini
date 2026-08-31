@@ -762,6 +762,40 @@ def get_report_target_coverage(wildcards):
     return []
 
 
+def get_report_target_dist(wildcards):
+    if has_design_bed():
+        return get_sample_type_path(
+            wildcards, "qc/mosdepth_bed", ".mosdepth.global.dist.txt"
+        )
+    return []
+
+
+def get_report_demux_summary(wildcards):
+    if dorado_barcodes:
+        return "qc/dorado_demux/dorado_demux_mqc.tsv"
+    return []
+
+
+def get_sample_barcode_name(wildcards):
+    rows = _unit_rows(wildcards.sample, wildcards.type)
+    if not rows.empty:
+        barcodes = [
+            str(b).strip()
+            for b in rows.get("barcode_name", pd.Series(dtype=str)).tolist()
+            if str(b).strip()
+        ]
+        if barcodes:
+            return barcodes[0]
+        bc = [
+            str(b).strip()
+            for b in rows.get("barcode", pd.Series(dtype=str)).tolist()
+            if str(b).strip()
+        ]
+        if bc:
+            return bc[0]
+    return ""
+
+
 def get_report_bcr_abl_fusion(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
         return get_sample_type_path(

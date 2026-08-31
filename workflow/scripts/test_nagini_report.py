@@ -285,6 +285,93 @@ class FullReportTest(unittest.TestCase):
         self.assertEqual(row["Gene"], "GENE1")
         self.assertEqual(row["Caller"], "ClairS-TO")
         self.assertEqual(row["ClinVar_Significance"], "Pathogenic")
+        self.assertIn("gnomAD_AF", row)
+
+    def test_adaptive_sampling_enrichment_and_demux_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband = write_test_inputs(root)
+            wgs_cov = root / "wgs_cov.tsv"
+            wgs_cov.write_text("chrom\tlength\tbases\tmean\ntotal\t1000\t1000\t2.5\n")
+            target_cov = root / "target_cov.tsv"
+            target_cov.write_text(
+                "chrom\tlength\tbases\tmean\n"
+                "chr1:100-200\t100\t100\t45.0\n"
+                "chr1:300-400\t100\t100\t8.0\n"
+                "total\t200\t200\t26.5\n"
+            )
+            target_dist = root / "target.dist.txt"
+            target_dist.write_text("total\t0\t1.00\ntotal\t10\t0.98\ntotal\t20\t0.92\ntotal\t30\t0.85\n")
+            demux_summary = root / "demux.tsv"
+            demux_summary.write_text(
+                "Barcode\tSample\tReads\tPercent of classified\tPercent of run\tStatus\n"
+                "barcode01\texample\t1500000\t50.0\t45.5\tOK\n"
+            )
+            output = root / "adaptive_report.xlsx"
+            REPORT.generate_report(
+                str(output), "example", "T", "hg38", "VEP", str(vcf),
+                str(sv), str(translocations), str(wgs_cov), str(target_cov), str(cramino),
+                str(cytoband), caller="ClairS-TO", design_bed="/data/panel.bed",
+                platform="ont_r10_dorado_sup_5khz", target_dist=str(target_dist),
+                demux_summary=str(demux_summary), barcode="barcode01",
+            )
+            sheets = read_workbook(output)
+            flat = ["\t".join(row) for row in sheets["Overview"]]
+            text = "\n".join(flat)
+
+            # Metadata verification
+            self.assertIn("Barcode / Demux ID\tbarcode01", text)
+            self.assertIn("1500000 reads (45.5%)", text)
+
+            # Enrichment & Coverage breadth verification
+            self.assertIn("Target Fold Enrichment\tTarget / WGS coverage ratio\t10.6x\tPASS", text)
+            self.assertIn("Target Breadth (>=20x)\t% target bases >= 20x depth\t92.0%\tPASS", text)
+            self.assertIn("Target Breadth (>=30x)\t% target bases >= 30x depth\t85.0%\tPASS", text)
+
+            # Low-coverage target region alert
+            self.assertIn("LOW-COVERAGE TARGET REGIONS (<20x)", text)
+            self.assertIn("chr1:300-400\t8.0x\tSEVERELY LOW (<10x)", text)
+
+
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
+class MosdepthDistParsingTest(unittest.TestCase):
+    def test_parse_mosdepth_dist(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dist_file = Path(tmpdir) / "dist.txt"
+            dist_file.write_text(
+                "chr1\t10\t0.5\n"
+                "total\t0\t1.00\n"
+                "total\t10\t0.95\n"
+                "total\t20\t0.88\n"
+                "total\t30\t0.75\n"
+            )
+            parsed = REPORT.parse_mosdepth_dist(dist_file)
+            self.assertEqual(parsed[0], 1.0)
+            self.assertEqual(parsed[10], 0.95)
+            self.assertEqual(parsed[20], 0.88)
+            self.assertEqual(parsed[30], 0.75)
+
+
+@unittest.skipIf(REPORT is None, "xlsxwriter not available")
+class DemuxParsingTest(unittest.TestCase):
+    def test_parse_demux_info(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tsv_file = Path(tmpdir) / "demux_mqc.tsv"
+            tsv_file.write_text(
+                "# section_name: Dorado\n"
+                "Barcode\tSample\tReads\tPercent of classified\tPercent of run\tStatus\n"
+                "barcode01\tsampleA\t1000\t60.0\t50.0\tOK\n"
+                "barcode02\tsampleB\t800\t40.0\t40.0\tOK\n"
+            )
+            res_a = REPORT.parse_demux_info(tsv_file, sample="sampleA", barcode="barcode01")
+            self.assertEqual(res_a["barcode"], "barcode01")
+            self.assertEqual(res_a["reads"], "1000")
+            self.assertEqual(res_a["fraction"], "50.0%")
+
+            res_b = REPORT.parse_demux_info(tsv_file, sample="sampleB")
+            self.assertEqual(res_b["barcode"], "barcode02")
+            self.assertEqual(res_b["reads"], "800")
+            self.assertEqual(res_b["fraction"], "40.0%")
 
 
 if __name__ == "__main__":
