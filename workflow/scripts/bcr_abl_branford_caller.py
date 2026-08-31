@@ -89,6 +89,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
     parser.add_argument("--min-base-quality", type=int, default=0, help="Minimum base quality")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality")
+    parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args()
 
 
@@ -123,35 +124,41 @@ def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
     return rows
 
 
-def count_position(
+def count_positions_batch(
     bam: pysam.AlignmentFile,
     chrom: str,
-    pos_1based: int,
+    positions_0based: set[int],
     max_depth: int,
     min_baseq: int,
     min_mapq: int,
-) -> Dict[str, int]:
-    """Extract forward/reverse base counts at a single coordinate, excluding reference skips."""
-    counts = {f"{base}_{strand}": 0 for base in BASES for strand in ("fwd", "rev")}
-    counts["refskip"] = 0
-    counts["deletion"] = 0
-    counts["low_baseq"] = 0
+) -> Dict[int, Dict[str, int]]:
+    """Extract forward/reverse base counts across a set of coordinates in a single pileup traversal."""
+    results: Dict[int, Dict[str, int]] = {}
+    if not positions_0based:
+        return results
 
-    target_0based = pos_1based - 1
+    for pos_0based in positions_0based:
+        results[pos_0based] = {f"{base}_{strand}": 0 for base in BASES for strand in ("fwd", "rev")}
+        results[pos_0based].update({"refskip": 0, "deletion": 0, "low_baseq": 0})
+
+    min_pos = min(positions_0based)
+    max_pos = max(positions_0based) + 1
 
     for column in bam.pileup(
         chrom,
-        target_0based,
-        pos_1based,
+        min_pos,
+        max_pos,
         truncate=True,
         stepper="nofilter",
         max_depth=max_depth,
         min_base_quality=0,
         ignore_overlaps=False,
     ):
-        if column.reference_pos != target_0based:
+        ref_pos = column.reference_pos
+        if ref_pos not in positions_0based:
             continue
 
+        counts = results[ref_pos]
         for read in column.pileups:
             aln = read.alignment
             if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail:
@@ -180,7 +187,21 @@ def count_position(
             strand = "rev" if aln.is_reverse else "fwd"
             counts[f"{base}_{strand}"] += 1
 
-    return counts
+    return results
+
+
+def count_position(
+    bam: pysam.AlignmentFile,
+    chrom: str,
+    pos_1based: int,
+    max_depth: int,
+    min_baseq: int,
+    min_mapq: int,
+) -> Dict[str, int]:
+    """Extract forward/reverse base counts at a single coordinate (wrapper for count_positions_batch)."""
+    target_0based = pos_1based - 1
+    batch_res = count_positions_batch(bam, chrom, {target_0based}, max_depth, min_baseq, min_mapq)
+    return batch_res.get(target_0based, {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
 
 
 def main() -> None:
@@ -203,16 +224,41 @@ def main() -> None:
         except Exception as e:
             sys.stderr.write(f"Warning: could not load TKI profiles from {args.features_json}: {e}\n")
 
-    bam = pysam.AlignmentFile(str(args.bam), "rb")
+    bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
 
     # Contig renaming check (e.g. chr9 vs 9)
     bam_contigs = set(bam.references)
-    
-    cache: Dict[Tuple[str, int], Dict[str, int]] = {}
-    all_results: List[Dict[str, Any]] = []
-    detected_mutations: List[Dict[str, Any]] = []
 
+    # Group all target sites by resolved BAM contig for single-pass scanning
+    chrom_positions: Dict[str, set[int]] = {}
+    for site in sites:
+        chrom = site["chrom"]
+        if chrom not in bam_contigs:
+            alt_chrom = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
+            if alt_chrom in bam_contigs:
+                chrom = alt_chrom
+        if chrom not in chrom_positions:
+            chrom_positions[chrom] = set()
+        chrom_positions[chrom].add(site["pos"] - 1)
+
+    cache: Dict[Tuple[str, int], Dict[str, int]] = {}
     try:
+        for chrom, pos_set in chrom_positions.items():
+            if chrom in bam_contigs:
+                batch_counts = count_positions_batch(
+                    bam, chrom, pos_set, args.max_depth, args.min_base_quality, args.min_mapping_quality
+                )
+                for pos_0based, counts in batch_counts.items():
+                    cache[(chrom, pos_0based + 1)] = counts
+            else:
+                for pos_0based in pos_set:
+                    c = {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")}
+                    c.update({"refskip": 0, "deletion": 0, "low_baseq": 0})
+                    cache[(chrom, pos_0based + 1)] = c
+
+        all_results: List[Dict[str, Any]] = []
+        detected_mutations: List[Dict[str, Any]] = []
+
         for site in sites:
             chrom = site["chrom"]
             if chrom not in bam_contigs:
@@ -225,19 +271,10 @@ def main() -> None:
             alt = site["alt"]
             short_mut = site["short_mutation"]
 
-            key = (chrom, pos)
-            if key not in cache:
-                if chrom in bam_contigs:
-                    cache[key] = count_position(
-                        bam, chrom, pos, args.max_depth, args.min_base_quality, args.min_mapping_quality
-                    )
-                else:
-                    cache[key] = {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")}
-                    cache[key].update({"refskip": 0, "deletion": 0, "low_baseq": 0})
-
-            counts = cache[key]
-            per_base = {b: counts[f"{b}_fwd"] + counts[f"{b}_rev"] for b in BASES}
+            counts = cache.get((chrom, pos), {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
+            per_base = {b: counts.get(f"{b}_fwd", 0) + counts.get(f"{b}_rev", 0) for b in BASES}
             depth = sum(per_base.values())
+
             ad_ref = per_base.get(ref, 0)
             ad_alt = per_base.get(alt, 0)
             vaf = (ad_alt / depth) if depth > 0 else 0.0

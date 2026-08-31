@@ -10,6 +10,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIPELINE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Activate conda environment 'nagini' if available and not already active
+if [[ "${CONDA_DEFAULT_ENV:-}" != "nagini" ]]; then
+    if command -v conda &>/dev/null; then
+        eval "$(conda shell.bash hook 2>/dev/null || true)"
+        conda activate nagini 2>/dev/null || true
+    elif [[ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
+        source "${HOME}/miniconda3/etc/profile.d/conda.sh"
+        conda activate nagini 2>/dev/null || true
+    elif [[ -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
+        source "${HOME}/anaconda3/etc/profile.d/conda.sh"
+        conda activate nagini 2>/dev/null || true
+    elif [[ -f "/opt/conda/etc/profile.d/conda.sh" ]]; then
+        source "/opt/conda/etc/profile.d/conda.sh"
+        conda activate nagini 2>/dev/null || true
+    elif [[ -f "/home/cgu-lab/miniconda3/etc/profile.d/conda.sh" ]]; then
+        source "/home/cgu-lab/miniconda3/etc/profile.d/conda.sh"
+        conda activate nagini 2>/dev/null || true
+    fi
+fi
+
+
 input_dir=""
 analysis_dir="${PWD}"
 pipeline_path="${PIPELINE_ROOT}"

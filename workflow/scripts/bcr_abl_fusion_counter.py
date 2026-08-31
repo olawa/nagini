@@ -106,8 +106,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--json-output", type=Path, default=None, help="Optional output JSON summary path")
     parser.add_argument("--arriba-output", type=Path, default=None, help="Optional Arriba-compatible fusions TSV path for draw_fusions.R")
     parser.add_argument("--tolerance", type=int, default=150, help="Coordinate tolerance in bp to match exon junction")
-
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality for read segments")
+    parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args()
 
 
@@ -138,7 +138,7 @@ def assign_exon(pos: int, exon_map: Dict[str, int], tolerance: int) -> Optional[
 
 
 def extract_fusion_events(
-    bam_path: Path, build: str, tolerance: int, min_mapq: int
+    bam_path: Path, build: str, tolerance: int, min_mapq: int, threads: int = 1
 ) -> Tuple[Dict[str, int], List[Dict[str, Any]], int]:
     """Inspect reads for chimeric BCR-ABL1 alignments and identify junction isoforms."""
     coords = KNOWN_JUNCTIONS[build]
@@ -147,8 +147,9 @@ def extract_fusion_events(
     bcr_exons = coords["bcr_exons"]
     abl_exons = coords["abl_exons"]
 
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
+    bam = pysam.AlignmentFile(str(bam_path), "rb", threads=threads)
     read_segments: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
 
     total_reads_scanned = 0
     try:
@@ -416,13 +417,14 @@ def main() -> None:
     if not args.bam.is_file():
         sys.exit(f"BAM file not found: {args.bam}")
 
-    bam = pysam.AlignmentFile(str(args.bam), "rb")
+    bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
     build = detect_genome_build(bam, args.genome_build)
     bam.close()
 
     isoform_counts, raw_events, total_scanned = extract_fusion_events(
-        args.bam, build, args.tolerance, args.min_mapq
+        args.bam, build, args.tolerance, args.min_mapq, threads=getattr(args, "threads", 1)
     )
+
 
     write_outputs(
         args.sample,

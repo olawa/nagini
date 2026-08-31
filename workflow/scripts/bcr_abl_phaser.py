@@ -31,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-json", type=Path, default=None, help="Optional output phasing JSON path")
     parser.add_argument("--min-spanning-reads", type=int, default=10, help="Minimum spanning reads required for robust phasing")
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality")
+    parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args()
 
 
@@ -68,20 +69,54 @@ def load_detected_mutations(tsv_path: Path) -> List[Dict[str, Any]]:
 
 
 def get_base_at_pos(read: pysam.AlignedSegment, target_1based: int) -> Optional[str]:
-    """Return the base in query sequence at a 1-based reference position, or None if skipped/del/out of bounds."""
-    target_0based = target_1based - 1
+    """Return the base in query sequence at a 1-based reference position, or None if skipped/del/out of bounds.
     
+    Uses direct CIGAR stepping for maximum performance without allocating pair tuples.
+    """
+    target_0based = target_1based - 1
+
     # Quick bounding box check
     if target_0based < read.reference_start or target_0based >= read.reference_end:
         return None
 
-    # Use get_aligned_pairs for exact alignment mapping
-    for query_pos, ref_pos in read.get_aligned_pairs():
-        if ref_pos == target_0based:
-            if query_pos is None:
+    cigartuples = read.cigartuples
+    if not cigartuples:
+        return None
+
+    seq = read.query_sequence
+    if not seq:
+        return None
+
+    ref_cur = read.reference_start
+    query_cur = 0
+
+    for op, length in cigartuples:
+        if op in (0, 7, 8):  # Match (M), Equal (=), Diff (X)
+            if ref_cur <= target_0based < ref_cur + length:
+                offset = target_0based - ref_cur
+                return seq[query_cur + offset].upper()
+            ref_cur += length
+            query_cur += length
+        elif op == 1:  # Insertion (I)
+            query_cur += length
+        elif op == 2:  # Deletion (D)
+            if ref_cur <= target_0based < ref_cur + length:
                 return "DEL"
-            return read.query_sequence[query_pos].upper()
+            ref_cur += length
+        elif op == 3:  # RefSkip (N - intron skip)
+            if ref_cur <= target_0based < ref_cur + length:
+                return "REFSKIP"
+            ref_cur += length
+        elif op == 4:  # Soft clip (S)
+            query_cur += length
+        elif op in (5, 6):  # Hard clip (H), Pad (P)
+            pass
+
+        if ref_cur > target_0based:
+            break
+
     return None
+
 
 
 def phase_mutation_pair(
@@ -221,8 +256,9 @@ def main() -> None:
     phased_pairs: List[Dict[str, Any]] = []
 
     if len(detected_muts) >= 2:
-        bam = pysam.AlignmentFile(str(args.bam), "rb")
+        bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
         try:
+
             for m1, m2 in itertools.combinations(detected_muts, 2):
                 pair_result = phase_mutation_pair(
                     bam, m1, m2, args.sample, args.min_spanning_reads, args.min_mapq

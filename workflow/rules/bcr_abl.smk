@@ -48,12 +48,12 @@ rule bcr_abl_fusion_counts:
         genome_build=lambda wildcards: config.get("reference_build", "hg38"),
     log:
         "logs/bcr_abl_fusion_counts/{sample}_{type}.log",
-    threads: config.get("bcr_abl", {}).get("threads", 1)
+    threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("bcr_abl", {}).get("threads", 1),
+        threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     conda:
         "../../envs/nagini.yaml"
@@ -68,7 +68,8 @@ rule bcr_abl_fusion_counts:
             --json-output {output.json} \
             --arriba-output {output.arriba} \
             --tolerance {params.tolerance} \
-            --min-mapq {params.min_mapq} > {log} 2>&1
+            --min-mapq {params.min_mapq} \
+            --threads {threads} > {log} 2>&1
         """
 
 
@@ -93,12 +94,12 @@ rule bcr_abl_branford_calling:
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
-    threads: config.get("bcr_abl", {}).get("threads", 1)
+    threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("bcr_abl", {}).get("threads", 1),
+        threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     conda:
         "../../envs/nagini.yaml"
@@ -115,7 +116,8 @@ rule bcr_abl_branford_calling:
             --min-af {params.min_af} \
             --min-depth {params.min_depth} \
             --min-alt-reads {params.min_alt_reads} \
-            --max-depth {params.max_depth} > {log} 2>&1
+            --max-depth {params.max_depth} \
+            --threads {threads} > {log} 2>&1
         """
 
 
@@ -133,12 +135,12 @@ rule bcr_abl_phasing:
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
     log:
         "logs/bcr_abl_phasing/{sample}_{type}.log",
-    threads: config.get("bcr_abl", {}).get("threads", 1)
+    threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("bcr_abl", {}).get("threads", 1),
+        threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     conda:
         "../../envs/nagini.yaml"
@@ -151,7 +153,8 @@ rule bcr_abl_phasing:
             --output-tsv {output.tsv} \
             --output-json {output.json} \
             --min-spanning-reads {params.min_spanning_reads} \
-            --min-mapq {params.min_mapq} > {log} 2>&1
+            --min-mapq {params.min_mapq} \
+            --threads {threads} > {log} 2>&1
         """
 
 
@@ -168,12 +171,12 @@ rule bcr_abl_exon_coverage:
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
     log:
         "logs/bcr_abl_exon_coverage/{sample}_{type}.log",
-    threads: config.get("bcr_abl", {}).get("threads", 1)
+    threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("bcr_abl", {}).get("threads", 1),
+        threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     conda:
         "../../envs/nagini.yaml"
@@ -185,8 +188,10 @@ rule bcr_abl_exon_coverage:
             --sample {wildcards.sample} \
             --output {output.tsv} \
             --min-mapq {params.min_mapq} \
-            --max-depth {params.max_depth} > {log} 2>&1
+            --max-depth {params.max_depth} \
+            --threads {threads} > {log} 2>&1
         """
+
 
 
 rule bcr_abl_draw_fusions:
