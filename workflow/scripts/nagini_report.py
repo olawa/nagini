@@ -473,7 +473,9 @@ def write_xlsx(path, sheets):
     workbook = xlsxwriter.Workbook(
         path, {"constant_memory": False, "default_date_format": "yyyy-mm-dd"}
     )
+    workbook.set_size(1600, 1200)
     try:
+
         workbook.set_properties(
             {
                 "title": "nagini analysis report",
@@ -710,20 +712,38 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     else:
         p20_status, p20_style = ("INFO", 0)
 
-    # If BCR-ABL1 assay data is present, compute target coverage metrics directly from BCR-ABL1 exons
-    if has_bcr_abl and bcr_abl_exon_rows:
+    total_fusion_reads = sum(int(r.get("read_count", 0)) for r in bcr_abl_fusion_rows)
+    raw_reads_num = 0
+    try:
+        raw_reads_num = int(float(str(total_reads).replace(",", "")))
+    except (ValueError, TypeError):
+        raw_reads_num = 0
+
+    if raw_reads_num > 0 and total_fusion_reads > 0:
+        target_enrich_pct = (total_fusion_reads / raw_reads_num) * 100.0
+        target_enrich_str = f"{target_enrich_pct:.2f}%"
+        enrich_status, enrich_style = ("PASS", 5) if target_enrich_pct >= 0.5 else ("INFO", 0)
+    else:
+        target_enrich_str = "N/A"
+        enrich_status, enrich_style = ("INFO", 0)
+
+    if bcr_abl_exon_rows:
         total_exon_len = sum(int(r.get("length", 0)) for r in bcr_abl_exon_rows)
         if total_exon_len > 0:
             avg_exon_cov = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / total_exon_len
-            target_cov = f"{avg_exon_cov:.1f}"
-            t_val = avg_exon_cov
-            t_status, t_style = ("PASS", 5) if t_val >= 100.0 else (("BORDERLINE", 6) if t_val >= 20.0 else ("LOW", 4))
-
-            pct_100x = sum(float(r.get("pct_100x", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / (total_exon_len * 100.0)
-            pct_500x = sum(float(r.get("pct_500x", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / (total_exon_len * 100.0)
-            pct_20x_str = f"{pct_100x * 100:.1f}%"
-            pct_30x_str = f"{pct_500x * 100:.1f}%"
-            p20_status, p20_style = ("PASS", 5) if pct_100x >= 0.95 else (("BORDERLINE", 6) if pct_100x >= 0.80 else ("LOW", 4))
+            kd_depth_str = f"{avg_exon_cov:.1f}x"
+            kd_val = avg_exon_cov
+            kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
+        else:
+            kd_depth_str = "N/A"
+            kd_status, kd_style = ("INFO", 0)
+    elif bcr_abl_mutation_rows:
+        kd_val = sum(int(r.get("depth", 0)) for r in bcr_abl_mutation_rows) / len(bcr_abl_mutation_rows)
+        kd_depth_str = f"{kd_val:.1f}x"
+        kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
+    else:
+        kd_depth_str = "N/A"
+        kd_status, kd_style = ("INFO", 0)
 
     try:
         w_val = float(wgs_cov.split()[0])
@@ -740,22 +760,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         fold_enr_str = "N/A"
         fold_enr_status, fold_enr_style = ("INFO", 0)
 
-    if has_bcr_abl and bcr_abl_exon_rows:
-        low_cov_20x = []
-        for r in bcr_abl_exon_rows:
-            try:
-                m_cov = float(r.get("mean_depth", 0.0))
-            except (ValueError, TypeError):
-                continue
-            if m_cov < 100.0:
-                low_cov_20x.append((r.get("exon", ""), m_cov))
-        low_cov_20x.sort(key=lambda x: x[1])
-        low_20x_count = len(low_cov_20x)
-        low_cov_status, low_cov_style = (
-            ("PASS", 5) if low_20x_count == 0 else (("REVIEW", 6) if low_20x_count <= 2 else ("ACTION REQUIRED", 4))
-        )
-    else:
-        low_cov_20x = []
+    low_cov_20x = []
+    if not has_bcr_abl:
         for r in target_rows:
             chrom_name = str(r.get("chrom", "")).strip()
             if not chrom_name or chrom_name.lower() == "total":
@@ -802,28 +808,47 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("Variant Annotation", 7), (annotation, 0), ("Target Region / Panel", 7), (target_display, 0)],
         [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
         [("", 0), ("", 0), ("", 0), ("", 0)],
-        [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
-        [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
-        [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
-        [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
-        [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
-        [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
-        [("Mean Target Coverage", 7), ("Mean depth in BCR-ABL1 exons" if has_bcr_abl else "Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
-        [("Target Fold Enrichment", 7), ("Target / WGS coverage ratio", 0), (fold_enr_str, 0), (fold_enr_status, fold_enr_style)],
-        [("Target Breadth (>=100x)" if has_bcr_abl else "Target Breadth (>=20x)", 7), ("% target bases >= 100x depth" if has_bcr_abl else "% target bases >= 20x depth", 0), (pct_20x_str, 0), (p20_status, p20_style)],
-        [("Target Breadth (>=500x)" if has_bcr_abl else "Target Breadth (>=30x)", 7), ("% target bases >= 500x depth" if has_bcr_abl else "% target bases >= 30x depth", 0), (pct_30x_str, 0), ("PASS" if (pct_30x and pct_30x != "N/A" and pct_30x != "0.0%") else "INFO", 5 if (pct_30x and pct_30x != "N/A" and pct_30x != "0.0%") else 0)],
-        [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
-        [("", 0), ("", 0), ("", 0), ("", 0)],
-        [("VARIANT CALLING SUMMARY", 3), ("", 3), ("COUNT", 3), ("FLAG / ACTION", 3)],
-        [("Total Small Variants", 7), ("SNVs and short indels", 0), (len(snvs), 0), ("PASS", 5)],
-        [("PASS Small Variants", 7), ("High-confidence calls", 0), (pass_count, 0), ("PASS", 5)],
-        [("ClinVar Pathogenic Variants", 7), ("Pathogenic / Likely Pathogenic", 0), (len(pathogenic_snvs), 0), ("ACTION REQUIRED" if pathogenic_snvs else "NONE", 4 if pathogenic_snvs else 5)],
-        [("High Impact Variants", 7), ("Stop gained / frameshift / splice", 0), (len(high_impact_snvs), 0), ("REVIEW" if high_impact_snvs else "NONE", 6 if high_impact_snvs else 5)],
-        [("Total Structural Variants", 7), ("Sniffles2 SV calls", 0), (len(svs), 0), ("INFO", 0)],
-        [("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)],
-        [("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)],
-        [("Low-Coverage Regions (<100x)" if has_bcr_abl else "Low-Coverage Regions (<20x)", 7), ("Target exons below 100x depth" if has_bcr_abl else "Target regions below 20x depth", 0), (low_20x_count, 0), (low_cov_status, low_cov_style)],
     ]
+
+    if has_bcr_abl:
+        overview.extend([
+            [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
+            [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
+            [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
+            [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
+            [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
+            [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
+            [("BCR-ABL1 Fusion Reads", 7), ("Total fusion-spanning reads (deduplicated)", 0), (total_fusion_reads, 0), ("PASS" if total_fusion_reads > 0 else "INFO", 5 if total_fusion_reads > 0 else 0)],
+            [("BCR-ABL1 Target Enrichment", 7), ("Fusion reads / total sequenced reads", 0), (target_enrich_str, 0), (enrich_status, enrich_style)],
+            [("Kinase Domain Mean Depth", 7), ("Mean depth across ABL1 resistance sites", 0), (kd_depth_str, 0), (kd_status, kd_style)],
+        ])
+    else:
+        overview.extend([
+            [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
+            [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
+            [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
+            [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
+            [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
+            [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
+            [("Mean Target Coverage", 7), ("Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
+            [("Target Fold Enrichment", 7), ("Target / WGS coverage ratio", 0), (fold_enr_str, 0), (fold_enr_status, fold_enr_style)],
+            [("Target Breadth (>=20x)", 7), ("% target bases >= 20x depth", 0), (pct_20x_str, 0), (p20_status, p20_style)],
+            [("Target Breadth (>=30x)", 7), ("% target bases >= 30x depth", 0), (pct_30x_str, 0), ("PASS" if (pct_30x and pct_30x >= 0.85) else ("INFO" if pct_30x is not None else "N/A"), 5 if (pct_30x and pct_30x >= 0.85) else 0)],
+            [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
+        ])
+
+    overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
+    overview.append([("VARIANT CALLING SUMMARY", 3), ("", 3), ("COUNT", 3), ("FLAG / ACTION", 3)])
+    overview.append([("Total Small Variants", 7), ("SNVs and short indels", 0), (len(snvs), 0), ("PASS", 5)])
+    overview.append([("PASS Small Variants", 7), ("High-confidence calls", 0), (pass_count, 0), ("PASS", 5)])
+    overview.append([("ClinVar Pathogenic Variants", 7), ("Pathogenic / Likely Pathogenic", 0), (len(pathogenic_snvs), 0), ("ACTION REQUIRED" if pathogenic_snvs else "NONE", 4 if pathogenic_snvs else 5)])
+    overview.append([("High Impact Variants", 7), ("Stop gained / frameshift / splice", 0), (len(high_impact_snvs), 0), ("REVIEW" if high_impact_snvs else "NONE", 6 if high_impact_snvs else 5)])
+    overview.append([("Total Structural Variants", 7), ("Sniffles2 SV calls", 0), (len(svs), 0), ("INFO", 0)])
+    overview.append([("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)])
+    overview.append([("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)])
+    if not has_bcr_abl:
+        overview.append([("Low-Coverage Regions (<20x)", 7), ("Target regions below 20x depth", 0), (low_20x_count, 0), (low_cov_status, low_cov_style)])
+
 
     # Add BCR-ABL summary block to overview if BCR-ABL data present
     if has_bcr_abl:
