@@ -29,6 +29,20 @@ def _bcr_abl_exons_bed():
     return _bcr_abl_resource(bed_name)
 
 
+def _bcr_abl_gtf():
+    """Pick the gene annotation GTF for BCR-ABL1 fusion plotting."""
+    override = config.get("bcr_abl", {}).get("gtf", "")
+    if override and os.path.isfile(override):
+        return override
+    ref_gtf = config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", "")
+    if ref_gtf and os.path.isfile(ref_gtf):
+        return ref_gtf
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    gtf_name = "bcr_abl_hg19.gtf" if "19" in build else "bcr_abl_hg38.gtf"
+    return _bcr_abl_resource(gtf_name)
+
+
+
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
     input:
@@ -203,10 +217,11 @@ rule bcr_abl_draw_fusions:
     output:
         pdf="reports/bcr_abl/{sample}_{type}.fusion_plot.pdf",
     params:
-        gtf=lambda wildcards: config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", ""),
+        gtf=lambda wildcards: _bcr_abl_gtf(),
         cytobands=lambda wildcards: config.get("reference", {}).get("cytoband", ""),
         protein_domains=lambda wildcards: config.get("arriba", {}).get("protein_domains", ""),
         extra=config.get("arriba", {}).get("extra", ""),
+
     log:
         "logs/bcr_abl_draw_fusions/{sample}_{type}.log",
     threads: config.get("arriba", {}).get("threads", 1)
