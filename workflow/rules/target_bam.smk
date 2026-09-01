@@ -7,7 +7,7 @@ __license__ = "GPL-3"
 rule pad_target_bed:
     """Pad the design BED file by +/- 25 kb (or configurable bp) and merge overlapping intervals."""
     input:
-        bed=lambda wildcards: config.get("reference", {}).get("design_bed", ""),
+        bed=lambda wildcards: get_resolved_design_bed(),
     output:
         bed="alignment/target_bam/targets_padded_25kb.bed",
     params:

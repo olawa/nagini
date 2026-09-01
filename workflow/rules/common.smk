@@ -560,10 +560,23 @@ def samples_with_assay_module(module):
     ]
 
 
+def get_resolved_design_bed():
+    """Return the resolved absolute path to design_bed if it exists, else empty string."""
+    bed = str(config.get("reference", {}).get("design_bed", "") or "").strip()
+    if not bed:
+        return ""
+    if os.path.isfile(bed):
+        return os.path.abspath(bed)
+    if not os.path.isabs(bed):
+        repo_relative = os.path.normpath(os.path.join(workflow.basedir, "..", bed))
+        if os.path.isfile(repo_relative):
+            return repo_relative
+    return ""
+
+
 def has_design_bed():
-    """Return True if a valid design_bed is configured."""
-    bed = config.get("reference", {}).get("design_bed", "")
-    return bool(bed and os.path.isfile(bed))
+    """Return True if a valid design_bed is configured and exists."""
+    return bool(get_resolved_design_bed())
 
 
 def get_minimap2_preset_for_unit(wildcards):
@@ -675,8 +688,9 @@ def mutect2_enabled(sample=None, unit_type=None):
 
 def get_clairs_to_bed(wildcards):
     """Return the design BED if configured, otherwise whole-genome contigs BED."""
-    if has_design_bed():
-        return config["reference"]["design_bed"]
+    resolved = get_resolved_design_bed()
+    if resolved:
+        return resolved
     return "references/genome_contigs.bed"
 
 

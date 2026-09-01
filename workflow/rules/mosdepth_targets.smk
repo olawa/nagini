@@ -9,7 +9,7 @@ rule mosdepth_targets:
     input:
         bam="alignment/nagini_bam/{sample}_{type}.bam",
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
-        bed=config["reference"]["design_bed"],
+        bed=lambda wildcards: get_resolved_design_bed(),
     output:
         bed="qc/mosdepth_bed/{sample}_{type}.regions.bed.gz",
         per_base="qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz",
