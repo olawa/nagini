@@ -431,8 +431,23 @@ if [[ -n "$library_root" ]]; then
 fi
 if [[ -n "$barcode_map" ]]; then
     barcode_map="$(absolute_path "$barcode_map")"
+elif [[ -d "$input_dir" ]]; then
+    for candidate in \
+        "$input_dir/barcode_map.csv" "$input_dir/barcode_map.tsv" \
+        "$input_dir/sample_sheet.csv" "$input_dir/sample_sheet.tsv" \
+        "$input_dir/samplesheet.csv" "$input_dir/samplesheet.tsv" \
+        "$input_dir/sample_map.csv" "$input_dir/sample_map.tsv" \
+        "$input_dir/barcodes.csv" "$input_dir/barcodes.tsv"
+    do
+        if [[ -f "$candidate" ]]; then
+            barcode_map="$(absolute_path "$candidate")"
+            echo "Auto-detected barcode map in inbox: $barcode_map"
+            break
+        fi
+    done
 fi
 if [[ -n "$dorado_models_directory" ]]; then
+
     dorado_models_directory="$(absolute_path "$dorado_models_directory")"
 fi
 

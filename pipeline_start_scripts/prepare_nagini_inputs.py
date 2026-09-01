@@ -391,7 +391,14 @@ def discover_barcode_map(
     for path in sorted(input_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in {".csv", ".tsv", ".tab"}:
             continue
-        if not path.name.lower().startswith("sample_sheet"):
+        stem = path.stem.lower()
+        if not (
+            stem.startswith("sample_sheet")
+            or stem.startswith("samplesheet")
+            or "barcode_map" in stem
+            or "sample_map" in stem
+            or "barcodes" in stem
+        ):
             continue
         header = _delimited_header(path)
         has_sample = bool(
@@ -401,6 +408,7 @@ def discover_barcode_map(
         if "barcode" in header or "barcodename" in header or "barcodeid" in header:
             if has_sample:
                 candidates.append(path)
+
 
     if not candidates:
         return None, []
