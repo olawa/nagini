@@ -108,10 +108,11 @@ def build_summary_report(
         _, cramino_rows = parse_cramino(cramino_path)
         cramino_dict = {row["Metric"]: row["Value"] for row in cramino_rows}
         yield_gb = _find_metric(cramino_dict, "Yield [Gb]", "Yield", "Bases")
-        total_reads_str = _find_metric(cramino_dict, "Number of reads", "Reads")
-        mean_q = _find_metric(cramino_dict, "Mean quality", "Quality", "Q-score")
-        n50_bp = _find_metric(cramino_dict, "Read length N50", "N50")
+        total_reads_str = _find_metric(cramino_dict, "Number of reads", "Total reads", "Read count")
+        mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
+        n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
         median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
+
 
         # Parse BCR-ABL1 metrics if present
         fusion_rows = parse_bcr_abl_tsv(fusion_tsv_path)

@@ -336,11 +336,36 @@ def parse_cramino(path):
 
 
 def _find_metric(data_dict, *keywords):
-    for k, v in data_dict.items():
-        k_lower = k.lower()
-        if any(kw.lower() in k_lower for kw in keywords):
-            return str(v).strip()
+    """Lookup a metric from Cramino or QC summary dict with priority matching."""
+    # 1. Exact match (case-insensitive)
+    for kw in keywords:
+        kw_lower = kw.strip().lower()
+        for k, v in data_dict.items():
+            if k.strip().lower() == kw_lower:
+                return str(v).strip()
+
+    # 2. Match normalized names (without units/brackets)
+    for kw in keywords:
+        kw_norm = re.sub(r"\[.*?\]|\(.*?\)", "", kw).strip().lower()
+        if not kw_norm:
+            continue
+        for k, v in data_dict.items():
+            k_norm = re.sub(r"\[.*?\]|\(.*?\)", "", k).strip().lower()
+            if k_norm == kw_norm:
+                return str(v).strip()
+
+    # 3. Substring match, skipping percentage/fraction fields when searching for counts
+    for kw in keywords:
+        kw_lower = kw.strip().lower()
+        for k, v in data_dict.items():
+            k_lower = k.strip().lower()
+            if kw_lower in ("reads", "total reads", "number of reads"):
+                if "aligned" in k_lower or "%" in k_lower or "fraction" in k_lower:
+                    continue
+            if kw_lower in k_lower:
+                return str(v).strip()
     return ""
+
 
 
 def parse_bcr_abl_tsv(path):
@@ -672,10 +697,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     cramino_dict = {row["Metric"]: row["Value"] for row in cramino_rows}
     yield_gb = _find_metric(cramino_dict, "Yield [Gb]", "Yield", "Bases")
-    total_reads = _find_metric(cramino_dict, "Number of reads", "Reads")
-    mean_q = _find_metric(cramino_dict, "Mean quality", "Quality", "Q-score")
-    n50_bp = _find_metric(cramino_dict, "Read length N50", "N50")
-    median_len = _find_metric(cramino_dict, "Median read length", "Median length")
+    total_reads = _find_metric(cramino_dict, "Number of reads", "Total reads", "Read count")
+    mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
+    n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
+    median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
+
 
     wgs_cov = next(
         (str(row.get("mean", "")) for row in wgs_rows if str(row.get("chrom", "")).lower() == "total"),
