@@ -229,4 +229,8 @@ files:
   - name: Nagini Excel report
     input: null
     output: "reports/{sample}_{type}.nagini_report.xlsx"
+  - name: Nagini multi-sample summary Excel report
+    input: null
+    output: "reports/nagini_summary_report.xlsx"
+
 

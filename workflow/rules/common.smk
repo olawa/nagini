@@ -792,7 +792,11 @@ def get_report_demux_summary(wildcards):
 
 
 def get_sample_barcode_name(wildcards):
-    rows = _unit_rows(wildcards.sample, wildcards.type)
+    return get_sample_barcode_name_str(wildcards.sample, wildcards.type)
+
+
+def get_sample_barcode_name_str(sample, sample_type):
+    rows = _unit_rows(sample, sample_type)
     if not rows.empty:
         barcodes = [
             str(b).strip()
@@ -809,6 +813,7 @@ def get_sample_barcode_name(wildcards):
         if bc:
             return bc[0]
     return ""
+
 
 
 def get_report_bcr_abl_fusion(wildcards):
