@@ -224,6 +224,7 @@ def _scale_workstation_resources(cfg):
     # Moderate parallel / intermediate rules scaled proportionally:
     moderate_core_rules = {
         "samtools_merge_bam": max(4, min(16, cores // 2)),
+        "extract_target_bam": max(4, min(16, cores // 2)),
         "mosdepth": max(4, min(16, cores // 2)),
         "mosdepth_bed": max(4, min(16, cores // 2)),
     }

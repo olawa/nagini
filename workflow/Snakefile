@@ -14,6 +14,7 @@ include: "rules/minimap2_fastq_align.smk"
 
 include: "rules/minimap2_unmapped_bam_align.smk"
 include: "rules/samtools.smk"
+include: "rules/target_bam.smk"
 include: "rules/mosdepth_genome.smk"
 include: "rules/mosdepth_targets.smk"
 include: "rules/sv_summary.smk"

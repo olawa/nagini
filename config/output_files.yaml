@@ -7,6 +7,14 @@ files:
   - name: aligned BAM index
     input: null
     output: "alignment/nagini_bam/{sample}_{type}.bam.bai"
+  - name: target region BAM (+/-25kb)
+    input: null
+    output: "alignment/target_bam/{sample}_{type}.target.bam"
+    when: has_design_bed
+  - name: target region BAM index
+    input: null
+    output: "alignment/target_bam/{sample}_{type}.target.bam.bai"
+    when: has_design_bed
   - name: read and sequence statistics
     input: null
     output: "qc/cramino/{sample}_{type}.txt"
