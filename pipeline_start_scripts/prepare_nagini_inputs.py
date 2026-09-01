@@ -567,22 +567,31 @@ def make_bam_tables_from_barcode_map(
     expected = set(mapping)
     missing = sorted(expected - observed)
     unmapped = sorted(observed - expected)
-    if missing:
-        raise SystemExit(
-            "Barcode map contains barcodes with no BAM files: " + ", ".join(missing)
-        )
     if unmapped:
+        print(
+            "WARNING: Ignoring BAM barcode directories absent from barcode map: "
+            + ", ".join(unmapped),
+            file=sys.stderr,
+        )
+    if missing:
+        print(
+            "WARNING: Barcode map contains barcodes with no BAM files: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+    selected_barcodes = sorted(expected & observed)
+    if not selected_barcodes:
         raise SystemExit(
-            "BAM barcode directories are absent from the barcode map: "
-            + ", ".join(unmapped)
-            + ". Add them to the map or remove them from the input directory."
+            f"None of the barcodes in the barcode map ({', '.join(sorted(expected))}) "
+            f"were found in {args.input_dir}."
         )
 
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
-    for barcode in sorted(mapping):
+    for barcode in selected_barcodes:
         assignment = mapping[barcode]
+
         sample_name = assignment["sample"]
         samples_by_name.setdefault(sample_name, {"sample": sample_name})
         for index, bam_path in enumerate(sorted(bams_by_barcode[barcode]), start=1):
@@ -945,24 +954,31 @@ def make_barcode_fastq_tables(
     expected = set(mapping)
     unmapped = sorted(observed - expected)
     if unmapped:
-        raise SystemExit(
-            "Barcode FASTQ directories/files are absent from the barcode map: "
-            + ", ".join(unmapped)
-            + ". Add them to the map or remove them from the input directory."
+        print(
+            "WARNING: Ignoring barcode FASTQ directories/files absent from barcode map: "
+            + ", ".join(unmapped),
+            file=sys.stderr,
         )
     missing = sorted(expected - observed)
     if missing:
         print(
-            "WARNING: barcode map contains barcodes with no selected FASTQ files: "
+            "WARNING: Barcode map contains barcodes with no selected FASTQ files: "
             + ", ".join(missing),
             file=sys.stderr,
+        )
+    selected_barcodes = sorted(expected & observed)
+    if not selected_barcodes:
+        raise SystemExit(
+            f"None of the barcodes in the barcode map ({', '.join(sorted(expected))}) "
+            f"were found in {args.input_dir}."
         )
 
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
-    for barcode in sorted(observed):
+    for barcode in selected_barcodes:
         assignment = mapping[barcode]
+
         sample_name = assignment["sample"]
         samples_by_name.setdefault(sample_name, {"sample": sample_name})
         source_files = sorted(fastqs_by_barcode[barcode])
