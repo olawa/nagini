@@ -684,7 +684,8 @@ def _registry_entry(variable, value, reference_root, source):
             f"{source}: expected a path or a mapping, got {type(value).__name__}."
         )
     if path and reference_root and not os.path.isabs(path):
-        path = os.path.join(reference_root, path)
+        if not path.startswith(("workflow/", "config/")):
+            path = os.path.join(reference_root, path)
     return ReferenceEntry(variable, path, kind, checksum, source)
 
 
