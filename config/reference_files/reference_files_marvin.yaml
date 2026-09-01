@@ -31,9 +31,9 @@ reference_builds:
       url: ''
       checksum: ''
     design_bed:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed
+      path: workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
       type: file
-      url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/homo_sapiens.hg38.wgs.bed
+      url: ''
       checksum: ''
     sv_annotation_bed:
       path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz

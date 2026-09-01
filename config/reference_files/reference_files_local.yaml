@@ -31,9 +31,9 @@ reference_builds:
       url: ''
       checksum: ''
     design_bed:
-      path: references/hg38/targets.bed
+      path: workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
       type: file
-      url: file:references/hg38/targets.bed
+      url: file:workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
       checksum: ''
     sv_annotation_bed:
       path: ''
