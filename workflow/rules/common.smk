@@ -945,23 +945,27 @@ def compile_output_file_list(wildcards):
         if not _pipeline_condition_met(condition):
             continue
 
-        for sample in get_samples(samples):
-            clean_sample = str(sample).strip()
-            if not _sample_condition_met(condition, clean_sample):
-                continue
-
-            for unit_type in get_unit_types_for_sample(sample):
-                if allowed_types and unit_type not in allowed_types:
+        template = str(file_definition["output"]).strip()
+        if "{sample}" in template:
+            for sample in get_samples(samples):
+                clean_sample = str(sample).strip()
+                if not _sample_condition_met(condition, clean_sample):
                     continue
-                clean_type = str(unit_type).strip()
-                template = str(file_definition["output"]).strip()
-                output_files.append(
-                    outdir
-                    / template.format(
-                        sample=clean_sample,
-                        type=clean_type,
+
+                for unit_type in get_unit_types_for_sample(sample):
+                    if allowed_types and unit_type not in allowed_types:
+                        continue
+                    clean_type = str(unit_type).strip()
+                    output_files.append(
+                        outdir
+                        / template.format(
+                            sample=clean_sample,
+                            type=clean_type,
+                        )
                     )
-                )
+        else:
+            output_files.append(outdir / template)
+
 
     if dorado_barcodes:
         output_files.append(outdir / "basecalling/dorado_demux/demux_summary.tsv")

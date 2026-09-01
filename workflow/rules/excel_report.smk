@@ -67,22 +67,23 @@ def get_summary_report_inputs(wildcards):
         "bcr_abl_phasings": [],
         "bcr_abl_exons": [],
     }
-    for _, row in samples.iterrows():
-        s = str(row["sample"]).strip()
-        t = str(row["type"]).strip()
-        res["reports"].append(f"reports/{s}_{t}.nagini_report.xlsx")
-        res["craminos"].append(f"qc/cramino/{s}_{t}.txt")
-        res["wgs_coverages"].append(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt")
+    for sample in get_samples(samples):
+        s = str(sample).strip()
+        for unit_type in get_unit_types_for_sample(sample):
+            t = str(unit_type).strip()
+            res["reports"].append(f"reports/{s}_{t}.nagini_report.xlsx")
+            res["craminos"].append(f"qc/cramino/{s}_{t}.txt")
+            res["wgs_coverages"].append(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt")
 
-        if sample_needs_dna_variant_calling(s):
-            vcf_suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-            res["snv_vcfs"].append(f"snv_indels/clairs_to_postprocess/{s}_{t}{vcf_suffix}")
+            if sample_needs_dna_variant_calling(s):
+                vcf_suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
+                res["snv_vcfs"].append(f"snv_indels/clairs_to_postprocess/{s}_{t}{vcf_suffix}")
 
-        if sample_has_assay_module(s, "bcr_abl"):
-            res["bcr_abl_fusions"].append(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv")
-            res["bcr_abl_mutations"].append(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv")
-            res["bcr_abl_phasings"].append(f"reports/bcr_abl/{s}_{t}.phasing.tsv")
-            res["bcr_abl_exons"].append(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv")
+            if sample_has_assay_module(s, "bcr_abl"):
+                res["bcr_abl_fusions"].append(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv")
+                res["bcr_abl_mutations"].append(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv")
+                res["bcr_abl_phasings"].append(f"reports/bcr_abl/{s}_{t}.phasing.tsv")
+                res["bcr_abl_exons"].append(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv")
     return res
 
 
@@ -93,10 +94,26 @@ rule nagini_summary_excel_report:
     output:
         xlsx="reports/nagini_summary_report.xlsx",
     params:
-        sample_names=lambda wildcards: [str(row["sample"]).strip() for _, row in samples.iterrows()],
-        sample_types=lambda wildcards: [str(row["type"]).strip() for _, row in samples.iterrows()],
-        barcodes=lambda wildcards: [get_sample_barcode_name_str(str(row["sample"]).strip(), str(row["type"]).strip()) for _, row in samples.iterrows()],
-        assays=lambda wildcards: [get_assay(str(row["sample"]).strip()) for _, row in samples.iterrows()],
+        sample_names=lambda wildcards: [
+            str(s).strip()
+            for s in get_samples(samples)
+            for _ in get_unit_types_for_sample(s)
+        ],
+        sample_types=lambda wildcards: [
+            str(t).strip()
+            for s in get_samples(samples)
+            for t in get_unit_types_for_sample(s)
+        ],
+        barcodes=lambda wildcards: [
+            get_sample_barcode_name_str(str(s).strip(), str(t).strip())
+            for s in get_samples(samples)
+            for t in get_unit_types_for_sample(s)
+        ],
+        assays=lambda wildcards: [
+            get_assay(str(s).strip())
+            for s in get_samples(samples)
+            for _ in get_unit_types_for_sample(s)
+        ],
         reference_build=lambda wildcards: config.get("reference", {}).get("build", config.get("reference_build", "hg38")),
         sequence_id=lambda wildcards: config.get("sequence_id", os.path.basename(os.getcwd())),
     log:
@@ -113,4 +130,5 @@ rule nagini_summary_excel_report:
         "{rule}: compile multi-sample Excel summary report"
     script:
         "../scripts/nagini_summary_report.py"
+
 
