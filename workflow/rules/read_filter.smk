@@ -86,10 +86,10 @@ rule read_filter_fastq:
         "../../envs/nagini.yaml"
     shell:
         """
-        {params.binary} filter {input.fastq1} -o {output.fastq1} \
+        {params.binary} filter -i {input.fastq1} -o {output.fastq1} \
             --qv {params.min_qv} \
             --len {params.length_range} \
-            -t {threads} {params.extra} > {log} 2>&1
+            {params.extra} > {log} 2>&1
         """
 
 
@@ -117,8 +117,9 @@ rule read_filter_unmapped_bam:
         "../../envs/nagini.yaml"
     shell:
         """
-        {params.binary} filter {input.bam} -o {output.bam} \
+        {params.binary} filter -i {input.bam} -o {output.bam} \
             --qv {params.min_qv} \
             --len {params.length_range} \
-            -t {threads} {params.extra} > {log} 2>&1
+            {params.extra} > {log} 2>&1
         """
+

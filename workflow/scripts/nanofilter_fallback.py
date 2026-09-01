@@ -115,7 +115,8 @@ def main():
     subparsers = parser.add_subparsers(dest="subcommand")
 
     filter_parser = subparsers.add_parser("filter", help="Filter reads")
-    filter_parser.add_argument("input", type=Path, help="Input BAM/FASTQ(.gz) file")
+    filter_parser.add_argument("-i", "--input", dest="input_file", type=Path, default=None, help="Input BAM/FASTQ(.gz) file")
+    filter_parser.add_argument("positional_input", nargs="?", type=Path, default=None, help="Positional input BAM/FASTQ(.gz) file")
     filter_parser.add_argument("-o", "--output", type=Path, required=True, help="Output file")
     filter_parser.add_argument("--qv", type=float, default=20.0, help="Minimum mean QV [default: 20]")
     filter_parser.add_argument("--len", type=str, default="", help="Length range min-max")
@@ -123,21 +124,27 @@ def main():
 
     args, unknown = parser.parse_known_args()
     if args.subcommand != "filter":
-        # Check if called as: script input -o output --qv ...
+        # Check if called as: script -i input -o output --qv ...
         parser_direct = argparse.ArgumentParser()
-        parser_direct.add_argument("input", type=Path)
+        parser_direct.add_argument("-i", "--input", dest="input_file", type=Path, default=None)
+        parser_direct.add_argument("positional_input", nargs="?", type=Path, default=None)
         parser_direct.add_argument("-o", "--output", type=Path, required=True)
         parser_direct.add_argument("--qv", type=float, default=20.0)
         parser_direct.add_argument("--len", type=str, default="")
         parser_direct.add_argument("-t", "--threads", type=int, default=1)
         args, _ = parser_direct.parse_known_args()
 
+    input_target = args.input_file or getattr(args, "positional_input", None)
+    if not input_target:
+        sys.exit("nanofilter error: input file is required via -i/--input or positional argument.")
+
     min_l, max_l = parse_len_range(args.len)
-    in_str = str(args.input).lower()
+    in_str = str(input_target).lower()
     if in_str.endswith(".bam"):
-        filter_bam(args.input, args.output, args.qv, min_l, max_l, threads=args.threads)
+        filter_bam(input_target, args.output, args.qv, min_l, max_l, threads=args.threads)
     else:
-        filter_fastq(args.input, args.output, args.qv, min_l, max_l)
+        filter_fastq(input_target, args.output, args.qv, min_l, max_l)
+
 
 
 if __name__ == "__main__":

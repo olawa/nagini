@@ -104,10 +104,9 @@ BUILTIN_ASSAYS = {
         "config_overrides": {
             "read_filter": {
                 "enabled": True,
-                "min_qv": 20,
-                "length_range": "500-3000",
             },
         },
+
     },
 
 }
