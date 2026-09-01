@@ -93,9 +93,9 @@ reference_builds:
       url: file:/data/references/hs1.mmi
       checksum: ''
     design_bed:
-      path: ''
-      type: optional
-      url: ''
+      path: workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
+      type: file
+      url: file:workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
       checksum: ''
     sv_annotation_bed:
       path: ''

@@ -41,7 +41,7 @@ references:
     fai: "references/hs1/chm13v2.0.fa.fai"
     dict: "references/hs1/chm13v2.0.dict"
     mmi: ""
-    design_bed: "references/hs1/targets.bed"
+    design_bed: "workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed"
     sv_annotation_bed: ""
     tandem_repeats: ""
     clinvar: ""

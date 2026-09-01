@@ -87,9 +87,9 @@ reference_builds:
       url: ''
       checksum: ''
     design_bed:
-      path: references/hs1/targets.bed
+      path: workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
       type: file
-      url: file:references/hs1/targets.bed
+      url: file:workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
       checksum: ''
     sv_annotation_bed:
       path: ''

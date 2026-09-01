@@ -25,6 +25,8 @@ annotate_svs: false
 container_runtime: singularity
 singularity_binds:
   - /data
+  - /var/lib/minknow/data
+  - /home
 
 # Pin before clinical use.
 CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
