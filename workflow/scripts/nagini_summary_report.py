@@ -226,8 +226,9 @@ def build_summary_report(
                         "alt": r.get("alt", ""),
                         "vaf": f"{float(r.get('vaf_percent', r.get('vaf', 0.0))):.2f}%",
                         "depth": r.get("depth", ""),
-                        "alt_reads": r.get("alt_reads", ""),
+                        "alt_reads": r.get("ad_alt", r.get("alt_reads", "")),
                         "consequence": r.get("mutation", ""),
+
                         "clinical_note": r.get("tki_resistance", "Resistance mutation"),
                         "status": "DETECTED",
                     })
@@ -357,7 +358,8 @@ def build_summary_report(
             p_rows = bd["phasing_rows"]
             det_m = [r for r in m_rows if str(r.get("status", "")).upper() == "DETECTED"]
             mut_names = ", ".join(r["mutation"] for r in det_m) if det_m else "None detected"
-            vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('alt_reads')}/{r.get('depth')})" for r in det_m) if det_m else "-"
+            vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in det_m) if det_m else "-"
+
 
             cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "CIS" in r.get("phase_state", "").upper()]
             trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "TRANS" in r.get("phase_state", "").upper()]
