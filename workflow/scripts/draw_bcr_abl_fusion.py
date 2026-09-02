@@ -243,16 +243,27 @@ def draw_matplotlib_diagram(
     # -----------------------------------------------------------------------
     ax_cov = fig.add_subplot(gs[2, 1])
     if exon_cov_rows:
+        import re
         ex_names = [r.get("exon", "") for r in exon_cov_rows]
         ex_depths = [float(r.get("mean_depth", 0.0)) for r in exon_cov_rows]
-        cov_colors = ["#ED7D31" if "ABL1_exon_" in ex and int(ex.split("_")[-1]) >= 4 else "#41719C" for ex in ex_names]
         
-        short_names = [ex.replace("BCR_exon_", "BCR e").replace("ABL1_exon_", "ABL1 a") for ex in ex_names]
+        def _is_kd_exon(ex_str):
+            if "ABL1" in ex_str.upper():
+                m = re.search(r"(?:exon|e|a)(\d+)", ex_str, re.IGNORECASE)
+                if m:
+                    return int(m.group(1)) in range(4, 10)
+            return False
+
+        cov_colors = ["#ED7D31" if _is_kd_exon(ex) else "#41719C" for ex in ex_names]
+        short_names = [re.sub(r"(?i)(BCR|ABL1)[_ ]+Exon(\d+).*", r"\1 e\2", ex) for ex in ex_names]
+        short_names = [re.sub(r"(?i)ABL1 e(\d+)", r"ABL1 a\1", s) for s in short_names]
+        
         ax_cov.bar(range(len(short_names)), ex_depths, color=cov_colors, edgecolor="#14324F", width=0.6)
         ax_cov.set_xticks(range(len(short_names)))
         ax_cov.set_xticklabels(short_names, rotation=45, ha="right", fontsize=7.5)
         ax_cov.set_ylabel("Mean Depth (x)", fontsize=9, fontweight="bold")
         ax_cov.set_title("Exon Mean Coverage Depth", fontsize=10, fontweight="bold", color="#1F4E78")
+
         ax_cov.grid(axis="y", linestyle="--", alpha=0.5)
     else:
         ax_cov.text(0.5, 0.5, "Exon coverage data not available", ha="center", va="center", fontsize=10, color="#7F7F7F")

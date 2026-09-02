@@ -247,7 +247,9 @@ rule bcr_abl_draw_fusions:
 
         # 1. Look for draw_fusions.R
         DRAW_CMD=""
-        if command -v draw_fusions.R >/dev/null 2>&1; then
+        if [ -f "{workflow.basedir}/scripts/draw_fusions.r" ]; then
+            DRAW_CMD="Rscript {workflow.basedir}/scripts/draw_fusions.r"
+        elif command -v draw_fusions.R >/dev/null 2>&1; then
             DRAW_CMD="draw_fusions.R"
         elif [ -f "/arriba_v2.4.0/draw_fusions.R" ]; then
             DRAW_CMD="/arriba_v2.4.0/draw_fusions.R"
@@ -299,25 +301,37 @@ rule bcr_abl_draw_fusions:
         echo "GTF: {params.gtf}"
 
         # Try Arriba draw_fusions.R / bundled draw_fusions.r if available
-        if [ -n "$DRAW_CMD" ] && [ -f "{params.gtf}" ] && [ -n "$CYTO_FILE" ] && [ -f "$CYTO_FILE" ]; then
+        if [ -n "$DRAW_CMD" ] && [ -f "{params.gtf}" ]; then
             PROT_OPT=""
-            PANELS="fusion,circos,readcounts"
-            if [ -n "$PROT_FILE" ] && [ -f "$PROT_FILE" ]; then
-                PROT_OPT="--proteinDomains=$PROT_FILE"
-                PANELS="fusion,circos,domains,readcounts"
+            CYTO_OPT=""
+            PANELS="fusion,readcounts"
+
+            if [ -n "$CYTO_FILE" ] && [ -f "$CYTO_FILE" ]; then
+                CYTO_OPT="--cytobands=$CYTO_FILE"
+                PANELS="fusion,circos,readcounts"
             fi
 
-            echo "Executing Arriba draw_fusions.R..."
+            if [ -n "$PROT_FILE" ] && [ -f "$PROT_FILE" ]; then
+                PROT_OPT="--proteinDomains=$PROT_FILE"
+                if [ -n "$CYTO_OPT" ]; then
+                    PANELS="fusion,circos,domains,readcounts"
+                else
+                    PANELS="fusion,domains,readcounts"
+                fi
+            fi
+
+            echo "Executing Arriba draw_fusions.R ($PANELS)..."
             $DRAW_CMD \
                 --fusions={input.fusions} \
                 --alignments={input.bam} \
                 --output={output.pdf} \
                 --annotation={params.gtf} \
-                --cytobands="$CYTO_FILE" \
+                --sampleName="{wildcards.sample}" \
                 --transcriptSelection=canonical \
                 --plotPanels=$PANELS \
-                $PROT_OPT {params.extra} || true
+                $CYTO_OPT $PROT_OPT {params.extra} || true
         fi
+
 
 
         # If PDF was not produced or is 0 bytes, generate publication-ready fusion diagram via python
