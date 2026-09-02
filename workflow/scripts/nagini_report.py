@@ -691,7 +691,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     cytoband="", caller="", design_bed="", platform="",
                     target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
-                    bcr_abl_exon_coverage=""):
+                    bcr_abl_exon_coverage="", bcr_abl_plot_png=""):
+
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
