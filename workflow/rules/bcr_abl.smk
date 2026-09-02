@@ -349,7 +349,7 @@ rule bcr_abl_draw_fusions:
 
             PDF_FILE="{output.pdf}"
             PNG_FILE="{output.png}"
-            PNG_BASE="${PNG_FILE%.png}"
+            PNG_BASE="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_plot"
 
             # If pdftoppm is available, ensure first page of PDF is used as PNG
             if command -v pdftoppm >/dev/null 2>&1 && [ -s "$PDF_FILE" ]; then
