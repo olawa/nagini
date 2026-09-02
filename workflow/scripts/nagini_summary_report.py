@@ -131,7 +131,9 @@ def build_summary_report(
                 "mutation_rows": mutation_rows,
                 "phasing_rows": phasing_rows,
                 "exon_rows": exon_rows,
+                "plot_png": s.get("bcr_abl_plot_png", ""),
             })
+
 
         total_fusion_reads = sum(int(r.get("read_count", 0)) for r in fusion_rows)
         raw_reads_num = 0
@@ -378,6 +380,7 @@ def build_summary_report(
                 bd["mutation_rows"],
                 bd["phasing_rows"],
                 bd["exon_rows"],
+                plot_png=bd.get("plot_png", ""),
             )
             sheets.append((sheet_title, sample_bcr_rows, LAYOUT))
 
@@ -399,6 +402,7 @@ def run_from_snakemake(snakemake):
     bcr_mutations = list(getattr(snakemake.input, "bcr_abl_mutations", []))
     bcr_phasings = list(getattr(snakemake.input, "bcr_abl_phasings", []))
     bcr_exons = list(getattr(snakemake.input, "bcr_abl_exons", []))
+    bcr_plots = list(getattr(snakemake.input, "bcr_abl_plots", []))
 
     sample_records = []
     for i, name in enumerate(sample_names):
@@ -417,7 +421,9 @@ def run_from_snakemake(snakemake):
             "bcr_abl_mutations": bcr_mutations[i] if i < len(bcr_mutations) else "",
             "bcr_abl_phasing": bcr_phasings[i] if i < len(bcr_phasings) else "",
             "bcr_abl_exon_coverage": bcr_exons[i] if i < len(bcr_exons) else "",
+            "bcr_abl_plot_png": bcr_plots[i] if i < len(bcr_plots) else "",
         })
+
 
     build_summary_report(
         output_path=snakemake.output.xlsx,

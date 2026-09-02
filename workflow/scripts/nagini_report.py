@@ -487,11 +487,20 @@ def _column_widths(rows):
     return widths
 
 
+class ReportLayout(list):
+    """List subclass carrying optional embedded image metadata."""
+
+    def __init__(self, items=None, image_info=None):
+        super().__init__(items or [])
+        self.image_info = image_info
+
+
 def write_xlsx(path, sheets):
     """Write sheets to an XLSX workbook.
 
-    ``sheets`` is a list of ``(name, rows)`` or ``(name, rows, kind)``.  A row
-    is a list of plain values or ``(value, style_id)`` pairs.
+    ``sheets`` is a list of ``(name, rows)`` or ``(name, rows, kind)`` or
+    ``(name, rows, kind, image_info)``. A row is a list of plain values or
+    ``(value, style_id)`` pairs.
     """
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -515,6 +524,7 @@ def write_xlsx(path, sheets):
         for sheet in sheets:
             name, rows = sheet[0], sheet[1]
             kind = sheet[2] if len(sheet) > 2 else TABLE
+            image_info = getattr(rows, "image_info", None) or (sheet[3] if len(sheet) > 3 else None)
             worksheet = workbook.add_worksheet(safe_sheet_name(name, used_names))
 
             for column_index, width in enumerate(_column_widths(rows)):
@@ -537,6 +547,15 @@ def write_xlsx(path, sheets):
                             cell_format,
                         )
 
+            if image_info and isinstance(image_info, dict) and os.path.isfile(image_info.get("path", "")) and os.path.getsize(image_info.get("path", "")) > 0:
+                cell = image_info.get("cell", f"A{len(rows) + 3}")
+                x_scale = float(image_info.get("x_scale", 0.45))
+                y_scale = float(image_info.get("y_scale", 0.45))
+                try:
+                    worksheet.insert_image(cell, image_info["path"], {"x_scale": x_scale, "y_scale": y_scale})
+                except Exception as exc:
+                    sys.stderr.write(f"Warning: could not insert image {image_info['path']}: {exc}\n")
+
             if kind == TABLE and len(rows) > 1:
                 worksheet.freeze_panes(1, 0)
                 worksheet.autofilter(0, 0, len(rows) - 1, max(len(rows[0]) - 1, 0))
@@ -544,7 +563,7 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
-def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None):
+def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None):
     layout = [
         [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
@@ -657,7 +676,14 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (int(r.get("spanning_reads", 0)), 0),
             ])
 
+    if plot_png and os.path.isfile(plot_png) and os.path.getsize(plot_png) > 0:
+        layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+        layout.append([("5. BCR-ABL1 FUSION ARCHITECTURE & JUNCTION PLOT (ARRIBA)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+        img_cell = f"B{len(layout) + 2}"
+        return ReportLayout(layout, image_info={"path": plot_png, "cell": img_cell, "x_scale": 0.45, "y_scale": 0.45})
+
     return layout
+
 
 
 def generate_report(output, sample, sample_type, reference_build, annotation, snv_vcf,
@@ -940,7 +966,10 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         ("Overview", overview, LAYOUT),
     ]
     if has_bcr_abl:
-        sheets.append(("BCR-ABL1", build_bcr_abl_sheet(sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows, bcr_abl_exon_rows), LAYOUT))
+        bcr_layout = build_bcr_abl_sheet(
+            sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows, bcr_abl_exon_rows, plot_png=bcr_abl_plot_png
+        )
+        sheets.append(("BCR-ABL1", bcr_layout, LAYOUT))
 
     sheets.extend([
         ("SNVs and indels", table(snv_columns, snvs)),
@@ -983,6 +1012,7 @@ def run_from_snakemake(snakemake):
         bcr_abl_mutations=_first_or_str(getattr(snakemake.input, "bcr_abl_mutations", "")),
         bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
         bcr_abl_exon_coverage=_first_or_str(getattr(snakemake.input, "bcr_abl_exon_coverage", "")),
+        bcr_abl_plot_png=_first_or_str(getattr(snakemake.input, "bcr_abl_plot_png", "")),
     )
 
 
@@ -1010,6 +1040,7 @@ def main():
     parser.add_argument("--bcr-abl-mutations", default="")
     parser.add_argument("--bcr-abl-phasing", default="")
     parser.add_argument("--bcr-abl-exon-coverage", default="")
+    parser.add_argument("--bcr-abl-plot-png", default="")
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,

@@ -20,6 +20,7 @@ rule nagini_excel_report:
         bcr_abl_mutations=get_report_bcr_abl_mutations,
         bcr_abl_phasing=get_report_bcr_abl_phasing,
         bcr_abl_exon_coverage=get_report_bcr_abl_exon_coverage,
+        bcr_abl_plot_png=get_report_bcr_abl_plot_png,
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
@@ -66,6 +67,7 @@ def get_summary_report_inputs(wildcards):
         "bcr_abl_mutations": [],
         "bcr_abl_phasings": [],
         "bcr_abl_exons": [],
+        "bcr_abl_plots": [],
     }
     for sample in get_samples(samples):
         s = str(sample).strip()
@@ -84,6 +86,7 @@ def get_summary_report_inputs(wildcards):
                 res["bcr_abl_mutations"].append(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv")
                 res["bcr_abl_phasings"].append(f"reports/bcr_abl/{s}_{t}.phasing.tsv")
                 res["bcr_abl_exons"].append(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv")
+                res["bcr_abl_plots"].append(f"reports/bcr_abl/{s}_{t}.fusion_plot.png")
     return res
 
 

@@ -222,6 +222,11 @@ files:
     input: null
     output: "reports/bcr_abl/{sample}_{type}.fusion_plot.pdf"
     when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 Arriba fusion plot PNG
+    input: null
+    output: "reports/bcr_abl/{sample}_{type}.fusion_plot.png"
+    when: "assay_module:bcr_abl"
+
   - name: MultiQC Nanopore report
     input: null
 

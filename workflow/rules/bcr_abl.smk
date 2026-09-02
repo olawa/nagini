@@ -220,6 +220,7 @@ rule bcr_abl_draw_fusions:
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
     output:
         pdf="reports/bcr_abl/{sample}_{type}.fusion_plot.pdf",
+        png="reports/bcr_abl/{sample}_{type}.fusion_plot.png",
     params:
         gtf=lambda wildcards: _bcr_abl_gtf(),
         cytobands=lambda wildcards: config.get("reference", {}).get("cytoband", "") or config.get("reference", {}).get("cytobands", ""),
@@ -330,9 +331,17 @@ rule bcr_abl_draw_fusions:
                 --transcriptSelection=canonical \
                 --plotPanels=$PANELS \
                 $CYTO_OPT $PROT_OPT {params.extra} || true
+
+            $DRAW_CMD \
+                --fusions={input.fusions} \
+                --alignments={input.bam} \
+                --output={output.png} \
+                --annotation={params.gtf} \
+                --sampleName="{wildcards.sample}" \
+                --transcriptSelection=canonical \
+                --plotPanels=$PANELS \
+                $CYTO_OPT $PROT_OPT {params.extra} || true
         fi
-
-
 
         # If PDF was not produced or is 0 bytes, generate publication-ready fusion diagram via python
         if [ ! -s "{output.pdf}" ]; then
@@ -347,8 +356,22 @@ rule bcr_abl_draw_fusions:
                 --output {output.pdf}
         fi
 
+        # If PNG was not produced or is 0 bytes, generate via python
+        if [ ! -s "{output.png}" ]; then
+            python3 {workflow.basedir}/scripts/draw_bcr_abl_fusion.py \
+                --sample {wildcards.sample} \
+                --fusions {input.fusion_summary} \
+                --mutations {input.mutations} \
+                --phasing {input.phasing} \
+                --exon-coverage {input.exon_coverage} \
+                --build {params.build} \
+                --output {output.png} || true
+        fi
+
         test -s "{output.pdf}"
+        test -s "{output.png}"
         """
+
 
 
 
