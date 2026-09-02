@@ -94,9 +94,10 @@ rule dorado_demux:
         dorado_bin=_dorado_exe,
         kit=config.get("dorado", {}).get("kit", ""),
         extra=lambda wildcards: (
-            ("--both-ends " if (config.get("dorado", {}).get("demux_both_ends", False) or config.get("dorado", {}).get("both_ends", False)) else "")
+            ("--barcode-both-ends " if (config.get("dorado", {}).get("demux_both_ends", False) or config.get("dorado", {}).get("both_ends", False) or config.get("dorado", {}).get("barcode_both_ends", False)) else "")
             + config.get("dorado", {}).get("demux_extra", "")
         ).strip(),
+
 
     log:
         "logs/dorado/demux.log",
