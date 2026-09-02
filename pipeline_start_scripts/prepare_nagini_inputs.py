@@ -105,17 +105,36 @@ def known_assays(pipeline_root: Path, config: dict) -> set[str]:
 
 
 def parse_args() -> argparse.Namespace:
+    repo_root = Path(__file__).resolve().parent.parent
+    default_base_config = repo_root / "config" / "config.yaml"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, required=True)
     parser.add_argument("--analysis-dir", type=Path, required=True)
-    parser.add_argument("--pipeline-root", type=Path, required=True)
-    parser.add_argument("--base-config", type=Path, required=True)
+    parser.add_argument(
+        "--pipeline-root",
+        type=Path,
+        default=repo_root,
+        help="Path to Nagini repository root (default: auto-detected).",
+    )
+    parser.add_argument(
+        "--base-config",
+        type=Path,
+        default=default_base_config,
+        help="Path to base config.yaml (default: <pipeline-root>/config/config.yaml).",
+    )
+    parser.add_argument(
+        "--site",
+        choices=("local", "workstation", "marvin"),
+        default="workstation",
+        help="Runtime site for default site-config and reference-files (default: workstation).",
+    )
     parser.add_argument("--site-config", type=Path)
     parser.add_argument("--reference-files", type=Path)
     parser.add_argument("--library-root", type=Path)
     parser.add_argument(
         "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam"), required=True
     )
+
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
     parser.add_argument(
         "--reference-build",
@@ -262,7 +281,36 @@ def parse_args() -> argparse.Namespace:
         help="Path to nanofilter binary or script.",
     )
     parser.add_argument("--force", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    args.input_dir = args.input_dir.expanduser().resolve()
+    args.analysis_dir = args.analysis_dir.expanduser().resolve()
+    args.pipeline_root = args.pipeline_root.expanduser().resolve()
+    args.base_config = args.base_config.expanduser().resolve()
+
+    if args.site_config:
+        args.site_config = args.site_config.expanduser().resolve()
+    else:
+        site_candidate = args.pipeline_root / "config" / "site_configs" / f"site_config_{args.site}.yaml"
+        if site_candidate.is_file():
+            args.site_config = site_candidate
+
+    if args.reference_files:
+        args.reference_files = args.reference_files.expanduser().resolve()
+    else:
+        ref_candidate = args.pipeline_root / "config" / "reference_files" / f"reference_files_{args.site}.yaml"
+        if ref_candidate.is_file():
+            args.reference_files = ref_candidate
+
+    if getattr(args, "barcode_map", None):
+        args.barcode_map = args.barcode_map.expanduser().resolve()
+    if getattr(args, "bed_file", None):
+        args.bed_file = Path(args.bed_file).expanduser().resolve()
+    if getattr(args, "library_root", None):
+        args.library_root = Path(args.library_root).expanduser().resolve()
+
+    return args
+
 
 
 
