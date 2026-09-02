@@ -59,7 +59,10 @@ dorado_models_directory=""
 dorado_container=""
 dorado_binary=""
 dorado_demux_output_format="fastq"
+dorado_demux_both_ends=false
+dorado_demux_extra=""
 dorado_aligner="minimap2"
+
 bed_file=""
 small_variant_caller=""
 clairs_to_platform=""
@@ -120,7 +123,10 @@ Options:
   --dorado-container IMAGE      Override default Dorado Docker/Singularity image (or 'none' for local binary).
   --dorado-binary PATH          Path to local dorado binary (e.g. ~/tmp/tools/dorado-2.1.1-linux-x64/bin/dorado).
   --demux-output-format FORMAT  Per-barcode raw output: bam, fastq, or both (default: fastq).
+  --demux-both-ends             Require barcode detection at both ends in Dorado demux.
+  --demux-extra FLAGS           Additional flags passed to dorado demux.
   --dorado-aligner ALIGNER      Alignment after demux: minimap2 or dorado (default: minimap2).
+
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
   --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
@@ -309,7 +315,17 @@ while [[ $# -gt 0 ]]; do
             dorado_demux_output_format="$2"
             shift 2
             ;;
+        --demux-both-ends|--both-ends)
+            dorado_demux_both_ends=true
+            shift
+            ;;
+        --demux-extra)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
+            dorado_demux_extra="$2"
+            shift 2
+            ;;
         --dorado-aligner)
+
             [[ $# -ge 2 ]] || die "$1 requires a value"
             dorado_aligner="$2"
             shift 2
@@ -550,7 +566,10 @@ prepare_cmd=(
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-demux-output-format "$dorado_demux_output_format" --dorado-aligner "$dorado_aligner")
+[[ "$dorado_demux_both_ends" == "true" ]] && prepare_cmd+=(--dorado-demux-both-ends)
+[[ -n "$dorado_demux_extra" ]] && prepare_cmd+=(--dorado-demux-extra "$dorado_demux_extra")
 [[ -n "$dorado_device" ]] && prepare_cmd+=(--dorado-device "$dorado_device")
+
 [[ -n "$dorado_models_directory" ]] && prepare_cmd+=(--dorado-models-directory "$dorado_models_directory")
 [[ -n "$dorado_container" ]] && prepare_cmd+=(--dorado-container "$dorado_container")
 [[ -n "$dorado_binary" ]] && prepare_cmd+=(--dorado-binary "$dorado_binary")

@@ -176,8 +176,20 @@ def parse_args() -> argparse.Namespace:
         default="fastq",
     )
     parser.add_argument(
+        "--dorado-demux-both-ends",
+        action="store_true",
+        default=False,
+        help="Require barcode detection at both ends of reads in Dorado demux.",
+    )
+    parser.add_argument(
+        "--dorado-demux-extra",
+        default="",
+        help="Extra flags passed to dorado demux.",
+    )
+    parser.add_argument(
         "--dorado-aligner", choices=("minimap2", "dorado"), default="minimap2"
     )
+
     parser.add_argument("--methylation", choices=("Yes", "No"), default="No")
     parser.add_argument(
         "--bed-file",
@@ -1396,7 +1408,12 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
                 args, "dorado_demux_output_format", "fastq"
             ),
         }
+        if getattr(args, "dorado_demux_both_ends", False):
+            dorado_settings["demux_both_ends"] = True
+        if getattr(args, "dorado_demux_extra", ""):
+            dorado_settings["demux_extra"] = args.dorado_demux_extra
         if getattr(args, "dorado_container", ""):
+
             dorado_settings["container"] = args.dorado_container
         if getattr(args, "dorado_binary", ""):
             dorado_settings["binary"] = str(Path(args.dorado_binary).expanduser().resolve())
