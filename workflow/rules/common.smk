@@ -873,6 +873,8 @@ _PIPELINE_CONDITIONS = {
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
     "annotate_svs": lambda: bool(config.get("annotate_svs", False)),
     "has_design_bed": lambda: has_design_bed(),
+    "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
+    "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }
 
 _SAMPLE_CONDITIONS = {
@@ -892,7 +894,10 @@ _SAMPLE_CONDITIONS = {
     "sample_needs_sv_calling": sample_needs_sv_calling,
     "sample_needs_rna_analysis": sample_needs_rna_analysis,
     "target_restricted": sample_is_target_restricted,
+    "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
+    "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }
+
 
 
 def _pipeline_condition_met(condition):

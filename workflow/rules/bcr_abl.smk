@@ -42,6 +42,29 @@ def _bcr_abl_gtf():
     return _bcr_abl_resource(gtf_name)
 
 
+def _find_rindels_binary():
+    """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
+    override = config.get("rindels", {}).get("binary", "") or config.get("bcr_abl", {}).get("rindels_binary", "")
+    if override and (os.path.isfile(override) or shutil.which(override)):
+        return override
+    candidates = [
+        os.path.expanduser("~/bin/rindels"),
+        "/home/cgu-lab/bin/rindels",
+        os.path.expanduser("~/tmp/tools/rindels/target/release/rindels"),
+        "/home/cgu-lab/tmp/tools/rindels/target/release/rindels",
+        os.path.expanduser("~/.cargo/bin/rindels"),
+        "/Users/olwal516/dev/projects/rindels/target/release/rindels",
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    which_r = shutil.which("rindels")
+    if which_r:
+        return which_r
+    return "rindels"
+
+
+
 
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
@@ -395,6 +418,92 @@ rule bcr_abl_draw_fusions:
         test -s "{output.pdf}"
         test -s "{output.png}"
         """
+
+
+rule bcr_abl_bcftools_pileup:
+    """Run bcftools mpileup and call across BCR-ABL1 target exons at full depth."""
+    input:
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+        bed=lambda wildcards: _bcr_abl_exons_bed(),
+    output:
+        vcf="snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz",
+        tbi="snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz.tbi",
+    params:
+        max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 100000),
+        min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 20),
+        min_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
+        prior=lambda wildcards: config.get("bcr_abl", {}).get("pileup_prior", 0.01),
+        extra=lambda wildcards: config.get("bcr_abl", {}).get("bcftools_mpileup_extra", ""),
+    log:
+        "logs/bcr_abl_bcftools_pileup/{sample}_{type}.log",
+    threads: config.get("bcr_abl", {}).get("threads", 2)
+    resources:
+        mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("bcr_abl", {}).get("threads", 2),
+        time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcftools", {}).get("container", "docker://hydragenetics/common:3.1.1")
+    conda:
+        "../../envs/nagini.yaml"
+    shell:
+        """
+        exec > {log} 2>&1
+        bcftools mpileup -Ou -f {input.ref} -R {input.bed} \
+            -d {params.max_depth} -q {params.min_mapq} -Q {params.min_baseq} \
+            -a FORMAT/AD,FORMAT/DP {params.extra} {input.bam} | \
+        bcftools call -mv -P {params.prior} -Oz -o {output.vcf}
+
+        bcftools index -t {output.vcf}
+        """
+
+
+rule bcr_abl_rindels:
+    """Run Rindels in targeted ONT BCR-ABL1 amplicon mode."""
+    input:
+        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+    output:
+        vcf="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz",
+        tbi="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz.tbi",
+        haplotypes="snv_indels/rindels/{sample}_{type}.haplotypes.tsv",
+    params:
+        binary=lambda wildcards: _find_rindels_binary(),
+        genome=lambda wildcards: "hg19" if "19" in str(config.get("reference_build", "hg19")).lower() else "hg38",
+        extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --bcr-abl"),
+    log:
+        "logs/bcr_abl_rindels/{sample}_{type}.log",
+    threads: config.get("rindels", {}).get("threads", 4)
+    resources:
+        mem_mb=config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("rindels", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("rindels", {}).get("threads", 4),
+        time=config.get("rindels", {}).get("time", config["default_resources"]["time"]),
+    shell:
+        """
+        exec > {log} 2>&1
+        RINDELS_BIN="{params.binary}"
+        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
+            echo "Error: Rindels binary not found at $RINDELS_BIN"
+            exit 1
+        fi
+
+        "$RINDELS_BIN" -b {input.bam} -r {input.ref} -o {output.vcf} \
+            {params.extra} --bcr-abl-genome {params.genome} \
+            --write-haplotypes {output.haplotypes} -t {threads}
+
+        if [ -s "{output.vcf}" ] && [ ! -s "{output.tbi}" ]; then
+            if command -v bcftools >/dev/null 2>&1; then
+                bcftools index -t {output.vcf} || true
+            fi
+        fi
+        """
+
 
 
 

@@ -425,7 +425,10 @@ CONFIG_FLAG_CONDITIONS = {
     "annotate_small_variants",
     "annotate_svs",
     "sv_calling",
+    "enable_rindels",
+    "enable_bcftools_pileup",
 }
+
 
 CONDITION_PREFIXES = ("assay:", "assay_module:")
 

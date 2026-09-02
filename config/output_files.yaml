@@ -226,6 +226,15 @@ files:
     input: null
     output: "reports/bcr_abl/{sample}_{type}.fusion_plot.png"
     when: "assay_module:bcr_abl"
+  - name: BCR-ABL1 bcftools mpileup VCF
+    input: null
+    output: "snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz"
+    when: "enable_bcftools_pileup"
+  - name: BCR-ABL1 Rindels VCF
+    input: null
+    output: "snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
+    when: "enable_rindels"
+
 
   - name: MultiQC Nanopore report
     input: null
