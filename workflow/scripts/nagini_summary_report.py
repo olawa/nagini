@@ -3,8 +3,10 @@
 import argparse
 import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -55,16 +57,23 @@ def build_summary_report(
     sheets = []
     used_sheet_names = set()
 
+    out_dir = os.path.dirname(output_path) or "."
+    parent_dir = os.path.basename(os.path.abspath(os.path.join(out_dir, "..")))
+    seq_clean = str(sequence_id or "").strip()
+    display_id = seq_clean if (seq_clean and seq_clean.lower() not in {"run", "default"}) else parent_dir
+    date_str = datetime.now().strftime("%Y-%m-%d")
+
     # -----------------------------------------------------------------------
     # 1. OVERVIEW SHEET
     # -----------------------------------------------------------------------
     overview_rows = [
-        [("NAGINI MULTI-SAMPLE RUN SUMMARY", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
+        [(f"NAGINI RUN SUMMARY - {display_id} ({date_str})", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
         [("RUN & PIPELINE METADATA", 3), ("", 3), ("", 3), ("", 3)],
-        [("Sequence ID", 7), (sequence_id, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
+        [("Sequence ID / Run", 7), (display_id, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
         [("Reference Genome", 7), (reference_build, 0), ("Total Samples", 7), (len(sample_records), 0)],
         [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
+
         [("", 0), ("", 0), ("", 0), ("", 0)],
         [("SAMPLE QUALITY CONTROL & SEQUENCING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
         [
@@ -382,9 +391,30 @@ def build_summary_report(
                 bd["exon_rows"],
                 plot_png=bd.get("plot_png", ""),
             )
-            sheets.append((sheet_title, sample_bcr_rows, LAYOUT))
-
     write_xlsx(output_path, sheets)
+
+    # Also create unique, run-specific named copies so multiple summaries can be opened in Excel simultaneously
+    clean_id = re.sub(r"[^\w\.-]", "_", display_id)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    # 1. Folder/run-named copy: e.g. reports/dilution_full_run_nagini_summary_report.xlsx
+    named_file = os.path.join(out_dir, f"{clean_id}_nagini_summary_report.xlsx")
+    if os.path.abspath(named_file) != os.path.abspath(output_path):
+        try:
+            shutil.copyfile(output_path, named_file)
+            sys.stderr.write(f"[Nagini] Created run-named summary workbook: {named_file}\n")
+        except Exception as exc:
+            sys.stderr.write(f"Warning: could not create run-named summary copy: {exc}\n")
+
+    # 2. Timestamped copy: e.g. reports/dilution_full_run_summary_20260902_1128.xlsx
+    time_file = os.path.join(out_dir, f"{clean_id}_summary_{timestamp}.xlsx")
+    if os.path.abspath(time_file) != os.path.abspath(output_path) and os.path.abspath(time_file) != os.path.abspath(named_file):
+        try:
+            shutil.copyfile(output_path, time_file)
+            sys.stderr.write(f"[Nagini] Created timestamped summary workbook: {time_file}\n")
+        except Exception as exc:
+            sys.stderr.write(f"Warning: could not create timestamped summary copy: {exc}\n")
+
 
 
 def run_from_snakemake(snakemake):
