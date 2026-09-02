@@ -349,20 +349,21 @@ rule bcr_abl_draw_fusions:
 
             PDF_FILE="{output.pdf}"
             PNG_FILE="{output.png}"
-            PNG_BASE="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_plot"
+            P1_PREFIX="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_plot_p1"
 
             # If pdftoppm is available, ensure first page of PDF is used as PNG
             if command -v pdftoppm >/dev/null 2>&1 && [ -s "$PDF_FILE" ]; then
-                pdftoppm -png -r 150 -f 1 -l 1 "$PDF_FILE" "${PNG_BASE}_p1" 2>/dev/null || true
-                for f in "${PNG_BASE}_p1-1.png" "${PNG_BASE}_p1-01.png" "${PNG_BASE}_p1-001.png"; do
+                pdftoppm -png -r 150 -f 1 -l 1 "$PDF_FILE" "$P1_PREFIX" 2>/dev/null || true
+                for f in "$P1_PREFIX-1.png" "$P1_PREFIX-01.png" "$P1_PREFIX-001.png"; do
                     if [ -s "$f" ]; then
                         mv -f "$f" "$PNG_FILE"
                         break
                     fi
                 done
-                rm -f "${PNG_BASE}_p1"*.png 2>/dev/null || true
+                rm -f "$P1_PREFIX"*.png 2>/dev/null || true
             fi
         fi
+
 
 
 
