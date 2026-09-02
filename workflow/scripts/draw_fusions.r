@@ -206,14 +206,22 @@ if (colnames(fusions)[1] == "X.gene1" || colnames(fusions)[1] == "gene1" || coln
 }
 
 if (grepl("\\.png$", outputFile, ignore.case=TRUE)) {
-
+	if (nrow(fusions) > 1) {
+		message(paste0("Selecting primary fusion (1 of ", nrow(fusions), ") for bitmap image output: ", fusions[1, "gene1"], ":", fusions[1, "gene2"]))
+		fusions <- fusions[1, , drop=FALSE]
+	}
 	png(outputFile, width=pdfWidth*150, height=pdfHeight*150, res=150)
 } else if (grepl("\\.jpe?g$", outputFile, ignore.case=TRUE)) {
+	if (nrow(fusions) > 1) {
+		message(paste0("Selecting primary fusion (1 of ", nrow(fusions), ") for bitmap image output: ", fusions[1, "gene1"], ":", fusions[1, "gene2"]))
+		fusions <- fusions[1, , drop=FALSE]
+	}
 	jpeg(outputFile, width=pdfWidth*150, height=pdfHeight*150, res=150, quality=95)
 } else {
 	pdf(outputFile, onefile=T, width=pdfWidth, height=pdfHeight, title=ifelse(sampleName != "", sampleName, fusionsFile))
 }
 par(family=fontFamily)
+
 
 
 if (nrow(fusions) == 0) {

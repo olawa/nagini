@@ -549,10 +549,11 @@ def write_xlsx(path, sheets):
 
             if image_info and isinstance(image_info, dict) and os.path.isfile(image_info.get("path", "")) and os.path.getsize(image_info.get("path", "")) > 0:
                 cell = image_info.get("cell", f"A{len(rows) + 3}")
-                x_scale = float(image_info.get("x_scale", 0.45))
-                y_scale = float(image_info.get("y_scale", 0.45))
+                x_scale = float(image_info.get("x_scale", 0.68))
+                y_scale = float(image_info.get("y_scale", 0.68))
                 try:
                     worksheet.insert_image(cell, image_info["path"], {"x_scale": x_scale, "y_scale": y_scale})
+
                 except Exception as exc:
                     sys.stderr.write(f"Warning: could not insert image {image_info['path']}: {exc}\n")
 
@@ -680,7 +681,8 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
         layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
         layout.append([("5. BCR-ABL1 FUSION ARCHITECTURE & JUNCTION PLOT (ARRIBA)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
         img_cell = f"B{len(layout) + 2}"
-        return ReportLayout(layout, image_info={"path": plot_png, "cell": img_cell, "x_scale": 0.45, "y_scale": 0.45})
+        return ReportLayout(layout, image_info={"path": plot_png, "cell": img_cell, "x_scale": 0.68, "y_scale": 0.68})
+
 
     return layout
 

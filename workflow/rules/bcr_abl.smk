@@ -321,7 +321,7 @@ rule bcr_abl_draw_fusions:
                 fi
             fi
 
-            echo "Executing Arriba draw_fusions.R ($PANELS)..."
+            echo "Executing Arriba draw_fusions.R (all fusions to PDF)..."
             $DRAW_CMD \
                 --fusions={input.fusions} \
                 --alignments={input.bam} \
@@ -332,8 +332,13 @@ rule bcr_abl_draw_fusions:
                 --plotPanels=$PANELS \
                 $CYTO_OPT $PROT_OPT {params.extra} || true
 
+            # Generate PNG for primary (most common) fusion only
+            PRIMARY_TSV="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.primary_fusion.tsv"
+            head -n 2 {input.fusions} > "$PRIMARY_TSV" 2>/dev/null || cp {input.fusions} "$PRIMARY_TSV"
+
+            echo "Executing Arriba draw_fusions.R for PNG (primary fusion)..."
             $DRAW_CMD \
-                --fusions={input.fusions} \
+                --fusions="$PRIMARY_TSV" \
                 --alignments={input.bam} \
                 --output={output.png} \
                 --annotation={params.gtf} \
@@ -341,7 +346,22 @@ rule bcr_abl_draw_fusions:
                 --transcriptSelection=canonical \
                 --plotPanels=$PANELS \
                 $CYTO_OPT $PROT_OPT {params.extra} || true
+
+            rm -f "$PRIMARY_TSV"
+
+            # If pdftoppm is available, ensure first page of PDF is used as PNG
+            if command -v pdftoppm >/dev/null 2>&1 && [ -s "{output.pdf}" ]; then
+                pdftoppm -png -r 150 -f 1 -l 1 "{output.pdf}" "{output.png%.png}_p1" 2>/dev/null || true
+                for f in "{output.png%.png}_p1-1.png" "{output.png%.png}_p1-01.png" "{output.png%.png}_p1-001.png"; do
+                    if [ -s "$f" ]; then
+                        mv -f "$f" "{output.png}"
+                        break
+                    fi
+                done
+                rm -f "{output.png%.png}_p1"*.png 2>/dev/null || true
+            fi
         fi
+
 
         # If PDF was not produced or is 0 bytes, generate publication-ready fusion diagram via python
         if [ ! -s "{output.pdf}" ]; then
