@@ -277,12 +277,14 @@ rule bcr_abl_draw_fusions:
         PROT_FILE="{params.protein_domains}"
         if [ -z "$PROT_FILE" ] || [ ! -f "$PROT_FILE" ]; then
             for p in \
+                /arriba_v2.4.0/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
                 /arriba_v2.4.0/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.tsv \
+                /arriba_v2.4.0/database/protein_domains_hg38_GRCh38_v2.4.0.gff3 \
                 /arriba_v2.4.0/database/protein_domains_hg38_GRCh38_v2.4.0.tsv \
-                /var/lib/arriba/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /var/lib/arriba/database/protein_domains_hg38_GRCh38_v2.4.0.tsv \
-                /data/references/arriba/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /data/references/arriba/protein_domains_hg38_GRCh38_v2.4.0.tsv
+                /var/lib/arriba/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
+                /var/lib/arriba/database/protein_domains_hg38_GRCh38_v2.4.0.gff3 \
+                /data/references/arriba/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
+                /data/references/arriba/protein_domains_hg38_GRCh38_v2.4.0.gff3
             do
                 if [ -f "$p" ]; then
                     PROT_FILE="$p"
@@ -296,10 +298,14 @@ rule bcr_abl_draw_fusions:
         echo "Protein domains: $PROT_FILE"
         echo "GTF: {params.gtf}"
 
-        # Try Arriba draw_fusions.R if available
+        # Try Arriba draw_fusions.R / bundled draw_fusions.r if available
         if [ -n "$DRAW_CMD" ] && [ -f "{params.gtf}" ] && [ -n "$CYTO_FILE" ] && [ -f "$CYTO_FILE" ]; then
             PROT_OPT=""
-            [ -n "$PROT_FILE" ] && [ -f "$PROT_FILE" ] && PROT_OPT="--proteinDomains=$PROT_FILE"
+            PANELS="fusion,circos,readcounts"
+            if [ -n "$PROT_FILE" ] && [ -f "$PROT_FILE" ]; then
+                PROT_OPT="--proteinDomains=$PROT_FILE"
+                PANELS="fusion,circos,domains,readcounts"
+            fi
 
             echo "Executing Arriba draw_fusions.R..."
             $DRAW_CMD \
@@ -308,8 +314,11 @@ rule bcr_abl_draw_fusions:
                 --output={output.pdf} \
                 --annotation={params.gtf} \
                 --cytobands="$CYTO_FILE" \
+                --transcriptSelection=canonical \
+                --plotPanels=$PANELS \
                 $PROT_OPT {params.extra} || true
         fi
+
 
         # If PDF was not produced or is 0 bytes, generate publication-ready fusion diagram via python
         if [ ! -s "{output.pdf}" ]; then
