@@ -1167,6 +1167,7 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
     for path in files:
         sample = ""
         sample_type = args.sample_type
+        barcode_name = ""
         if pattern:
             match = pattern.search(path.name)
             if match:
@@ -1177,6 +1178,7 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
                 else:
                     sample = match.group(0)
                 sample_type = match.groupdict().get("type", args.sample_type)
+                barcode_name = match.groupdict().get("barcode", "")
         if not sample:
             stem = path.stem
             if stem.endswith(("_T", "_N", "_R")):
@@ -1189,25 +1191,27 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
         counters[sample] += 1
         run_id = args.run_id or args.sequence_id or args.input_dir.name
         samples_by_name.setdefault(sample, {"sample": sample})
-        units.append(
-            {
-                "sample": sample,
-                "type": sample_type,
-                "platform": "ONT",
-                "machine": "unknown",
-                "processing_unit": f"PU{counters[sample]:03d}",
-                "barcode": args.barcode,
-                "input_type": args.input_type,
-                "fastq1": "UNUSED",
-                "fastq2": "UNUSED",
-                "bam": str(path),
-                "methylation": args.methylation,
-                "run_id": run_id,
-                "basecalling_model": args.basecalling_model,
-                "library_type": getattr(args, "library_type", "wgs"),
-                "assay": getattr(args, "assay", ""),
-            }
-        )
+        unit_entry = {
+            "sample": sample,
+            "type": sample_type,
+            "platform": "ONT",
+            "machine": "unknown",
+            "processing_unit": f"PU{counters[sample]:03d}",
+            "barcode": args.barcode,
+            "input_type": args.input_type,
+            "fastq1": "UNUSED",
+            "fastq2": "UNUSED",
+            "bam": str(path),
+            "methylation": args.methylation,
+            "run_id": run_id,
+            "basecalling_model": args.basecalling_model,
+            "library_type": getattr(args, "library_type", "wgs"),
+            "assay": getattr(args, "assay", ""),
+        }
+        if barcode_name:
+            unit_entry["barcode_name"] = str(barcode_name).strip()
+        units.append(unit_entry)
+
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
 
 
