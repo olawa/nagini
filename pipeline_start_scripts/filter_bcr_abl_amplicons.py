@@ -39,8 +39,10 @@ def find_nanostream(custom_path: str | None = None) -> str:
         "/home/cgu-lab/bin/nanostream",
         "/usr/local/bin/nanostream",
         os.path.expanduser("~/.cargo/bin/nanostream"),
-        "/Users/olwal516/dev/bin/nanostream",
+        os.path.expanduser("~/tmp/tools/nanoMonitor/target/release/nanostream"),
+        "/home/cgu-lab/tmp/tools/nanoMonitor/target/release/nanostream",
     ]
+
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
@@ -249,6 +251,11 @@ def main():
             final_fq_path = Path(orig_fq)
 
         new_row = dict(row)
+        # Explicitly set input_type to fastq and clear old BAM path so Nagini realigns from filtered FASTQ
+        new_row["input_type"] = "fastq"
+        if "bam" in new_row:
+            new_row["bam"] = ""
+
         # Store path relative to out_dir if inside, else absolute
         try:
             rel_path = final_fq_path.relative_to(out_dir)
@@ -257,6 +264,7 @@ def main():
             new_row[fq_col] = str(final_fq_path)
 
         new_units.append(new_row)
+
 
         summary_report_table.append({
             "sample": sample,

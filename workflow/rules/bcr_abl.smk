@@ -53,8 +53,8 @@ def _find_rindels_binary():
         os.path.expanduser("~/tmp/tools/rindels/target/release/rindels"),
         "/home/cgu-lab/tmp/tools/rindels/target/release/rindels",
         os.path.expanduser("~/.cargo/bin/rindels"),
-        "/Users/olwal516/dev/projects/rindels/target/release/rindels",
     ]
+
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
