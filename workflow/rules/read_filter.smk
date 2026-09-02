@@ -42,6 +42,8 @@ def get_nanofilter_binary():
 
 def is_read_filtering_enabled(sample):
     """Check if read pre-filtering is enabled for a given sample/assay."""
+    if config.get("read_filter", {}).get("enabled") is False:
+        return False
     setting = get_assay_setting(sample, "read_filter", "enabled", None)
     if setting is not None:
         return bool(setting)
@@ -51,15 +53,16 @@ def is_read_filtering_enabled(sample):
 def get_fastq_for_alignment(wildcards):
     """Return filtered FASTQ if filtering is enabled, else raw unit FASTQ."""
     if is_read_filtering_enabled(wildcards.sample):
-        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz"
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
     return get_unit_input(wildcards, "fastq1")
 
 
 def get_unmapped_bam_for_alignment(wildcards):
     """Return filtered unmapped BAM if filtering is enabled, else raw BAM."""
     if is_read_filtering_enabled(wildcards.sample):
-        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam"
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam".strip()
     return get_unit_input(wildcards, "bam")
+
 
 
 rule read_filter_fastq:

@@ -64,14 +64,22 @@ def find_default_primers() -> str:
 def parse_units_tsv(units_file: str) -> list[dict[str, str]]:
     with open(units_file, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f, delimiter="\t")
-        return list(reader)
+        rows = []
+        for r in reader:
+            cleaned = {str(k).strip(): (str(v).strip() if v is not None else "") for k, v in r.items() if k is not None}
+            rows.append(cleaned)
+        return rows
 
 
 def write_units_tsv(units_file: str, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
+    cleaned_fieldnames = [str(fn).strip() for fn in fieldnames if fn]
     with open(units_file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+        writer = csv.DictWriter(f, fieldnames=cleaned_fieldnames, delimiter="\t")
         writer.writeheader()
-        writer.writerows(rows)
+        for r in rows:
+            cleaned_row = {k: (str(v).strip() if v is not None else "") for k, v in r.items()}
+            writer.writerow(cleaned_row)
+
 
 
 def run_nanostream_amplicons(
@@ -295,11 +303,21 @@ def main():
     new_units_path = out_dir / "units.tsv"
     write_units_tsv(str(new_units_path), new_units, fieldnames)
 
-    # Copy samples.tsv and config.nagini.yaml
+    # Copy samples.tsv and update config.nagini.yaml
     if samples_path.is_file():
         shutil.copy2(str(samples_path), str(out_dir / "samples.tsv"))
     if config_path.is_file():
-        shutil.copy2(str(config_path), str(out_dir / "config.nagini.yaml"))
+        try:
+            import yaml
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            # Disable pre-alignment nanofilter because reads are already filtered amplicons
+            cfg.setdefault("read_filter", {})["enabled"] = False
+            with open(out_dir / "config.nagini.yaml", "w", encoding="utf-8") as f:
+                yaml.safe_dump(cfg, f, sort_keys=False)
+        except Exception:
+            shutil.copy2(str(config_path), str(out_dir / "config.nagini.yaml"))
+
 
     # Print summary table
     print("\n" + "=" * 96)
