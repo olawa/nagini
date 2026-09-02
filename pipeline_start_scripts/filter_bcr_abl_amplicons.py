@@ -82,6 +82,7 @@ def run_nanostream_amplicons(
     output_fastq_prefix: str,
     threads: int = 8,
     split_by_amplicon: bool = True,
+    split_chimeras: bool = True,
     max_edit_dist: int = 3,
     end_length: int = 150,
 ) -> dict:
@@ -101,7 +102,10 @@ def run_nanostream_amplicons(
     ]
     if split_by_amplicon:
         cmd.append("--split-by-amplicon")
+    if split_chimeras:
+        cmd.append("--split-chimeras")
     cmd.append(input_fastq)
+
 
     sys.stderr.write(f"\n[Nanostream] Running amplicon filter for {Path(input_fastq).name}...\n")
     sys.stderr.write(f"Command: {' '.join(cmd)}\n")
@@ -151,7 +155,15 @@ def main():
         action="store_true",
         help="If set, include both major and minor amplicons in a combined FASTQ for each sample instead of picking the primary",
     )
+    parser.add_argument(
+        "--no-split-chimeras",
+        dest="split_chimeras",
+        action="store_false",
+        default=True,
+        help="Disable splitting of concatemeric chimeric reads at internal primers",
+    )
     args = parser.parse_args()
+
 
     run_dir = Path(args.run_dir).resolve()
     out_dir = Path(args.out_dir).resolve()
@@ -216,12 +228,14 @@ def main():
             output_fastq_prefix=out_fq_prefix,
             threads=args.threads,
             split_by_amplicon=True,
+            split_chimeras=args.split_chimeras,
         )
 
         amplicons_dict = stats_data.get("amplicons", {})
         total_raw = stats_data.get("total_raw_reads", 0)
         primer_dimers = stats_data.get("failed_pair_match", 0)
         unmatched = stats_data.get("unmatched_count", 0)
+        split_chimeras_count = stats_data.get("split_chimeras_count", 0)
         total_matched = sum(info.get("count", 0) for info in amplicons_dict.values())
 
         # Find the split fastq files created by nanostream
@@ -265,7 +279,6 @@ def main():
 
         new_units.append(new_row)
 
-
         summary_report_table.append({
             "sample": sample,
             "type": stype,
@@ -273,6 +286,7 @@ def main():
             "matched_amplicons": total_matched,
             "match_rate": f"{(total_matched / max(total_raw, 1)) * 100.0:.1f}%",
             "primer_dimers": primer_dimers,
+            "split_chimeras": split_chimeras_count,
             "unmatched": unmatched,
             "amplicons": ", ".join(f"{k} ({v['count']})" for k, v in amplicons_dict.items()) or "None",
         })
@@ -288,14 +302,15 @@ def main():
         shutil.copy2(str(config_path), str(out_dir / "config.nagini.yaml"))
 
     # Print summary table
-    print("\n" + "=" * 80)
-    print("AMPLICON FILTERING RESULTS SUMMARY")
-    print("=" * 80)
-    print(f"{'Sample':<20} | {'Raw Reads':<10} | {'Matched':<10} | {'Match %':<8} | {'Dimers':<8} | {'Amplicons (count)'}")
-    print("-" * 80)
+    print("\n" + "=" * 96)
+    print("AMPLICON FILTERING & CHIMERA SPLITTING RESULTS SUMMARY")
+    print("=" * 96)
+    print(f"{'Sample':<18} | {'Raw Reads':<9} | {'Matched':<9} | {'Match %':<8} | {'Dimers':<7} | {'Split Chim':<10} | {'Amplicons (count)'}")
+    print("-" * 96)
     for r in summary_report_table:
-        print(f"{r['sample']:<20} | {r['raw_reads']:<10} | {r['matched_amplicons']:<10} | {r['match_rate']:<8} | {r['primer_dimers']:<8} | {r['amplicons']}")
-    print("=" * 80)
+        print(f"{r['sample']:<18} | {r['raw_reads']:<9} | {r['matched_amplicons']:<9} | {r['match_rate']:<8} | {r['primer_dimers']:<7} | {r['split_chimeras']:<10} | {r['amplicons']}")
+    print("=" * 96)
+
 
     print("\nSUCCESS! New amplicon-filtered analysis directory is ready at:")
     print(f"  {out_dir}\n")
