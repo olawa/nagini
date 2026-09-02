@@ -57,6 +57,14 @@ class SummaryReportTest(unittest.TestCase):
             self.assertTrue(Path(out_xlsx).exists())
             self.assertGreater(Path(out_xlsx).stat().st_size, 1000)
 
+            import zipfile
+            with zipfile.ZipFile(out_xlsx, "r") as z:
+                wb_xml = z.read("xl/workbook.xml").decode("utf-8")
+                self.assertIn("Overview", wb_xml)
+                self.assertIn("BCR-ABL1 Overview", wb_xml)
+                self.assertIn("BCR-ABL (sample1)", wb_xml)
+
 
 if __name__ == "__main__":
     unittest.main()
+

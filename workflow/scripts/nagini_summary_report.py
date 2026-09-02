@@ -393,7 +393,10 @@ def build_summary_report(
                 bd["exon_rows"],
                 plot_png=bd.get("plot_png", ""),
             )
+            sheets.append((sheet_title, sample_bcr_rows, LAYOUT))
+
     write_xlsx(output_path, sheets)
+
 
     # Also create unique, run-specific named copies so multiple summaries can be opened in Excel simultaneously
     clean_id = re.sub(r"[^\w\.-]", "_", display_id)
