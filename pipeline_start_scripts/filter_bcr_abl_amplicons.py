@@ -82,6 +82,14 @@ def write_units_tsv(units_file: str, rows: list[dict[str, str]], fieldnames: lis
 
 
 
+def nanostream_supports_split_chimeras(nanostream_bin: str) -> bool:
+    try:
+        proc = subprocess.run([nanostream_bin, "amplicons", "--help"], capture_output=True, text=True)
+        return "--split-chimeras" in proc.stdout or "--split-chimeras" in proc.stderr
+    except Exception:
+        return False
+
+
 def run_nanostream_amplicons(
     nanostream_bin: str,
     primers_tsv: str,
@@ -111,8 +119,15 @@ def run_nanostream_amplicons(
     if split_by_amplicon:
         cmd.append("--split-by-amplicon")
     if split_chimeras:
-        cmd.append("--split-chimeras")
+        if nanostream_supports_split_chimeras(nanostream_bin):
+            cmd.append("--split-chimeras")
+        else:
+            sys.stderr.write(
+                f"[Nanostream] Note: {nanostream_bin} does not support '--split-chimeras' yet; "
+                f"skipping chimera splitting (recompile nanoMonitor to enable concatemer splitting).\n"
+            )
     cmd.append(input_fastq)
+
 
 
     sys.stderr.write(f"\n[Nanostream] Running amplicon filter for {Path(input_fastq).name}...\n")

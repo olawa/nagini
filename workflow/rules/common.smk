@@ -714,15 +714,17 @@ def get_sample_type_path(wildcards, directory, suffix):
 
     sample = str(wildcards.sample).strip()
     unit_type = str(wildcards.type).strip()
+    d = str(directory).strip()
+    sfx = str(suffix).strip()
     if not sample or not unit_type:
         raise WorkflowError(
             f"Cannot build a report path with empty sample/type: {sample}/{unit_type}."
         )
-    if any(character.isspace() for character in directory + suffix):
-        raise WorkflowError(
-            f"Internal whitespace in report path components: {directory}, {suffix}."
-        )
-    return f"{directory}/{sample}_{unit_type}{suffix}"
+    res = f"{d}/{sample}_{unit_type}{sfx}"
+    while " /" in res or "/ " in res or " _" in res or "_ " in res or " ." in res:
+        res = res.replace(" /", "/").replace("/ ", "/").replace(" _", "_").replace("_ ", "_").replace(" .", ".")
+    return res.strip()
+
 
 
 def get_small_variant_report_vcf(wildcards):
