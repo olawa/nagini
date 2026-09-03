@@ -8,36 +8,56 @@ import platform
 import shutil
 
 
-def get_nanofilter_binary():
-    """Resolve the nanofilter executable path across platforms."""
+def get_nanostream_binary():
+    """Resolve the nanostream executable, or fail with what to do about it.
+
+    There is deliberately no Python fallback. A fallback that reimplements the
+    filter is worse than no filter at all: it computed mean read quality as the
+    arithmetic mean of Phred scores, which overestimates quality on exactly the
+    ONT failure mode this filter exists to catch (a good read with a bad tail),
+    so the same config silently kept different reads depending on which
+    implementation happened to be resolved on that host.
+
+    nanostream computes it as -10*log10(mean(10^(-q/10))) on the FASTQ path and
+    reads the qs tag directly on the BAM path.
+    """
+
     configured = config.get("read_filter", {}).get("binary", "")
     if configured:
         expanded = os.path.expanduser(os.path.expandvars(configured))
-        if os.path.isabs(expanded) and os.path.exists(expanded):
-            return expanded
-        if shutil.which(configured):
-            return shutil.which(configured)
+        if os.path.isabs(expanded):
+            if os.path.exists(expanded) and os.access(expanded, os.X_OK):
+                return expanded
+            raise WorkflowError(
+                f"read_filter.binary points at {expanded}, which is not an executable file."
+            )
+        resolved = shutil.which(configured)
+        if resolved:
+            return resolved
+        raise WorkflowError(f"read_filter.binary={configured!r} is not on PATH.")
 
-    path_bin = shutil.which("nanofilter")
-    if path_bin:
-        return path_bin
+    for name in ("nanostream", "nanofilter"):
+        resolved = shutil.which(name)
+        if resolved:
+            return resolved
 
+    # Resolved on the submitting host, so a bundled binary has to be one the
+    # compute nodes can also execute; keep it in the repo on shared storage.
     system = platform.system().lower()
     machine = platform.machine().lower()
-    if machine in ("aarch64", "arm64"):
-        arch_alias = "arm64"
-    elif machine in ("x86_64", "amd64"):
-        arch_alias = "x86_64"
-    else:
-        arch_alias = machine
+    arch_alias = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x86_64", "amd64": "x86_64"}.get(
+        machine, machine
+    )
+    bundled = os.path.join(workflow.basedir, "bin", f"{system}-{arch_alias}", "nanostream")
+    if os.path.exists(bundled) and os.access(bundled, os.X_OK):
+        return bundled
 
-    bundled_dir = os.path.join(workflow.basedir, "bin", f"{system}-{arch_alias}")
-    bundled_exe = os.path.join(bundled_dir, "nanofilter")
-    if os.path.exists(bundled_exe) and os.access(bundled_exe, os.X_OK):
-        return bundled_exe
-
-    fallback_script = os.path.join(workflow.basedir, "scripts", "nanofilter_fallback.py")
-    return f"python3 {fallback_script}"
+    raise WorkflowError(
+        "read_filter is enabled but nanostream was not found. Put it on PATH, set "
+        "read_filter.binary to its path, drop the binary in "
+        f"workflow/bin/{system}-{arch_alias}/nanostream, or set read_filter.enabled: "
+        "false to skip filtering."
+    )
 
 
 def is_read_filtering_enabled(sample):
@@ -72,7 +92,7 @@ rule read_filter_fastq:
     output:
         fastq1=temp("reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.fastq.gz"),
     params:
-        binary=lambda wildcards: get_nanofilter_binary(),
+        binary=lambda wildcards: get_nanostream_binary(),
         min_qv=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)),
         length_range=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "length_range", config.get("read_filter", {}).get("length_range", "500-3000")),
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
@@ -85,6 +105,12 @@ rule read_filter_fastq:
         partition=config.get("read_filter", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("read_filter", {}).get("threads", 4),
         time=config.get("read_filter", {}).get("time", config["default_resources"]["time"]),
+    # Deliberately no container: this rule runs the nanostream binary resolved
+    # by get_nanostream_binary(), and a container would hide a binary found on
+    # the host PATH. Set read_filter.container plus read_filter.binary together
+    # if you want it containerised, with the binary at a path inside the image.
+    container:
+        config.get("read_filter", {}).get("container", None)
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -103,7 +129,7 @@ rule read_filter_unmapped_bam:
     output:
         bam=temp("reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.unmapped.bam"),
     params:
-        binary=lambda wildcards: get_nanofilter_binary(),
+        binary=lambda wildcards: get_nanostream_binary(),
         min_qv=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)),
         length_range=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "length_range", config.get("read_filter", {}).get("length_range", "500-3000")),
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
@@ -116,6 +142,12 @@ rule read_filter_unmapped_bam:
         partition=config.get("read_filter", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("read_filter", {}).get("threads", 4),
         time=config.get("read_filter", {}).get("time", config["default_resources"]["time"]),
+    # Deliberately no container: this rule runs the nanostream binary resolved
+    # by get_nanostream_binary(), and a container would hide a binary found on
+    # the host PATH. Set read_filter.container plus read_filter.binary together
+    # if you want it containerised, with the binary at a path inside the image.
+    container:
+        config.get("read_filter", {}).get("container", None)
     conda:
         "../../envs/nagini.yaml"
     shell:

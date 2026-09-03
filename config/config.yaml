@@ -152,9 +152,19 @@ references:
 # them here; anything not listed keeps its built-in definition.
 assays: {}
 
-# Pre-alignment read filtering with nanofilter (QV, length range)
 read_filter:
+  # Pre-alignment read filtering with nanostream (the unified CLI from the
+  # nanoMonitor workspace). There is no Python fallback: if the binary cannot
+  # be resolved the run stops rather than silently filtering differently.
+  #
+  # nanostream computes mean read quality as -10*log10(mean(10^(-q/10))).
+  # On BAM input it reads the qs tag directly; on FASTQ it recomputes from the
+  # quality string with that same formula, so the value matches a dorado
+  # qs:i header tag to within its integer rounding. It does not currently read
+  # the qs:i tag out of the FASTQ header itself.
   enabled: false
+  # Empty: look for nanostream (then nanofilter) on PATH, then
+  # workflow/bin/<os>-<arch>/nanostream. Set to an absolute path to pin it.
   binary: ""
   min_qv: 20
   length_range: "500-3000"
