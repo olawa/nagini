@@ -92,6 +92,8 @@ rule bcr_abl_fusion_counts:
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -138,6 +140,8 @@ rule bcr_abl_branford_calling:
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -179,6 +183,8 @@ rule bcr_abl_phasing:
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -215,6 +221,8 @@ rule bcr_abl_exon_coverage:
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:

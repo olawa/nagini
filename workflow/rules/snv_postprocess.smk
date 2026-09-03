@@ -305,6 +305,8 @@ rule create_genome_contigs_bed:
     output:
         bed="references/genome_contigs.bed",
     threads: 1
+    container:
+        config["default_container"]
     shell:
         """
         awk 'BEGIN {{OFS="\\t"}} {{print $1, 0, $2}}' {input.fai} > {output.bed}
