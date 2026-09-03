@@ -18,4 +18,4 @@ container_runtime: singularity
 singularity_binds: []
 
 # Pin before clinical use.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"

@@ -48,10 +48,10 @@ VEP_CACHE: ""
 SNPEFF_DB: ""
 SIMPLE_SV_PANEL: ""
 SIMPLE_SV_FUSION_PAIRS: ""
-# ClairS-TO ships no versioned tag we can rely on being present offline.
-# Pin this to a digest or a released tag per site before clinical use; the
-# floating tag below is a development default, not a validated one.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
+# Pinned deliberately: with a shared singularity cache, a floating :latest tag
+# means the workstation and the cluster can silently run different versions of
+# the caller. v0.4.4 is what :latest resolved to on 2026-05-11.
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"
 DEEPVARIANT_CONTAINER: "docker://google/deepvariant:1.6.0"
 ARRIBA_CONTAINER: "docker://uhrigs/arriba:2.4.0"
 

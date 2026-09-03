@@ -31,4 +31,4 @@ singularity_binds:
   - /projects
 
 # Pin before clinical use.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:latest"
+CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"
