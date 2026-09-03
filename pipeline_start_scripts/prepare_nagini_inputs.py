@@ -766,12 +766,21 @@ def _registry_entry(variable, value, reference_root, source):
     return ReferenceEntry(variable, path, kind, checksum, source)
 
 
-def flatten_reference_registry(registry: dict) -> list[ReferenceEntry]:
-    """Turn a registry into the {{VARIABLE}} entries the config templates use."""
+def flatten_reference_registry(registry: dict, default_root: str = "") -> list[ReferenceEntry]:
+    """Turn a registry into the {{VARIABLE}} entries the config templates use.
+
+    Relative ``path`` values are joined to a reference root, so a registry can
+    say where an asset sits inside the site's reference tree without repeating
+    the tree's location on every line. The root is the registry's own
+    ``reference_root`` when it sets one, otherwise the site's
+    ``REFERENCE_ROOT`` -- so a site declares that location once.
+    """
 
     if not registry:
         return []
-    reference_root = str(registry.get("reference_root", "") or "").strip()
+    reference_root = str(
+        registry.get("reference_root", "") or default_root or ""
+    ).strip()
     entries: list[ReferenceEntry] = []
 
     for build, assets in (registry.get("reference_builds") or {}).items():
@@ -798,7 +807,7 @@ def flatten_reference_registry(registry: dict) -> list[ReferenceEntry]:
     return entries
 
 
-def registry_variables(registry: dict) -> dict[str, str]:
+def registry_variables(registry: dict, default_root: str = "") -> dict[str, str]:
     """Every variable the registry declares, empty paths included.
 
     An entry with no path is a statement that the asset is not installed here,
@@ -806,7 +815,10 @@ def registry_variables(registry: dict) -> dict[str, str]:
     to it.
     """
 
-    return {entry.variable: entry.path for entry in flatten_reference_registry(registry)}
+    return {
+        entry.variable: entry.path
+        for entry in flatten_reference_registry(registry, default_root)
+    }
 
 
 def _md5(path: Path) -> str:
@@ -818,7 +830,10 @@ def _md5(path: Path) -> str:
 
 
 def validate_reference_registry(
-    registry: dict, verify_checksums: bool = False, strict: bool = False
+    registry: dict,
+    verify_checksums: bool = False,
+    strict: bool = False,
+    default_root: str = "",
 ) -> None:
     """Check the inventory before Snakemake builds a DAG against it.
 
@@ -828,7 +843,7 @@ def validate_reference_registry(
     ``--verify-references`` makes it strict and adds checksums.
     """
 
-    entries = flatten_reference_registry(registry)
+    entries = flatten_reference_registry(registry, default_root)
     missing = []
     wrong_kind = []
     bad_checksum = []
@@ -1309,17 +1324,44 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             raise SystemExit(f"Reference registry does not exist: {reference_path}")
         reference_registry = read_yaml(reference_path)
 
-    # base config defaults < registry inventory < site config. The registry is
-    # where a reference path is declared; the site config can still pin one
-    # without taking over the whole inventory.
-    if reference_registry:
-        config = deep_merge(config, registry_variables(reference_registry))
-
+    site_values: dict[str, Any] = {}
     if args.site_config:
         site_config = args.site_config.resolve()
         if not site_config.is_file():
             raise SystemExit(f"Site config does not exist: {site_config}")
-        config = deep_merge(config, read_yaml(site_config))
+        site_values = read_yaml(site_config)
+
+    # Where this site keeps its reference tree. Declared once, in the site
+    # config, and used to resolve every tree-relative path in the registry, so
+    # the registry says what an asset is called and the site says where the
+    # tree lives.
+    reference_root = str(
+        site_values.get("REFERENCE_ROOT", config.get("REFERENCE_ROOT", "")) or ""
+    ).strip()
+
+    # The registry may refer to the site's own variables, so that it can write
+    # reference_root: "{{REFERENCE_ROOT}}" instead of repeating the location.
+    if reference_registry:
+        registry_context = {
+            str(key): str(value)
+            for key, value in {**config, **site_values}.items()
+            if isinstance(value, (str, int, float, bool))
+        }
+        reference_registry = expand_templates(reference_registry, registry_context)
+        reference_root = str(
+            reference_registry.get("reference_root", "") or reference_root
+        ).strip()
+
+    # base config defaults < registry inventory < site config. The registry is
+    # where a reference path is declared; the site config can still pin one
+    # without taking over the whole inventory.
+    if reference_registry:
+        config = deep_merge(
+            config, registry_variables(reference_registry, reference_root)
+        )
+
+    if site_values:
+        config = deep_merge(config, site_values)
 
     # An explicit --reference-build wins over the config default: a single
     # nagini run uses one build for every sample, so switching assay (bcr_abl
@@ -1367,7 +1409,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         if getattr(args, "check_references", True):
             _verify = bool(getattr(args, "verify_references", False))
             validate_reference_registry(
-                reference_registry, verify_checksums=_verify, strict=_verify
+                reference_registry,
+                verify_checksums=_verify,
+                strict=_verify,
+                default_root=reference_root,
             )
 
     # Nagini's checked-in configs use paths relative to the repository root,

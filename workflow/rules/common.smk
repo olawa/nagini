@@ -131,6 +131,23 @@ if reference_build not in references:
 config["reference"] = references[reference_build]
 config["reference"]["build"] = reference_build
 
+# A reference entry with no FASTA means the build is declared but not installed
+# at this site (the registry says so with an empty path). Catch it here, where
+# the message can name the build, rather than letting Snakemake report an empty
+# input file for whichever rule happens to be scheduled first.
+if not str(config["reference"].get("fasta", "") or "").strip():
+    _installed = sorted(
+        name
+        for name, entry in references.items()
+        if isinstance(entry, dict) and str(entry.get("fasta", "") or "").strip()
+    )
+    raise WorkflowError(
+        f"reference_build={reference_build} has no fasta configured, which means it "
+        f"is not installed at site {config.get('site', '?')}. Builds available here: "
+        f"{', '.join(_installed) or 'none'}. Add the paths to "
+        "config/reference_files/reference_files_<site>.yaml, or pick another build."
+    )
+
 def vep_enabled():
     """Whether the report should depend on the VEP-annotated VCF."""
 

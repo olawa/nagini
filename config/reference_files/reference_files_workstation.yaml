@@ -1,154 +1,102 @@
 ---
 # Reference inventory for the workstation site.
 #
-# This is where a reference path is declared. The launcher flattens it into
-# the {{VARIABLE}} names used by config/config.yaml, so the site config only
-# needs to override a path when it genuinely differs from the inventory.
+# reference_root is where this site keeps its reference tree, taken from the
+# site config's REFERENCE_ROOT so the location is declared once. Every `path`
+# below is relative to it, so moving the tree is a one-line change.
 #
-# type: file | directory | optional. Empty checksums are not verified;
-# fill them in and run the launcher with --verify-references to check them.
+# Assets that ship inside the nagini repo (the adaptive design BEDs, the
+# BCR-ABL1 exon BED) are deliberately not listed here: they are defaulted in
+# config/config.yaml and resolved against the checkout, not the reference tree.
+#
+# type: file | directory | optional. An empty path means the asset is not
+# installed at this site, which overrides the shared default rather than
+# falling through to it. Empty checksums are not verified; fill them in and
+# run the launcher with --verify-references to check them.
 site: workstation
-reference_root: /data/references
+reference_root: "{{REFERENCE_ROOT}}"
 reference_builds:
   hg38:
     fasta:
-      path: /data/references/GRCh38_no_alt_analysis_set.fasta
+      path: GRCh38_no_alt_analysis_set.fasta
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.fasta
       checksum: ''
     fai:
-      path: /data/references/GRCh38_no_alt_analysis_set.fasta.fai
+      path: GRCh38_no_alt_analysis_set.fasta.fai
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.fasta.fai
       checksum: ''
     dict:
-      path: /data/references/GRCh38_no_alt_analysis_set.dict
+      path: GRCh38_no_alt_analysis_set.dict
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.dict
       checksum: ''
     minimap2_index:
-      path: /data/references/GRCh38_no_alt_analysis_set.mmi
+      path: GRCh38_no_alt_analysis_set.mmi
       type: file
       url: file:/data/references/GRCh38_no_alt_analysis_set.mmi
       checksum: ''
-    design_bed:
-      path: workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
-      type: file
-      url: file:workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
-      checksum: ''
-    sv_annotation_bed:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
     tandem_repeats:
-      path: /data/references/human_GRCh38_no_alt_analysis_set.trf.bed
+      path: human_GRCh38_no_alt_analysis_set.trf.bed
       type: file
       url: file:/data/references/human_GRCh38_no_alt_analysis_set.trf.bed
       checksum: ''
     clinvar:
-      path: /data/references/clinvar.vcf.gz
+      path: clinvar.vcf.gz
       type: file
       url: file:/data/references/clinvar.vcf.gz
       checksum: ''
     clinvar_index:
-      path: /data/references/clinvar.vcf.gz.tbi
+      path: clinvar.vcf.gz.tbi
       type: file
       url: file:/data/references/clinvar.vcf.gz.tbi
       checksum: ''
-    cytoband:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
     gene_annotation:
-      path: /data/references/gencode.v46.annotation.sorted.gtf
+      path: gencode.v46.annotation.sorted.gtf
       type: file
       url: file:/data/references/gencode.v46.annotation.sorted.gtf
       checksum: ''
     annotations:
-      path: /data/references/annotations
-      type: file
+      path: annotations
+      type: directory
       url: file:/data/references/annotations
       checksum: ''
   hs1:
     fasta:
-      path: /data/references/hs1.fa
+      path: hs1.fa
       type: file
       url: file:/data/references/hs1.fa
       checksum: ''
     fai:
-      path: /data/references/hs1.fa.fai
+      path: hs1.fa.fai
       type: file
       url: file:/data/references/hs1.fa.fai
       checksum: ''
     dict:
-      path: /data/references/hs1.dict
+      path: hs1.dict
       type: file
       url: file:/data/references/hs1.dict
       checksum: ''
     minimap2_index:
-      path: /data/references/hs1.mmi
+      path: hs1.mmi
       type: file
       url: file:/data/references/hs1.mmi
       checksum: ''
-    design_bed:
-      path: workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
-      type: file
-      url: file:workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
-      checksum: ''
-    sv_annotation_bed:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    tandem_repeats:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    clinvar:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    cytoband:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    gene_annotation:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    annotations:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
   hg19:
-    # PLACEHOLDER: not verified against any file on this machine. Confirm this
-    # path exists and re-run with --verify-references before first use.
-    # Needed only for the bcr_abl assay's reference_build.
     fasta:
-      path: /data/references/hg19/hg19.fa
+      path: hg19/hg19.fa
       type: file
       url: ''
       checksum: ''
     fai:
-      path: /data/references/hg19/hg19.fa.fai
+      path: hg19/hg19.fa.fai
       type: file
       url: ''
       checksum: ''
     dict:
-      path: /data/references/hg19/hg19.dict
+      path: hg19/hg19.dict
       type: file
-      url: ''
-      checksum: ''
-    mmi:
-      path: ''
-      type: optional
       url: ''
       checksum: ''
 annotations:

@@ -770,5 +770,97 @@ class ReferenceRegistryTest(unittest.TestCase):
             self.assertTrue(PREPARE.registry_variables(registry), f"{site} registry is empty")
 
 
+class ReferenceRootTest(unittest.TestCase):
+    """A site declares where its reference tree lives once, and the registry
+    names assets relative to it."""
+
+    PIPELINE_ROOT = Path(__file__).parents[1]
+
+    def test_tree_relative_paths_join_the_declared_root(self):
+        registry = {
+            "reference_root": "/refs",
+            "reference_builds": {"hg38": {"fasta": {"path": "hg38/genome.fa"}}},
+        }
+        self.assertEqual(
+            PREPARE.registry_variables(registry)["HG38_FASTA"], "/refs/hg38/genome.fa"
+        )
+
+    def test_the_root_can_be_inherited_from_the_site(self):
+        """A registry without its own reference_root uses the site's."""
+
+        registry = {"reference_builds": {"hg38": {"fasta": {"path": "hg38/genome.fa"}}}}
+        self.assertEqual(
+            PREPARE.registry_variables(registry, "/site/refs")["HG38_FASTA"],
+            "/site/refs/hg38/genome.fa",
+        )
+
+    def test_an_own_root_wins_over_the_inherited_one(self):
+        registry = {
+            "reference_root": "/explicit",
+            "reference_builds": {"hg38": {"fasta": {"path": "hg38/genome.fa"}}},
+        }
+        self.assertEqual(
+            PREPARE.registry_variables(registry, "/site/refs")["HG38_FASTA"],
+            "/explicit/hg38/genome.fa",
+        )
+
+    def test_repo_shipped_assets_are_not_joined_to_the_reference_tree(self):
+        """workflow/ and config/ paths belong to the checkout, not the tree."""
+
+        registry = {
+            "reference_root": "/refs",
+            "reference_builds": {
+                "hg38": {"design_bed": {"path": "workflow/resources/adaptive/x.bed"}}
+            },
+        }
+        self.assertEqual(
+            PREPARE.registry_variables(registry)["HG38_DESIGN_BED"],
+            "workflow/resources/adaptive/x.bed",
+        )
+
+    def test_absolute_paths_ignore_the_root(self):
+        registry = {
+            "reference_root": "/refs",
+            "reference_builds": {"hg38": {"fasta": {"path": "/elsewhere/genome.fa"}}},
+        }
+        self.assertEqual(
+            PREPARE.registry_variables(registry)["HG38_FASTA"], "/elsewhere/genome.fa"
+        )
+
+    def test_shipped_registries_declare_a_root_and_use_relative_paths(self):
+        """Guards against a site's tree location creeping back onto every line."""
+
+        for site in ("local", "workstation", "marvin"):
+            registry = PREPARE.read_yaml(
+                self.PIPELINE_ROOT / f"config/reference_files/reference_files_{site}.yaml"
+            )
+            self.assertIn(
+                "REFERENCE_ROOT", str(registry.get("reference_root", "")),
+                f"{site} should take its root from the site config",
+            )
+            for build, assets in (registry.get("reference_builds") or {}).items():
+                for key, value in (assets or {}).items():
+                    path = value.get("path", "") if isinstance(value, dict) else value
+                    if not path or not path.startswith("/"):
+                        continue
+                    # local is a developer machine and may point outside the tree.
+                    self.assertEqual(
+                        site, "local",
+                        f"{site}.{build}.{key} is absolute ({path}); make it relative "
+                        "to reference_root instead",
+                    )
+
+    def test_an_uninstalled_build_is_declared_empty_not_guessed(self):
+        """marvin has no hs1; the registry must say so rather than carry a path
+        copied from the shared defaults that resolves to nothing anywhere."""
+
+        registry = PREPARE.read_yaml(
+            self.PIPELINE_ROOT / "config/reference_files/reference_files_marvin.yaml"
+        )
+        hs1 = registry["reference_builds"]["hs1"]
+        self.assertEqual(hs1["fasta"]["path"], "")
+        self.assertEqual(hs1["fasta"]["type"], "optional")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,152 +1,77 @@
 ---
 # Reference inventory for the marvin site.
 #
-# This is where a reference path is declared. The launcher flattens it into
-# the {{VARIABLE}} names used by config/config.yaml, so the site config only
-# needs to override a path when it genuinely differs from the inventory.
+# reference_root is where this site keeps its reference tree, taken from the
+# site config's REFERENCE_ROOT so the location is declared once. Every `path`
+# below is relative to it, so moving the tree is a one-line change.
 #
-# type: file | directory | optional. Empty checksums are not verified;
-# fill them in and run the launcher with --verify-references to check them.
+# Assets that ship inside the nagini repo (the adaptive design BEDs, the
+# BCR-ABL1 exon BED) are deliberately not listed here: they are defaulted in
+# config/config.yaml and resolved against the checkout, not the reference tree.
+#
+# type: file | directory | optional. An empty path means the asset is not
+# installed at this site, which overrides the shared default rather than
+# falling through to it. Empty checksums are not verified; fill them in and
+# run the launcher with --verify-references to check them.
 site: marvin
+reference_root: "{{REFERENCE_ROOT}}"
 reference_builds:
   hg38:
     fasta:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
+      path: GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta
       checksum: ''
     fai:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
+      path: GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.fasta.fai
       checksum: ''
     dict:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
+      path: GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/GRCmasked/GCA_000001405.15_GRCh38_no_alt_analysis_set_GRCmasked.dict
       checksum: ''
-    minimap2_index:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    design_bed:
-      path: workflow/resources/adaptive/dic_9_20_iamp21_hg38.bed
-      type: file
-      url: ''
-      checksum: ''
     sv_annotation_bed:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
+      path: GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
       checksum: ''
     tandem_repeats:
-      path: /beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
+      path: GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
       type: file
       url: file:/beegfs-storage/data/ref_genomes/GRCh38/simple_sv_annotation/simple_repeats.merged.bed.gz
-      checksum: ''
-    clinvar:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    cytoband:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    gene_annotation:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    annotations:
-      path: ''
-      type: optional
-      url: ''
       checksum: ''
   hs1:
     fasta:
-      path: references/hs1/chm13v2.0.fa
-      type: file
+      path: ''
+      type: optional
       url: ''
       checksum: ''
     fai:
-      path: references/hs1/chm13v2.0.fa.fai
-      type: file
+      path: ''
+      type: optional
       url: ''
       checksum: ''
     dict:
-      path: references/hs1/chm13v2.0.dict
-      type: file
-      url: ''
-      checksum: ''
-    minimap2_index:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    design_bed:
-      path: workflow/resources/adaptive/dic_9_20_iamp21_T2T.bed
-      type: file
-      url: ''
-      checksum: ''
-    sv_annotation_bed:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    tandem_repeats:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    clinvar:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    cytoband:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    gene_annotation:
-      path: ''
-      type: optional
-      url: ''
-      checksum: ''
-    annotations:
       path: ''
       type: optional
       url: ''
       checksum: ''
   hg19:
-    # UNVERIFIED: inferred from pickett_bcr_abl_pipeline's own reference
-    # registry (its "url" field, which points at the shared reference tree
-    # rather than its project-local cache) and this file's own hg38 entry's
-    # path convention (/beegfs-storage/data/ref_genomes/...). Confirm this
-    # path exists on marvin and re-run with --verify-references before first
-    # use; consider pointing this at pickett's exact hg19.with.mt.fasta
-    # instead if that is what BCR-ABL1 BAMs on marvin are already aligned to.
     fasta:
-      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.fasta
+      path: hg19/genome_fasta/hg19.with.mt.fasta
       type: file
       url: ''
       checksum: ''
     fai:
-      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.fasta.fai
+      path: hg19/genome_fasta/hg19.with.mt.fasta.fai
       type: file
       url: ''
       checksum: ''
     dict:
-      path: /beegfs-storage/data/ref_genomes/hg19/genome_fasta/hg19.with.mt.dict
+      path: hg19/genome_fasta/hg19.with.mt.dict
       type: file
-      url: ''
-      checksum: ''
-    mmi:
-      path: ''
-      type: optional
       url: ''
       checksum: ''
 annotations:
