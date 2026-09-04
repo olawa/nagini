@@ -12,6 +12,8 @@ SPEC = importlib.util.spec_from_file_location("nagini_report", SCRIPT)
 REPORT = importlib.util.module_from_spec(SPEC)
 try:
     SPEC.loader.exec_module(REPORT)
+    if getattr(REPORT, "xlsxwriter", None) is None:
+        REPORT = None
 except ImportError:
     REPORT = None
 

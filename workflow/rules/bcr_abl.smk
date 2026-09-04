@@ -122,15 +122,25 @@ rule bcr_abl_branford_calling:
             config.get("bcr_abl", {}).get("features_json", "")
             or _bcr_abl_resource("bcr_abl_features.json")
         ),
+        ref_fasta=lambda wildcards: config.get("reference", {}).get("fasta", ""),
     output:
         all_sites="reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
         vcf="reports/bcr_abl/{sample}_{type}.branford_mutations.vcf",
     params:
         min_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "min_af", config.get("bcr_abl", {}).get("min_af", 0.01)),
+        subclonal_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "subclonal_af", config.get("bcr_abl", {}).get("subclonal_af", 0.002)),
         min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50),
         min_alt_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_alt_reads", 5),
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
+        min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
+        min_snr=lambda wildcards: config.get("bcr_abl", {}).get("min_snr", 3.0),
+        min_minor_strand_ratio=lambda wildcards: config.get("bcr_abl", {}).get("min_minor_strand_ratio", 0.05),
+        min_mean_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_mean_baseq", 14.0),
+        min_kmer_rate=lambda wildcards: config.get("bcr_abl", {}).get("min_kmer_rate", 0.60),
+        kmer_window=lambda wildcards: config.get("bcr_abl", {}).get("kmer_window", 3),
+        fasta_arg=lambda wildcards, input: f"--reference-fasta {input.ref_fasta}" if input.ref_fasta else "",
+        extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
     threads: config.get("bcr_abl", {}).get("threads", 4)
@@ -154,12 +164,22 @@ rule bcr_abl_branford_calling:
             --output-mutations {output.mutations} \
             --output-vcf {output.vcf} \
             --features-json {input.features} \
+            {params.fasta_arg} \
             --min-af {params.min_af} \
+            --subclonal-af {params.subclonal_af} \
             --min-depth {params.min_depth} \
             --min-alt-reads {params.min_alt_reads} \
             --max-depth {params.max_depth} \
+            --min-base-quality {params.min_base_quality} \
+            --min-snr {params.min_snr} \
+            --min-minor-strand-ratio {params.min_minor_strand_ratio} \
+            --min-mean-baseq {params.min_mean_baseq} \
+            --min-kmer-rate {params.min_kmer_rate} \
+            --kmer-window {params.kmer_window} \
+            {params.extra} \
             --threads {threads} > {log} 2>&1
         """
+
 
 
 rule bcr_abl_phasing:

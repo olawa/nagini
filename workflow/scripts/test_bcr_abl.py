@@ -113,8 +113,98 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
             self.assertIn("DETECTED", records[1])
             self.assertIn("20.0", records[1])  # 20% VAF
 
+    def test_noise_filtering_snr_and_strand_bias(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bam_path = tmp / "test_noise.bam"
+            bed_path = tmp / "branford_noise.bed"
+            all_sites_tsv = tmp / "all_sites_noise.tsv"
+            muts_tsv = tmp / "muts_noise.tsv"
+
+            # 2 sites on chr9:
+            # Site 1: E255 (pos 50, G>A) -> will have background noise (A=12, C=10, T=11) out of 1000 reads -> SNR ~ 1.09x -> ARTIFACT
+            # Site 2: T315 (pos 100, C>T) -> will have 25 alt reads ALL forward (0 reverse) with Ref balanced (400 fwd, 400 rev) -> STRAND_BIAS -> ARTIFACT
+            bed_path.write_text(
+                "chr9\t49\t50\tNM_1:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
+                "chr9\t99\t100\tNM_1:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+            )
+
+            reads = []
+            # Site 1: 967 WT reads (G at 49, C at 99) balanced fwd/rev
+            for i in range(484):
+                seq = list("N" * 150)
+                seq[49] = "G"
+                seq[99] = "C"
+                reads.append({"name": f"wt_fwd_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": False})
+            for i in range(483):
+                seq = list("N" * 150)
+                seq[49] = "G"
+                seq[99] = "C"
+                reads.append({"name": f"wt_rev_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": True})
+
+            # Site 1 noise: 12 A (candidate alt), 10 C (other 1), 11 T (other 2)
+            for i in range(12):
+                seq = list("N" * 150)
+                seq[49] = "A"
+                seq[99] = "C"
+                reads.append({"name": f"noise_a_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": i % 2 == 0})
+            for i in range(10):
+                seq = list("N" * 150)
+                seq[49] = "C"
+                seq[99] = "C"
+                reads.append({"name": f"noise_c_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": i % 2 == 0})
+            for i in range(11):
+                seq = list("N" * 150)
+                seq[49] = "T"
+                seq[99] = "C"
+                reads.append({"name": f"noise_t_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": i % 2 == 0})
+
+            # Site 2 strand bias: 25 T (candidate alt) ALL forward, 0 reverse
+            for i in range(25):
+                seq = list("N" * 150)
+                seq[49] = "G"
+                seq[99] = "T"
+                reads.append({"name": f"sb_mut_{i}", "chrom": "chr9", "start": 0, "seq": "".join(seq), "is_reverse": False})
+
+            create_synthetic_bam(bam_path, reads, [("chr9", 200)])
+
+            BRANFORD_CALLER.sys.argv = [
+                "bcr_abl_branford_caller.py",
+                "--bam", str(bam_path),
+                "--bed", str(bed_path),
+                "--sample", "NOISE_SAMPLE",
+                "--output-all", str(all_sites_tsv),
+                "--output-mutations", str(muts_tsv),
+                "--min-af", "0.01",
+                "--min-depth", "50",
+                "--min-alt-reads", "5",
+                "--min-snr", "3.0",
+                "--min-minor-strand-ratio", "0.05",
+            ]
+            BRANFORD_CALLER.main()
+
+            # muts_tsv should have NO detected mutations (both filtered as ARTIFACT)
+            mut_content = [l for l in muts_tsv.read_text().splitlines() if not l.startswith("#") and l.strip()]
+            self.assertEqual(len(mut_content), 1)  # Only header line, no detected mutations
+
+            # all_sites_tsv should list both with ARTIFACT and specific filter_reasons
+            all_content = [l for l in all_sites_tsv.read_text().splitlines() if not l.startswith("#") and l.strip()]
+            header = all_content[0].split("\t")
+            status_idx = header.index("status")
+            reason_idx = header.index("filter_reason")
+
+            rec_e255 = all_content[1].split("\t")
+            rec_t315 = all_content[2].split("\t")
+
+            self.assertEqual(rec_e255[status_idx], "ARTIFACT")
+            self.assertIn("LOW_SNR", rec_e255[reason_idx])
+
+            self.assertEqual(rec_t315[status_idx], "ARTIFACT")
+            self.assertIn("STRAND_BIAS", rec_t315[reason_idx])
+
 
 class TestBcrAblPhaser(unittest.TestCase):
+
     def test_single_molecule_cis_phasing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -235,7 +325,7 @@ class TestBcrAblFusionCounter(unittest.TestCase):
         self.assertIsNone(FUSION_COUNTER.assign_exon(750, exon_map, tolerance=50))
 
 
-@unittest.skipIf(REPORT is None, "xlsxwriter not available")
+@unittest.skipIf(REPORT is None or getattr(REPORT, "xlsxwriter", None) is None, "xlsxwriter not available")
 class TestBcrAblReportIntegration(unittest.TestCase):
     def test_generates_workbook_with_bcr_abl_tab(self):
 
@@ -368,6 +458,82 @@ class TestBcrAblArribaOutput(unittest.TestCase):
             self.assertIn("chr9:130854065", content[1])
 
 
+class TestBcrAblReport(unittest.TestCase):
+    def test_build_bcr_abl_sheet_with_metrics(self):
+        if REPORT is None:
+            self.skipTest("nagini_report module could not be imported")
+        fusion_rows = [{"fusion_isoform": "e14a2", "status": "PRIMARY"}]
+        mutation_rows = [
+            {
+                "mutation": "T315I",
+                "aa_change": "p.Thr315Ile",
+                "pos": 133748283,
+                "ref": "C",
+                "alt": "T",
+                "depth": 46000,
+                "ad_alt": 650,
+                "vaf_percent": 1.41,
+                "status": "DETECTED",
+                "snr": 12.5,
+                "alt_minor_strand_ratio": 0.42,
+                "mean_baseq_alt": 28.4,
+                "imatinib": "Resistant",
+            },
+            {
+                "mutation": "Y253H",
+                "aa_change": "p.Tyr253His",
+                "pos": 133738357,
+                "ref": "T",
+                "alt": "C",
+                "depth": 45000,
+                "ad_alt": 200,
+                "vaf_percent": 0.44,
+                "status": "SUBCLONAL",
+                "snr": 5.2,
+                "alt_minor_strand_ratio": 0.38,
+                "mean_baseq_alt": 25.1,
+                "imatinib": "Resistant",
+            },
+        ]
+        phasing_rows = []
+        exon_rows = []
+
+        layout = REPORT.build_bcr_abl_sheet(
+            sample="TEST_BCR_SAMPLE",
+            fusion_rows=fusion_rows,
+            mutation_rows=mutation_rows,
+            phasing_rows=phasing_rows,
+            exon_rows=exon_rows,
+        )
+        self.assertIsInstance(layout, list)
+
+        # Check header
+        sec2_header_row = [row for row in layout if len(row) > 0 and row[0][0] == "Mutation"][0]
+        header_names = [col[0] for col in sec2_header_row]
+        self.assertIn("SNR (x)", header_names)
+        self.assertIn("Strand Ratio", header_names)
+        self.assertIn("Mean BaseQ", header_names)
+
+        # Check rows
+        t315i_row = [row for row in layout if len(row) > 0 and row[0][0] == "T315I"][0]
+        y253h_row = [row for row in layout if len(row) > 0 and row[0][0] == "Y253H"][0]
+
+        snr_idx = header_names.index("SNR (x)")
+        strand_idx = header_names.index("Strand Ratio")
+        baseq_idx = header_names.index("Mean BaseQ")
+        status_idx = header_names.index("Status")
+
+        self.assertEqual(t315i_row[snr_idx][0], "12.5x")
+        self.assertEqual(t315i_row[strand_idx][0], "0.42")
+        self.assertEqual(t315i_row[baseq_idx][0], "28.4")
+        self.assertEqual(t315i_row[status_idx][0], "DETECTED")
+        self.assertEqual(t315i_row[status_idx][1], 4)
+
+        self.assertEqual(y253h_row[status_idx][0], "SUBCLONAL")
+        self.assertEqual(y253h_row[status_idx][1], 6)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

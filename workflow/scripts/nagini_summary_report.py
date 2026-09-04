@@ -357,24 +357,34 @@ def build_summary_report(
             m_rows = bd["mutation_rows"]
             p_rows = bd["phasing_rows"]
             det_m = [r for r in m_rows if str(r.get("status", "")).upper() == "DETECTED"]
-            mut_names = ", ".join(r["mutation"] for r in det_m) if det_m else "None detected"
-            vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in det_m) if det_m else "-"
+            subcl_m = [r for r in m_rows if str(r.get("status", "")).upper() == "SUBCLONAL"]
 
+            if det_m:
+                mut_names = ", ".join(r["mutation"] for r in det_m)
+                if subcl_m:
+                    mut_names += f" (Subcl: {', '.join(r['mutation'] for r in subcl_m)})"
+            elif subcl_m:
+                mut_names = f"Subclonal: {', '.join(r['mutation'] for r in subcl_m)}"
+            else:
+                mut_names = "None detected"
+
+            all_active = det_m + subcl_m
+            vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in all_active) if all_active else "-"
 
             cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "CIS" in r.get("phase_state", "").upper()]
             trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "TRANS" in r.get("phase_state", "").upper()]
-            phase_state = "PASS (No resistance muts)" if not det_m else ("SINGLE MUTATION" if len(det_m) == 1 else ("COMPOUND (CIS)" if cis_pairs else "POLYCLONAL (TRANS)"))
+            phase_state = "PASS (No resistance muts)" if not all_active else ("SINGLE MUTATION" if len(all_active) == 1 else ("COMPOUND (CIS)" if cis_pairs else "POLYCLONAL (TRANS)"))
 
-            clinical_note = "Normal / Sensitive" if not det_m else ("Compound mutation (high TKI resistance)" if cis_pairs else "Resistance mutation detected")
+            clinical_note = "Normal / Sensitive" if not all_active else ("Compound mutation (high TKI resistance)" if cis_pairs else ("Resistance mutation detected" if det_m else "Subclonal resistance mutation"))
 
             bcr_summary_rows.append([
                 (bd["sample"], 10),
-                (mut_names, 4 if det_m else 0),
+                (mut_names, 4 if det_m else (6 if subcl_m else 0)),
                 (vaf_details, 0),
-                (phase_state, 4 if cis_pairs else (6 if trans_pairs else (4 if det_m else 5))),
+                (phase_state, 4 if cis_pairs else (6 if trans_pairs else (4 if det_m else (6 if subcl_m else 5)))),
                 (", ".join(cis_pairs) if cis_pairs else "-", 4 if cis_pairs else 0),
                 (", ".join(trans_pairs) if trans_pairs else "-", 6 if trans_pairs else 0),
-                (clinical_note, 4 if det_m else 5),
+                (clinical_note, 4 if det_m else (6 if subcl_m else 5)),
                 ("", 0), ("", 0), ("", 0),
             ])
 

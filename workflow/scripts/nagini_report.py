@@ -15,7 +15,10 @@ import os
 import re
 from datetime import datetime, timezone
 
-import xlsxwriter
+try:
+    import xlsxwriter
+except ImportError:
+    xlsxwriter = None
 
 
 def open_text(path):
@@ -502,6 +505,8 @@ def write_xlsx(path, sheets):
     ``(name, rows, kind, image_info)``. A row is a list of plain values or
     ``(value, style_id)`` pairs.
     """
+    if xlsxwriter is None:
+        raise RuntimeError("xlsxwriter is required to write XLSX workbooks")
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     workbook = xlsxwriter.Workbook(
@@ -594,20 +599,40 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
             ])
 
     layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-    layout.append([("2. ABL1 KINASE DOMAIN RESISTANCE MUTATIONS (BRANFORD PANEL)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+    layout.append([("2. ABL1 KINASE DOMAIN RESISTANCE MUTATIONS (BRANFORD PANEL)", 3)] + [("", 3)] * 17)
     layout.append([
         ("Mutation", 1), ("AA Change", 1), ("Position", 1), ("Ref", 1), ("Alt", 1),
         ("Depth", 1), ("Alt Reads", 1), ("VAF (%)", 1), ("Status", 1),
+        ("SNR (x)", 1), ("Strand Ratio", 1), ("Mean BaseQ", 1),
         ("Imatinib", 1), ("Dasatinib", 1), ("Nilotinib", 1), ("Bosutinib", 1), ("Ponatinib", 1), ("Asciminib", 1)
     ])
     if not mutation_rows:
-        layout.append([("No candidate resistance mutations called", 0)] + [("", 0)] * 14)
+        layout.append([("No candidate resistance mutations called", 0)] + [("", 0)] * 17)
     else:
         for r in mutation_rows:
             mut_status = str(r.get("status", "")).upper()
             mut_style = 4 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)
+
+            snr_val = r.get("snr", "")
+            try:
+                snr_display = f"{float(snr_val):.1f}x" if snr_val != "" and snr_val is not None else "N/A"
+            except (ValueError, TypeError):
+                snr_display = str(snr_val)
+
+            strand_ratio_val = r.get("alt_minor_strand_ratio", "")
+            try:
+                strand_display = f"{float(strand_ratio_val):.2f}" if strand_ratio_val != "" and strand_ratio_val is not None else "N/A"
+            except (ValueError, TypeError):
+                strand_display = str(strand_ratio_val)
+
+            baseq_val = r.get("mean_baseq_alt", "")
+            try:
+                baseq_display = f"{float(baseq_val):.1f}" if baseq_val != "" and baseq_val is not None else "N/A"
+            except (ValueError, TypeError):
+                baseq_display = str(baseq_val)
+
             layout.append([
-                (r.get("mutation", ""), 8 if mut_status == "DETECTED" else 0),
+                (r.get("mutation", ""), 8 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)),
                 (r.get("aa_change", ""), 0),
                 (int(r.get("pos", 0)), 0),
                 (r.get("ref", ""), 0),
@@ -616,6 +641,9 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (int(r.get("ad_alt", 0)), 0),
                 (float(r.get("vaf_percent", 0.0)), mut_style),
                 (mut_status, mut_style),
+                (snr_display, 0),
+                (strand_display, 0),
+                (baseq_display, 0),
                 (r.get("imatinib", "Unknown"), _style_tki_response(r.get("imatinib", ""))),
                 (r.get("dasatinib", "Unknown"), _style_tki_response(r.get("dasatinib", ""))),
                 (r.get("nilotinib", "Unknown"), _style_tki_response(r.get("nilotinib", ""))),
@@ -909,14 +937,30 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     if has_bcr_abl:
         prim_iso = next((r["fusion_isoform"] for r in bcr_abl_fusion_rows if r.get("status") == "PRIMARY"), "None detected")
         det_muts = [r["mutation"] for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() == "DETECTED"]
-        mut_summary = ", ".join(det_muts) if det_muts else "None detected"
+        subcl_muts = [r["mutation"] for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() == "SUBCLONAL"]
+
+        if det_muts:
+            mut_summary = ", ".join(det_muts)
+            if subcl_muts:
+                mut_summary += f" (Subclonal: {', '.join(subcl_muts)})"
+            mut_action = "ACTION REQUIRED"
+            mut_action_style = 4
+        elif subcl_muts:
+            mut_summary = f"Subclonal: {', '.join(subcl_muts)}"
+            mut_action = "SUBCLONAL"
+            mut_action_style = 6
+        else:
+            mut_summary = "None detected"
+            mut_action = "NONE"
+            mut_action_style = 5
+
         cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper()]
         phase_summary = f"CIS ({', '.join(cis_pairs)})" if cis_pairs else ("TRANS" if bcr_abl_phasing_rows else "N/A (<2 muts)")
 
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
         overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
-        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else 0), ("ACTION REQUIRED" if det_muts else "NONE", 4 if det_muts else 5)])
+        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts else 0)), (mut_action, mut_action_style)])
         overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, 4 if cis_pairs else 0), ("COMPOUND MUTATION (CIS)" if cis_pairs else ("POLYCLONAL (TRANS)" if bcr_abl_phasing_rows else "PASS"), 4 if cis_pairs else 5)])
 
 

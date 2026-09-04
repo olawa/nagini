@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -83,14 +84,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-mutations", required=True, type=Path, help="Output TSV with detected mutations")
     parser.add_argument("--output-vcf", type=Path, default=None, help="Optional output VCF file")
     parser.add_argument("--features-json", type=Path, default=None, help="Optional BCR-ABL features JSON database")
+    parser.add_argument("--reference-fasta", type=Path, default=None, help="Optional reference FASTA for k-mer validation")
     parser.add_argument("--min-af", type=float, default=0.01, help="Minimum AF threshold for mutation calling (default 0.01 / 1 percent)")
+    parser.add_argument("--subclonal-af", type=float, default=0.002, help="Subclonal AF threshold (default 0.002 / 0.2 percent)")
     parser.add_argument("--min-depth", type=int, default=50, help="Minimum total coverage depth (default 50)")
     parser.add_argument("--min-alt-reads", type=int, default=5, help="Minimum alternate supporting reads (default 5)")
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
-    parser.add_argument("--min-base-quality", type=int, default=0, help="Minimum base quality")
-    parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality")
+    parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
+    parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
+    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum Signal-to-Noise Ratio (Alt / max_other) (default 3.0)")
+    parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
+    parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
+    parser.add_argument("--min-kmer-rate", type=float, default=0.60, help="Minimum kmer reference clean rate (default 0.60 / 60 percent)")
+    parser.add_argument("--kmer-window", type=int, default=3, help="Flanking kmer window size in bp (default 3)")
+    parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args()
+
 
 
 def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
@@ -131,15 +141,26 @@ def count_positions_batch(
     max_depth: int,
     min_baseq: int,
     min_mapq: int,
-) -> Dict[int, Dict[str, int]]:
-    """Extract forward/reverse base counts across a set of coordinates in a single pileup traversal."""
-    results: Dict[int, Dict[str, int]] = {}
+    ref_seqs_by_pos: Optional[Dict[Tuple[str, int], Tuple[str, str]]] = None,
+    orig_chrom: Optional[str] = None,
+) -> Dict[int, Dict[str, Any]]:
+    """Extract forward/reverse base counts, base qualities, and k-mer context across coordinates."""
+    results: Dict[int, Dict[str, Any]] = {}
     if not positions_0based:
         return results
 
     for pos_0based in positions_0based:
-        results[pos_0based] = {f"{base}_{strand}": 0 for base in BASES for strand in ("fwd", "rev")}
-        results[pos_0based].update({"refskip": 0, "deletion": 0, "low_baseq": 0})
+        counts: Dict[str, Any] = {f"{base}_{strand}": 0 for base in BASES for strand in ("fwd", "rev")}
+        counts.update({
+            "refskip": 0,
+            "deletion": 0,
+            "low_baseq": 0,
+            "base_qual_sum": {b: 0 for b in BASES},
+            "base_qual_count": {b: 0 for b in BASES},
+            "kmer_clean_count": {b: 0 for b in BASES},
+            "kmer_total_count": {b: 0 for b in BASES},
+        })
+        results[pos_0based] = counts
 
     min_pos = min(positions_0based)
     max_pos = max(positions_0based) + 1
@@ -159,6 +180,14 @@ def count_positions_batch(
             continue
 
         counts = results[ref_pos]
+        lookup_key = (orig_chrom or chrom, ref_pos)
+        has_kmer = bool(ref_seqs_by_pos and lookup_key in ref_seqs_by_pos)
+        if has_kmer and ref_seqs_by_pos is not None:
+            ref_left, ref_right = ref_seqs_by_pos[lookup_key]
+            k_len = len(ref_left)
+        else:
+            ref_left, ref_right, k_len = "", "", 0
+
         for read in column.pileups:
             aln = read.alignment
             if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail:
@@ -175,10 +204,10 @@ def count_positions_batch(
                 counts["deletion"] += 1
                 continue
 
-            if min_baseq > 0 and aln.query_qualities is not None:
-                if aln.query_qualities[read.query_position] < min_baseq:
-                    counts["low_baseq"] += 1
-                    continue
+            bq = aln.query_qualities[read.query_position] if aln.query_qualities is not None else 30
+            if min_baseq > 0 and bq < min_baseq:
+                counts["low_baseq"] += 1
+                continue
 
             base = aln.query_sequence[read.query_position].upper()
             if base not in BASES:
@@ -186,6 +215,19 @@ def count_positions_batch(
 
             strand = "rev" if aln.is_reverse else "fwd"
             counts[f"{base}_{strand}"] += 1
+            counts["base_qual_sum"][base] += bq
+            counts["base_qual_count"][base] += 1
+
+            # Flanking k-mer reference context check
+            if k_len > 0:
+                qpos = read.query_position
+                qseq = aln.query_sequence
+                if qpos >= k_len and (qpos + 1 + k_len) <= len(qseq):
+                    counts["kmer_total_count"][base] += 1
+                    read_left = qseq[qpos - k_len : qpos].upper()
+                    read_right = qseq[qpos + 1 : qpos + 1 + k_len].upper()
+                    if read_left == ref_left and read_right == ref_right:
+                        counts["kmer_clean_count"][base] += 1
 
     return results
 
@@ -197,11 +239,12 @@ def count_position(
     max_depth: int,
     min_baseq: int,
     min_mapq: int,
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
     """Extract forward/reverse base counts at a single coordinate (wrapper for count_positions_batch)."""
     target_0based = pos_1based - 1
     batch_res = count_positions_batch(bam, chrom, {target_0based}, max_depth, min_baseq, min_mapq)
     return batch_res.get(target_0based, {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
+
 
 
 def main() -> None:
@@ -224,6 +267,30 @@ def main() -> None:
         except Exception as e:
             sys.stderr.write(f"Warning: could not load TKI profiles from {args.features_json}: {e}\n")
 
+    # Pre-extract reference k-mer context if reference fasta is provided
+    ref_seqs_by_pos: Dict[Tuple[str, int], Tuple[str, str]] = {}
+    if args.reference_fasta and args.reference_fasta.is_file():
+        try:
+            ref_fasta = pysam.FastaFile(str(args.reference_fasta))
+            fasta_refs = set(ref_fasta.references)
+            for site in sites:
+                c = site["chrom"]
+                if c not in fasta_refs:
+                    alt_c = c[3:] if c.startswith("chr") else f"chr{c}"
+                    if alt_c in fasta_refs:
+                        c = alt_c
+                if c in fasta_refs:
+                    p0 = site["pos"] - 1
+                    kw = args.kmer_window
+                    c_len = ref_fasta.get_reference_length(c)
+                    if p0 >= kw and (p0 + 1 + kw) <= c_len:
+                        left_seq = ref_fasta.fetch(c, p0 - kw, p0).upper()
+                        right_seq = ref_fasta.fetch(c, p0 + 1, p0 + 1 + kw).upper()
+                        ref_seqs_by_pos[(site["chrom"], p0)] = (left_seq, right_seq)
+            ref_fasta.close()
+        except Exception as e:
+            sys.stderr.write(f"Warning: could not load reference fasta {args.reference_fasta} for k-mer check: {e}\n")
+
     bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
 
     # Contig renaming check (e.g. chr9 vs 9)
@@ -231,29 +298,40 @@ def main() -> None:
 
     # Group all target sites by resolved BAM contig for single-pass scanning
     chrom_positions: Dict[str, set[int]] = {}
+    chrom_alias_map: Dict[str, str] = {}
     for site in sites:
         chrom = site["chrom"]
+        orig_chrom = chrom
         if chrom not in bam_contigs:
             alt_chrom = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
             if alt_chrom in bam_contigs:
                 chrom = alt_chrom
+        chrom_alias_map[chrom] = orig_chrom
         if chrom not in chrom_positions:
             chrom_positions[chrom] = set()
         chrom_positions[chrom].add(site["pos"] - 1)
 
-    cache: Dict[Tuple[str, int], Dict[str, int]] = {}
+    cache: Dict[Tuple[str, int], Dict[str, Any]] = {}
     try:
         for chrom, pos_set in chrom_positions.items():
             if chrom in bam_contigs:
+                orig_chrom = chrom_alias_map.get(chrom, chrom)
                 batch_counts = count_positions_batch(
-                    bam, chrom, pos_set, args.max_depth, args.min_base_quality, args.min_mapping_quality
+                    bam, chrom, pos_set, args.max_depth, args.min_base_quality, args.min_mapping_quality,
+                    ref_seqs_by_pos=ref_seqs_by_pos, orig_chrom=orig_chrom
                 )
                 for pos_0based, counts in batch_counts.items():
                     cache[(chrom, pos_0based + 1)] = counts
             else:
                 for pos_0based in pos_set:
-                    c = {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")}
-                    c.update({"refskip": 0, "deletion": 0, "low_baseq": 0})
+                    c: Dict[str, Any] = {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")}
+                    c.update({
+                        "refskip": 0, "deletion": 0, "low_baseq": 0,
+                        "base_qual_sum": {b: 0 for b in BASES},
+                        "base_qual_count": {b: 0 for b in BASES},
+                        "kmer_clean_count": {b: 0 for b in BASES},
+                        "kmer_total_count": {b: 0 for b in BASES},
+                    })
                     cache[(chrom, pos_0based + 1)] = c
 
         all_results: List[Dict[str, Any]] = []
@@ -279,13 +357,75 @@ def main() -> None:
             ad_alt = per_base.get(alt, 0)
             vaf = (ad_alt / depth) if depth > 0 else 0.0
 
-            # Classification: only candidate resistance mutations meeting thresholds are DETECTED
+            ad_ref_fwd = counts.get(f"{ref}_fwd", 0)
+            ad_ref_rev = counts.get(f"{ref}_rev", 0)
+            ad_alt_fwd = counts.get(f"{alt}_fwd", 0)
+            ad_alt_rev = counts.get(f"{alt}_rev", 0)
+
+            # Strand balance & Strand Odds Ratio (SOR)
+            alt_minor_strand_ratio = round(min(ad_alt_fwd, ad_alt_rev) / max(ad_alt, 1), 3)
+            ref_has_both_strands = (ad_ref_fwd > 0 and ad_ref_rev > 0)
+            r1 = (ad_alt_fwd + 1) * (ad_ref_rev + 1)
+            r2 = (ad_alt_rev + 1) * (ad_ref_fwd + 1)
+            sor = round(math.log(max(r1 / r2, r2 / r1)), 2)
+
+            # Mean base quality for Ref and Alt
+            bq_sum_alt = counts.get("base_qual_sum", {}).get(alt, 0)
+            bq_cnt_alt = counts.get("base_qual_count", {}).get(alt, 0)
+            mean_baseq_alt = round(bq_sum_alt / max(bq_cnt_alt, 1), 1) if bq_cnt_alt > 0 else 0.0
+
+            bq_sum_ref = counts.get("base_qual_sum", {}).get(ref, 0)
+            bq_cnt_ref = counts.get("base_qual_count", {}).get(ref, 0)
+            mean_baseq_ref = round(bq_sum_ref / max(bq_cnt_ref, 1), 1) if bq_cnt_ref > 0 else 0.0
+
+            # Flanking k-mer reference clean percentage
+            k_clean = counts.get("kmer_clean_count", {}).get(alt, 0)
+            k_tot = counts.get("kmer_total_count", {}).get(alt, 0)
+            kmer_clean_percent = round((k_clean / k_tot) * 100.0, 1) if k_tot > 0 else 100.0
+
+            # Error baseline from non-candidate alternative bases
+            other_bases = {b: per_base[b] for b in BASES if b != ref and b != alt}
+            ad_other = sum(other_bases.values())
+            ad_other_max = max(other_bases.values()) if other_bases else 0
+            vaf_other_percent = round((ad_other / depth) * 100.0, 3) if depth > 0 else 0.0
+            other_bases_str = ",".join(f"{b}:{c}" for b, c in sorted(other_bases.items()))
+
+            # Signal-to-Noise Ratio (SNR)
+            if ad_other_max == 0:
+                snr = float(ad_alt) if ad_alt > 0 else 0.0
+            else:
+                snr = round(ad_alt / max(ad_other_max, 1), 2)
+
+            # Quality filtering and status classification
             if depth < args.min_depth:
                 status = "LOW_DEPTH"
-            elif vaf >= args.min_af and ad_alt >= args.min_alt_reads:
-                status = "DETECTED"
-            else:
+                filter_reason = f"DEPTH<{args.min_depth}"
+            elif ad_alt < args.min_alt_reads:
                 status = "WILDTYPE"
+                filter_reason = "NO_ALT"
+            else:
+                fails = []
+                if snr < args.min_snr:
+                    fails.append(f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)")
+                if ref_has_both_strands and ad_alt >= 20 and alt_minor_strand_ratio < args.min_minor_strand_ratio:
+                    fails.append(f"STRAND_BIAS({alt_minor_strand_ratio:.3f}<{args.min_minor_strand_ratio:.2f})")
+                if mean_baseq_alt < args.min_mean_baseq:
+                    fails.append(f"LOW_BASEQ({mean_baseq_alt:.1f}<{args.min_mean_baseq:.1f})")
+                if k_tot > 0 and kmer_clean_percent < (args.min_kmer_rate * 100.0):
+                    fails.append(f"DIRTY_CONTEXT({kmer_clean_percent:.1f}%<{(args.min_kmer_rate*100):.0f}%)")
+
+                if fails:
+                    status = "ARTIFACT"
+                    filter_reason = ";".join(fails)
+                elif vaf >= args.min_af:
+                    status = "DETECTED"
+                    filter_reason = "PASS"
+                elif vaf >= args.subclonal_af:
+                    status = "SUBCLONAL"
+                    filter_reason = "PASS"
+                else:
+                    status = "WILDTYPE"
+                    filter_reason = "LOW_AF"
 
             # TKI responses
             tki_info = tki_profiles.get(short_mut, {})
@@ -309,25 +449,36 @@ def main() -> None:
                 "ad_ref": ad_ref,
                 "ad_alt": ad_alt,
                 "vaf_percent": round(vaf * 100.0, 3),
-                "ad_ref_fwd": counts[f"{ref}_fwd"],
-                "ad_ref_rev": counts[f"{ref}_rev"],
-                "ad_alt_fwd": counts[f"{alt}_fwd"],
-                "ad_alt_rev": counts[f"{alt}_rev"],
-                "n_refskip": counts.get("refskip", 0),
-                "n_deletion": counts.get("deletion", 0),
                 "status": status,
+                "filter_reason": filter_reason,
+                "snr": snr,
+                "ad_other": ad_other,
+                "vaf_other_percent": vaf_other_percent,
+                "other_bases": other_bases_str,
+                "alt_minor_strand_ratio": alt_minor_strand_ratio,
+                "sor": sor,
+                "mean_baseq_ref": mean_baseq_ref,
+                "mean_baseq_alt": mean_baseq_alt,
+                "kmer_clean_percent": kmer_clean_percent,
                 "imatinib": imatinib,
                 "dasatinib": dasatinib,
                 "nilotinib": nilotinib,
                 "bosutinib": bosutinib,
                 "ponatinib": ponatinib,
                 "asciminib": asciminib,
+                "ad_ref_fwd": ad_ref_fwd,
+                "ad_ref_rev": ad_ref_rev,
+                "ad_alt_fwd": ad_alt_fwd,
+                "ad_alt_rev": ad_alt_rev,
+                "n_refskip": counts.get("refskip", 0),
+                "n_deletion": counts.get("deletion", 0),
             }
             all_results.append(record)
 
-            if status == "DETECTED":
+            if status in ("DETECTED", "SUBCLONAL"):
                 detected_mutations.append(record)
-
+            elif args.include_artifacts and status == "ARTIFACT":
+                detected_mutations.append(record)
 
     finally:
         bam.close()
@@ -335,19 +486,24 @@ def main() -> None:
     # Sort results
     detected_mutations.sort(key=lambda r: (r["status"] != "DETECTED", -r["vaf_percent"]))
 
-    # Write All Sites TSV
+    # Output headers
     headers = [
         "sample", "chrom", "pos", "ref", "alt", "mutation", "aa_change", "name",
-        "depth", "ad_ref", "ad_alt", "vaf_percent", "status",
+        "depth", "ad_ref", "ad_alt", "vaf_percent", "status", "filter_reason",
+        "snr", "ad_other", "vaf_other_percent", "other_bases",
+        "alt_minor_strand_ratio", "sor",
+        "mean_baseq_ref", "mean_baseq_alt", "kmer_clean_percent",
         "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib", "asciminib",
         "ad_ref_fwd", "ad_ref_rev", "ad_alt_fwd", "ad_alt_rev", "n_refskip", "n_deletion",
     ]
 
+    # Write All Sites TSV
     args.output_all.parent.mkdir(parents=True, exist_ok=True)
     with args.output_all.open("w") as handle:
         handle.write(f"# sample={args.sample}\n")
         handle.write(f"# total_sites={len(all_results)}\n")
         handle.write(f"# detected_mutations={len([m for m in detected_mutations if m['status'] == 'DETECTED'])}\n")
+        handle.write(f"# subclonal_mutations={len([m for m in detected_mutations if m['status'] == 'SUBCLONAL'])}\n")
         handle.write("\t".join(headers) + "\n")
         for rec in all_results:
             handle.write("\t".join(str(rec.get(h, "")) for h in headers) + "\n")
@@ -357,6 +513,8 @@ def main() -> None:
     with args.output_mutations.open("w") as handle:
         handle.write(f"# sample={args.sample}\n")
         handle.write(f"# min_af={args.min_af}\n")
+        handle.write(f"# subclonal_af={args.subclonal_af}\n")
+        handle.write(f"# min_snr={args.min_snr}\n")
         handle.write(f"# min_depth={args.min_depth}\n")
         handle.write("\t".join(headers) + "\n")
         for rec in detected_mutations:
@@ -367,10 +525,15 @@ def main() -> None:
         args.output_vcf.parent.mkdir(parents=True, exist_ok=True)
         with args.output_vcf.open("w") as handle:
             handle.write("##fileformat=VCFv4.2\n")
-            handle.write(f"##source=nagini_bcr_abl_branford_caller\n")
+            handle.write("##source=nagini_bcr_abl_branford_caller\n")
             handle.write('##INFO=<ID=AA,Number=1,Type=String,Description="Amino acid change">\n')
             handle.write('##INFO=<ID=MUT,Number=1,Type=String,Description="Short mutation notation">\n')
             handle.write('##INFO=<ID=HGVS,Number=1,Type=String,Description="HGVS transcript annotation">\n')
+            handle.write('##INFO=<ID=SNR,Number=1,Type=Float,Description="Signal-to-noise ratio vs non-candidate error bases">\n')
+            handle.write('##INFO=<ID=SOR,Number=1,Type=Float,Description="Strand Odds Ratio">\n')
+            handle.write('##INFO=<ID=BQ_ALT,Number=1,Type=Float,Description="Mean base quality of ALT reads">\n')
+            handle.write('##FILTER=<ID=PASS,Description="All quality filters passed">\n')
+            handle.write('##FILTER=<ID=ARTIFACT,Description="Failed error baseline, strand bias, or base quality filters">\n')
             handle.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
             handle.write('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total depth">\n')
             handle.write('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths (REF, ALT)">\n')
@@ -378,10 +541,11 @@ def main() -> None:
             handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + args.sample + "\n")
             for rec in detected_mutations:
                 af_dec = rec["vaf_percent"] / 100.0
-                info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']}"
-                gt = "0/1" if rec["status"] == "DETECTED" else "./."
+                info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
+                gt = "0/1" if rec["status"] in ("DETECTED", "SUBCLONAL") else "./."
+                vcf_filter = "PASS" if rec["status"] in ("DETECTED", "SUBCLONAL") else "ARTIFACT"
                 format_val = f"{gt}:{rec['depth']}:{rec['ad_ref']},{rec['ad_alt']}:{af_dec:.4f}"
-                handle.write(f"{rec['chrom']}\t{rec['pos']}\t{rec['mutation']}\t{rec['ref']}\t{rec['alt']}\t.\tPASS\t{info_field}\tGT:DP:AD:AF\t{format_val}\n")
+                handle.write(f"{rec['chrom']}\t{rec['pos']}\t{rec['mutation']}\t{rec['ref']}\t{rec['alt']}\t.\t{vcf_filter}\t{info_field}\tGT:DP:AD:AF\t{format_val}\n")
 
     print(
         f"BCR-ABL1 Branford Caller [{args.sample}]: evaluated {len(sites)} resistance sites; "
@@ -392,3 +556,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
