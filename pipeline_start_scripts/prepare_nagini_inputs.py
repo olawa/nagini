@@ -109,7 +109,14 @@ def parse_args() -> argparse.Namespace:
     default_base_config = repo_root / "config" / "config.yaml"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, required=True)
-    parser.add_argument("--analysis-dir", type=Path, required=True)
+    parser.add_argument("--analysis-dir", type=Path, default=None)
+    parser.add_argument(
+        "--init-sample-sheet",
+        nargs="?",
+        const="sample_sheet.csv",
+        default=None,
+        help="Generate a sample sheet CSV template for the input directory and exit.",
+    )
     parser.add_argument(
         "--pipeline-root",
         type=Path,
@@ -132,7 +139,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-files", type=Path)
     parser.add_argument("--library-root", type=Path)
     parser.add_argument(
-        "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam"), required=True
+        "--input-type", choices=("minknow", "fastq", "unmapped_bam", "aligned_bam", ""), default=""
     )
 
     parser.add_argument("--sample-type", choices=("N", "T", "R"), default="N")
@@ -284,7 +291,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     args.input_dir = args.input_dir.expanduser().resolve()
-    args.analysis_dir = args.analysis_dir.expanduser().resolve()
+    if args.analysis_dir:
+        args.analysis_dir = args.analysis_dir.expanduser().resolve()
     args.pipeline_root = args.pipeline_root.expanduser().resolve()
     args.base_config = args.base_config.expanduser().resolve()
 
@@ -343,7 +351,24 @@ def make_barcode_sample_name(base_sample: str, barcode: str) -> str:
     """Combine base sample name and barcode into a sample name with barcode info (bc1, bc10, etc.)."""
     short_bc = format_short_barcode(barcode)
     base = str(base_sample or "").strip()
-    generic_names = {"sample", "reads", "read", "fastq", "run", "runs", "minknow", "pass", "fail"}
+    generic_names = {
+        "sample",
+        "reads",
+        "read",
+        "fastq",
+        "fastqs",
+        "bam",
+        "bams",
+        "data",
+        "inputs",
+        "run",
+        "runs",
+        "inbox",
+        "combined",
+        "minknow",
+        "pass",
+        "fail",
+    }
     if not base or base.lower() in generic_names:
         return short_bc
     if normalize_barcode(base) == normalize_barcode(barcode) or base.lower() == short_bc:
@@ -589,6 +614,58 @@ def discover_fastqs_by_barcode(
         if barcode:
             fastqs[barcode].append(resolved)
     return dict(fastqs)
+
+
+def generate_sample_sheet_template(args: argparse.Namespace) -> Path:
+    """Generate a pre-filled sample sheet CSV template for the input directory."""
+    input_dir = Path(args.input_dir).resolve()
+    if not input_dir.is_dir():
+        raise SystemExit(f"Input directory does not exist: {input_dir}")
+
+    target_str = getattr(args, "init_sample_sheet", None) or "sample_sheet.csv"
+    target_path = Path(target_str)
+    if not target_path.is_absolute():
+        target_path = input_dir / target_path
+
+    # Discover barcodes from existing FASTQ or BAM files
+    barcodes: list[str] = []
+    fastqs = discover_fastqs_by_barcode(input_dir, status="all")
+    if fastqs:
+        barcodes.extend(fastqs.keys())
+
+    bams = discover_bams_by_barcode(input_dir)
+    if bams:
+        barcodes.extend(bams.keys())
+
+    kit = str(getattr(args, "dorado_kit", "") or getattr(args, "barcode_kit", "") or "").strip()
+    if kit:
+        routing = _routing_module(_pipeline_root(args))
+        kit_size = routing.barcode_kit_size(kit)
+        if kit_size:
+            barcodes.extend(f"barcode{i:02d}" for i in range(1, kit_size + 1))
+
+    unique_barcodes = sorted(
+        {normalize_barcode(bc) for bc in barcodes if normalize_barcode(bc)},
+        key=lambda bc: int(re.search(r"\d+", bc).group(0)) if re.search(r"\d+", bc) else 0,
+    )
+
+    if not unique_barcodes:
+        unique_barcodes = [f"barcode{i:02d}" for i in range(1, 25)]
+
+    default_type = str(getattr(args, "sample_type", "T") or "T").strip().upper()
+    default_assay = str(getattr(args, "assay", "") or "").strip().lower() or "wgs"
+    default_lib = resolve_library_type_for_assay(default_assay, getattr(args, "library_type", ""), "wgs")
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with target_path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["barcode", "sample", "type", "library_type", "assay"])
+        for bc in unique_barcodes:
+            short_bc = format_short_barcode(bc)
+            writer.writerow([bc, f"sample_{short_bc}", default_type, default_lib, default_assay])
+
+    print(f"Created sample sheet template with {len(unique_barcodes)} barcode(s) at: {target_path}")
+    return target_path
 
 
 def discover_fastq_files(
@@ -1044,30 +1121,30 @@ def infer_barcode_map_from_fastq_files(
     if not samples_by_barcode:
         return {}
 
-    conflicts = {
-        barcode: sorted(s for s in samples if s)
-        for barcode, samples in samples_by_barcode.items()
-        if len(set(s for s in samples if s)) > 1
-    }
-    if conflicts:
-        details = "; ".join(
-            f"{barcode}: {', '.join(samples)}"
-            for barcode, samples in sorted(conflicts.items())
-        )
-        raise SystemExit(
-            "Cannot infer a unique sample for barcode FASTQ files ("
-            + details
-            + "). Provide --barcode-map."
-        )
-
     library_type = resolve_library_type_for_assay(
         getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
     )
     default_prefix = args.sequence_id or args.run_id or ""
+    all_observed_samples = sorted(
+        {s for samples in samples_by_barcode.values() for s in samples if s}
+    )
+    common_sample_prefix = (
+        all_observed_samples[0] if len(all_observed_samples) == 1 else ""
+    )
+
     mapping = {}
+    multi_flowcell = []
     for barcode, samples in sorted(samples_by_barcode.items()):
-        non_empty = [s for s in samples if s]
-        base_sample = non_empty[0] if non_empty else default_prefix
+        non_empty = sorted(set(s for s in samples if s))
+        if len(non_empty) > 1:
+            multi_flowcell.append(f"{barcode} ({', '.join(non_empty)})")
+
+        if common_sample_prefix:
+            base_sample = common_sample_prefix
+        elif default_prefix:
+            base_sample = default_prefix
+        else:
+            base_sample = ""
         sample_name = make_barcode_sample_name(base_sample, barcode)
         mapping[barcode] = {
             "barcode": barcode,
@@ -1076,6 +1153,11 @@ def infer_barcode_map_from_fastq_files(
             "library_type": library_type,
             "assay": str(getattr(args, "assay", "") or "").strip().lower(),
         }
+    if multi_flowcell:
+        print(
+            "Merging same-barcode reads across runs/flowcells for: "
+            + "; ".join(multi_flowcell)
+        )
     return mapping
 
 
@@ -1794,10 +1876,19 @@ def warn_about_model_download(args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     args.input_dir = args.input_dir.resolve()
-    args.analysis_dir = args.analysis_dir.resolve()
-    args.analysis_dir.mkdir(parents=True, exist_ok=True)
     if not args.input_dir.is_dir():
         raise SystemExit(f"Input directory does not exist: {args.input_dir}")
+
+    if getattr(args, "init_sample_sheet", None):
+        generate_sample_sheet_template(args)
+        return
+
+    if not args.analysis_dir:
+        raise SystemExit("--analysis-dir is required.")
+    args.analysis_dir = args.analysis_dir.resolve()
+    args.analysis_dir.mkdir(parents=True, exist_ok=True)
+    if not args.input_type:
+        raise SystemExit("--input-type is required.")
     if not getattr(args, "basecalling_model", None) or str(args.basecalling_model).strip().lower() in ("unknown", "", "none"):
         args.basecalling_model = DEFAULT_BASECALLING_MODEL
 

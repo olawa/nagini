@@ -340,6 +340,105 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(Path(units[0]["fastq1"]).name, "bc1.fastq.gz")
         self.assertEqual(Path(units[1]["fastq1"]).name, "bc10.fastq.gz")
 
+    def test_existing_barcode_fastq_merges_across_different_flowcells_without_sample_sheet(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "multi_fc_runs"
+            fc1_bc01 = root / "fc1" / "fastq_pass" / "barcode01"
+            fc1_bc02 = root / "fc1" / "fastq_pass" / "barcode02"
+            fc2_bc01 = root / "fc2" / "fastq_pass" / "barcode01"
+            for d in (fc1_bc01, fc1_bc02, fc2_bc01):
+                d.mkdir(parents=True, exist_ok=True)
+
+            with gzip.open(fc1_bc01 / "FLOWCELL1_pass_barcode01_1.fastq.gz", "wt") as h:
+                h.write("@fc1_bc01_r1\nACGT\n+\nIIII\n")
+            with gzip.open(fc1_bc02 / "FLOWCELL1_pass_barcode02_1.fastq.gz", "wt") as h:
+                h.write("@fc1_bc02_r1\nACGT\n+\nIIII\n")
+            with gzip.open(fc2_bc01 / "FLOWCELL2_pass_barcode01_1.fastq.gz", "wt") as h:
+                h.write("@fc2_bc01_r1\nTGCA\n+\nIIII\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.analysis_dir = Path(tmpdir) / "analysis"
+            args.barcode_map = None
+            args.sample_type = "T"
+            args.input_type = "fastq"
+            args.sequence_id = ""
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.library_type = "wgs"
+            args.assay = ""
+            args.sample_regex = PREPARE.DEFAULT_SAMPLE_REGEX
+            args.fastq_status = "all"
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_fastq_tables(args)
+            PREPARE.validate_tables(samples, units)
+
+            self.assertEqual(samples, [{"sample": "bc1"}, {"sample": "bc2"}])
+            self.assertEqual(len(units), 2)
+            bc1_unit = next(u for u in units if u["sample"] == "bc1")
+            bc2_unit = next(u for u in units if u["sample"] == "bc2")
+            with gzip.open(bc1_unit["fastq1"], "rt") as h:
+                bc1_content = h.read()
+            self.assertIn("fc1_bc01_r1", bc1_content)
+            self.assertIn("fc2_bc01_r1", bc1_content)
+            with gzip.open(bc2_unit["fastq1"], "rt") as h:
+                bc2_content = h.read()
+            self.assertIn("fc1_bc02_r1", bc2_content)
+
+    def test_init_sample_sheet_from_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "inbox"
+            (root / "barcode01").mkdir(parents=True)
+            (root / "barcode05").mkdir(parents=True)
+            (root / "barcode01" / "read.bam").touch()
+            (root / "barcode05" / "read.bam").touch()
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.init_sample_sheet = "sample_sheet.csv"
+            args.sample_type = "T"
+            args.assay = "bcr_abl"
+            args.library_type = "cdna"
+            args.barcode_kit = ""
+            args.dorado_kit = ""
+            args.pipeline_root = Path(__file__).parents[1]
+
+            out_path = PREPARE.generate_sample_sheet_template(args)
+            self.assertTrue(out_path.is_file())
+            content = out_path.read_text().splitlines()
+
+        self.assertEqual(content[0], "barcode,sample,type,library_type,assay")
+        self.assertEqual(content[1], "barcode01,sample_bc1,T,cdna,bcr_abl")
+        self.assertEqual(content[2], "barcode05,sample_bc5,T,cdna,bcr_abl")
+        self.assertEqual(len(content), 3)
+
+    def test_init_sample_sheet_from_barcode_kit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "inbox"
+            root.mkdir()
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.init_sample_sheet = "custom_sheet.csv"
+            args.sample_type = "N"
+            args.assay = "wgs"
+            args.library_type = "wgs"
+            args.barcode_kit = "SQK-RBK114-24"
+            args.dorado_kit = ""
+            args.pipeline_root = Path(__file__).parents[1]
+
+            out_path = PREPARE.generate_sample_sheet_template(args)
+            self.assertTrue(out_path.is_file())
+            rows = out_path.read_text().splitlines()
+
+        self.assertEqual(rows[0], "barcode,sample,type,library_type,assay")
+        self.assertEqual(len(rows), 25)
+        self.assertEqual(rows[1], "barcode01,sample_bc1,N,wgs,wgs")
+        self.assertEqual(rows[10], "barcode10,sample_bc10,N,wgs,wgs")
+        self.assertEqual(rows[24], "barcode24,sample_bc24,N,wgs,wgs")
+
     def test_minknow_tables_without_barcode_map_generates_short_barcode_samples(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "minknow"

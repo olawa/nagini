@@ -48,6 +48,7 @@ reference_build=""
 sequence_id=""
 sample_regex=""
 barcode_map=""
+init_sample_sheet=""
 barcode="NB"
 barcode_kit=""
 run_id=""
@@ -111,6 +112,7 @@ Options:
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
   --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed FASTQ/BAM.
                                 sample_sheet*.csv/tsv is auto-detected for existing FASTQ when omitted.
+  --init-sample-sheet [FILE]    Generate a sample sheet CSV template in the input directory and exit.
   --barcode-kit KIT             Dorado barcode kit used for demultiplexing minknow input.
   --default-barcode BARCODE     Barcode for FASTQ and BAM rows (default: NB).
   --run-id ID                   Run ID for generated FASTQ rows.
@@ -259,6 +261,15 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || die "$1 requires a value"
             barcode_map="$2"
             shift 2
+            ;;
+        --init-sample-sheet|--create-sample-sheet)
+            if [[ $# -ge 2 && ! "$2" =~ ^-- ]]; then
+                init_sample_sheet="$2"
+                shift 2
+            else
+                init_sample_sheet="sample_sheet.csv"
+                shift 1
+            fi
             ;;
         --barcode-kit)
             [[ $# -ge 2 ]] || die "$1 requires a value"
@@ -483,6 +494,22 @@ esac
 [[ -d "$pipeline_path/vendor/snakemake-wrappers" ]] || die "Snakemake wrappers are missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
 
 require_command python3
+
+if [[ -n "$init_sample_sheet" ]]; then
+    init_cmd=(
+        python3 "$pipeline_path/pipeline_start_scripts/prepare_nagini_inputs.py"
+        --init-sample-sheet "$init_sample_sheet"
+        --input-dir "$input_dir"
+        --pipeline-root "$pipeline_path"
+    )
+    [[ -n "$barcode_kit" ]] && init_cmd+=(--barcode-kit "$barcode_kit")
+    [[ -n "$sample_type" ]] && init_cmd+=(--sample-type "$sample_type")
+    [[ -n "$assay" ]] && init_cmd+=(--assay "$assay")
+    [[ -n "$library_type" ]] && init_cmd+=(--library-type "$library_type")
+    "${init_cmd[@]}"
+    exit 0
+fi
+
 require_command snakemake
 
 if [[ -z "$input_type" ]]; then
