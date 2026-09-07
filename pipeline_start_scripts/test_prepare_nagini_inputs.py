@@ -109,6 +109,52 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(units[1]["processing_unit"], "barcode02_001")
         self.assertTrue(all(row["input_type"] == "unmapped_bam" for row in units))
 
+    def test_format_short_barcode(self):
+        self.assertEqual(PREPARE.format_short_barcode("barcode01"), "bc1")
+        self.assertEqual(PREPARE.format_short_barcode("barcode10"), "bc10")
+        self.assertEqual(PREPARE.format_short_barcode("bc01"), "bc1")
+        self.assertEqual(PREPARE.format_short_barcode("bc10"), "bc10")
+        self.assertEqual(PREPARE.format_short_barcode("1"), "bc1")
+        self.assertEqual(PREPARE.format_short_barcode("24"), "bc24")
+        self.assertEqual(PREPARE.format_short_barcode(""), "bc")
+
+    def test_make_barcode_sample_name(self):
+        self.assertEqual(PREPARE.make_barcode_sample_name("PBE82562", "barcode01"), "PBE82562_bc1")
+        self.assertEqual(PREPARE.make_barcode_sample_name("PBE82562", "barcode10"), "PBE82562_bc10")
+        self.assertEqual(PREPARE.make_barcode_sample_name("minknow", "barcode01"), "bc1")
+        self.assertEqual(PREPARE.make_barcode_sample_name("sample", "barcode05"), "bc5")
+        self.assertEqual(PREPARE.make_barcode_sample_name("", "barcode10"), "bc10")
+        self.assertEqual(PREPARE.make_barcode_sample_name("RUN_bc1", "barcode01"), "RUN_bc1")
+        self.assertEqual(PREPARE.make_barcode_sample_name("barcode01", "barcode01"), "bc1")
+
+    def test_bam_tables_without_barcode_map_infers_bc_sample_names(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "bams"
+            (root / "barcode01").mkdir(parents=True)
+            (root / "barcode10").mkdir(parents=True)
+            (root / "barcode01" / "reads_1.bam").touch()
+            (root / "barcode10" / "reads_2.bam").touch()
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = None
+            args.sample_type = "T"
+            args.input_type = "unmapped_bam"
+            args.sequence_id = "RUN123"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "hac"
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_bam_tables_from_barcode_map(args)
+
+        self.assertEqual(samples, [{"sample": "RUN123_bc1"}, {"sample": "RUN123_bc10"}])
+        self.assertEqual(len(units), 2)
+        self.assertEqual(units[0]["sample"], "RUN123_bc1")
+        self.assertEqual(units[0]["barcode_name"], "barcode01")
+        self.assertEqual(units[1]["sample"], "RUN123_bc10")
+        self.assertEqual(units[1]["barcode_name"], "barcode10")
+
     def test_dorado_demux_flat_barcode_filenames_are_discovered(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "demux"
@@ -251,11 +297,113 @@ class PrepareNaginiInputsTest(unittest.TestCase):
                 for barcode, path in merged.items()
             }
 
-        self.assertEqual(samples, [{"sample": "PBE82562"}])
+        self.assertEqual(
+            samples, [{"sample": "PBE82562_bc1"}, {"sample": "PBE82562_bc23"}]
+        )
         self.assertEqual(sorted(merged), ["barcode01", "barcode23"])
         self.assertEqual(line_counts, {"barcode01": 16, "barcode23": 16})
         self.assertTrue(all(row["processing_unit"].endswith("_merged") for row in units))
         self.assertTrue(all(row["assay"] == "bcr_abl" for row in units))
+        self.assertEqual(merged["barcode01"].name, "PBE82562_bc1.fastq.gz")
+        self.assertEqual(merged["barcode23"].name, "PBE82562_bc23.fastq.gz")
+
+    def test_existing_barcode_fastq_with_generic_names_infers_bc_sample_names(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "runs"
+            for barcode in ("barcode01", "barcode10"):
+                directory = root / "fastq_pass" / barcode
+                directory.mkdir(parents=True, exist_ok=True)
+                path = directory / f"reads_{barcode}.fastq.gz"
+                with gzip.open(path, "wt") as handle:
+                    handle.write(f"@read_{barcode}\nACGT\n+\nIIII\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.analysis_dir = Path(tmpdir) / "analysis"
+            args.barcode_map = None
+            args.sample_type = "T"
+            args.input_type = "fastq"
+            args.sequence_id = ""
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.library_type = "wgs"
+            args.assay = ""
+            args.sample_regex = PREPARE.DEFAULT_SAMPLE_REGEX
+            args.fastq_status = "all"
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_fastq_tables(args)
+            PREPARE.validate_tables(samples, units)
+
+        self.assertEqual(samples, [{"sample": "bc1"}, {"sample": "bc10"}])
+        self.assertEqual(Path(units[0]["fastq1"]).name, "bc1.fastq.gz")
+        self.assertEqual(Path(units[1]["fastq1"]).name, "bc10.fastq.gz")
+
+    def test_minknow_tables_without_barcode_map_generates_short_barcode_samples(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "minknow"
+            root.mkdir()
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = None
+            args.sample_type = "T"
+            args.input_type = "minknow"
+            args.sequence_id = "FLOWCELL123"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.dorado_kit = "SQK-RBK114-24"
+            args.barcode_kit = "SQK-RBK114-24"
+            args.library_type = "wgs"
+            args.assay = ""
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_minknow_tables(args)
+            PREPARE.validate_tables(samples, units, allow_deferred_inputs=True)
+
+        sample_names = [row["sample"] for row in samples]
+        self.assertEqual(len(sample_names), 24)
+        self.assertIn("FLOWCELL123_bc1", sample_names)
+        self.assertIn("FLOWCELL123_bc10", sample_names)
+        self.assertIn("FLOWCELL123_bc24", sample_names)
+
+        self.assertEqual(len(units), 24)
+        units_by_bc = {row["barcode_name"]: row for row in units}
+        self.assertEqual(units_by_bc["barcode01"]["sample"], "FLOWCELL123_bc1")
+        self.assertEqual(units_by_bc["barcode01"]["bam"], "basecalling/dorado_demux/barcode01.bam")
+        self.assertEqual(units_by_bc["barcode10"]["sample"], "FLOWCELL123_bc10")
+        self.assertEqual(units_by_bc["barcode10"]["bam"], "basecalling/dorado_demux/barcode10.bam")
+
+    def test_minknow_tables_without_barcode_map_generic_sequence_id(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "minknow"
+            root.mkdir()
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = None
+            args.sample_type = "T"
+            args.input_type = "minknow"
+            args.sequence_id = ""
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.dorado_kit = "SQK-RBK114-24"
+            args.barcode_kit = "SQK-RBK114-24"
+            args.library_type = "wgs"
+            args.assay = ""
+            args.pipeline_root = Path(__file__).parents[1]
+
+            samples, units = PREPARE.make_minknow_tables(args)
+            PREPARE.validate_tables(samples, units, allow_deferred_inputs=True)
+
+        sample_names = [row["sample"] for row in samples]
+        self.assertEqual(len(sample_names), 24)
+        self.assertIn("bc1", sample_names)
+        self.assertIn("bc10", sample_names)
+        self.assertIn("bc24", sample_names)
 
     def test_minknow_tables_defer_dorado_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:

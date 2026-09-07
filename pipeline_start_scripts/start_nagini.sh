@@ -524,7 +524,9 @@ source_input_dir="$input_dir"
 source_input_type="$input_type"
 if [[ "$input_type" == "minknow" ]]; then
     [[ -n "$barcode_kit" ]] || die "--barcode-kit is required with --input-type minknow"
-    [[ -n "$barcode_map" ]] || die "--barcode-map is required with --input-type minknow"
+    if [[ -z "$barcode_map" ]]; then
+        echo "NOTE: No --barcode-map provided. Samples will be automatically named per barcode (e.g. bc1, bc10) based on kit $barcode_kit."
+    fi
     [[ "$basecalling_model" != "unknown" ]] || die "--basecalling-model (or --dorado-model) is required with --input-type minknow"
     [[ -z "$dorado_models_directory" || -d "$dorado_models_directory" ]] || die "Dorado models directory does not exist: $dorado_models_directory"
 fi

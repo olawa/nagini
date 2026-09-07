@@ -330,6 +330,33 @@ def normalize_barcode(value: object) -> str:
     return barcode
 
 
+def format_short_barcode(value: object) -> str:
+    """Format barcode01 -> bc1, barcode10 -> bc10, bc01 -> bc1, 01 -> bc1, etc."""
+    barcode = str(value or "").strip().lower()
+    match = re.search(r"(\d+)", barcode)
+    if match:
+        return f"bc{int(match.group(1))}"
+    return barcode if barcode else "bc"
+
+
+def make_barcode_sample_name(base_sample: str, barcode: str) -> str:
+    """Combine base sample name and barcode into a sample name with barcode info (bc1, bc10, etc.)."""
+    short_bc = format_short_barcode(barcode)
+    base = str(base_sample or "").strip()
+    generic_names = {"sample", "reads", "read", "fastq", "run", "runs", "minknow", "pass", "fail"}
+    if not base or base.lower() in generic_names:
+        return short_bc
+    if normalize_barcode(base) == normalize_barcode(barcode) or base.lower() == short_bc:
+        return short_bc
+
+    pattern = rf"(?i)[-_]?(?:{re.escape(short_bc)}|{re.escape(normalize_barcode(barcode))})$"
+    if re.search(pattern, base):
+        prefix = re.sub(pattern, "", base).rstrip("-_")
+        return f"{prefix}_{short_bc}" if prefix else short_bc
+
+    return f"{base}_{short_bc}"
+
+
 def read_barcode_map(
     path: Path,
     default_type: str,
@@ -620,16 +647,47 @@ def make_bam_tables_from_barcode_map(
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Build Hydra-style tables from Dorado ``bam_pass/barcodeXX`` output."""
 
-    mapping = read_barcode_map(
-        args.barcode_map.resolve(),
-        args.sample_type,
-        getattr(args, "library_type", "wgs"),
-        getattr(args, "assay", ""),
-        known_library_types(_pipeline_root(args)),
-    )
+    mapping = None
+    if getattr(args, "barcode_map", None):
+        mapping = read_barcode_map(
+            args.barcode_map.resolve(),
+            args.sample_type,
+            getattr(args, "library_type", "wgs"),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+    else:
+        mapping, map_sources = discover_barcode_map(
+            args.input_dir,
+            args.sample_type,
+            getattr(args, "library_type", ""),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+
     bams_by_barcode = discover_bams_by_barcode(args.input_dir)
     if not bams_by_barcode:
         raise SystemExit(f"No BAM files below barcode directories in {args.input_dir}.")
+
+    if not mapping:
+        library_type = resolve_library_type_for_assay(
+            getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
+        )
+        base_prefix = args.sequence_id or args.run_id or ""
+        mapping = {
+            barcode: {
+                "barcode": barcode,
+                "sample": make_barcode_sample_name(base_prefix, barcode),
+                "type": str(args.sample_type).strip().upper(),
+                "library_type": library_type,
+                "assay": str(getattr(args, "assay", "") or "").strip().lower(),
+            }
+            for barcode in sorted(bams_by_barcode)
+        }
+        print(
+            "Auto-inferred barcode map for BAM files: "
+            + ", ".join(f"{bc}->{m['sample']}" for bc, m in sorted(mapping.items()))
+        )
 
     observed = set(bams_by_barcode)
     expected = set(mapping)
@@ -966,12 +1024,8 @@ def infer_barcode_map_from_fastq_files(
 ) -> dict[str, dict[str, str]]:
     """Infer barcode assignments when FASTQ names contain sample and barcode.
 
-    A MinKNOW export can contain perfectly usable barcode FASTQs without a
-    parseable sample sheet.  In that case filenames such as
-    ``PBE82562_pass_barcode23_...fastq.gz`` still provide an unambiguous
-    sample/barcode assignment.  Only infer this mapping when every observed
-    barcode has exactly one sample; ambiguous barcodes must use
-    ``--barcode-map`` instead.
+    When no sample sheet is provided, each barcode is assigned a sample name
+    with barcode info (bc1, bc10, etc.), e.g. ``PBE82562_bc1`` or ``bc1``.
     """
 
     pattern = re.compile(args.sample_regex)
@@ -981,19 +1035,23 @@ def infer_barcode_map_from_fastq_files(
         barcode = _barcode_from_path(path, input_dir)
         if not barcode:
             continue
-        samples_by_barcode[barcode].add(sample_from_fastq(path, pattern).strip())
+        try:
+            sample = sample_from_fastq(path, pattern).strip()
+        except SystemExit:
+            sample = ""
+        samples_by_barcode[barcode].add(sample)
 
     if not samples_by_barcode:
         return {}
 
     conflicts = {
-        barcode: sorted(samples)
+        barcode: sorted(s for s in samples if s)
         for barcode, samples in samples_by_barcode.items()
-        if len(samples) != 1 or "" in samples
+        if len(set(s for s in samples if s)) > 1
     }
     if conflicts:
         details = "; ".join(
-            f"{barcode}: {', '.join(samples) or '<empty sample>'}"
+            f"{barcode}: {', '.join(samples)}"
             for barcode, samples in sorted(conflicts.items())
         )
         raise SystemExit(
@@ -1005,16 +1063,20 @@ def infer_barcode_map_from_fastq_files(
     library_type = resolve_library_type_for_assay(
         getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
     )
-    return {
-        barcode: {
+    default_prefix = args.sequence_id or args.run_id or ""
+    mapping = {}
+    for barcode, samples in sorted(samples_by_barcode.items()):
+        non_empty = [s for s in samples if s]
+        base_sample = non_empty[0] if non_empty else default_prefix
+        sample_name = make_barcode_sample_name(base_sample, barcode)
+        mapping[barcode] = {
             "barcode": barcode,
-            "sample": next(iter(samples)),
+            "sample": sample_name,
             "type": str(args.sample_type).strip().upper(),
             "library_type": library_type,
             "assay": str(getattr(args, "assay", "") or "").strip().lower(),
         }
-        for barcode, samples in sorted(samples_by_barcode.items())
-    }
+    return mapping
 
 
 def make_barcode_fastq_tables(
@@ -1065,7 +1127,12 @@ def make_barcode_fastq_tables(
         sample_name = assignment["sample"]
         samples_by_name.setdefault(sample_name, {"sample": sample_name})
         source_files = sorted(fastqs_by_barcode[barcode])
-        merged_fastq = merged_dir / f"{barcode}.fastq.gz"
+        short_bc = format_short_barcode(barcode)
+        if short_bc in sample_name.lower() or barcode.lower() in sample_name.lower():
+            fastq_name = f"{sample_name}.fastq.gz"
+        else:
+            fastq_name = f"{sample_name}_{short_bc}.fastq.gz"
+        merged_fastq = merged_dir / fastq_name
         merge_fastq_files(source_files, merged_fastq)
         units.append(
             {
@@ -1174,13 +1241,60 @@ def make_fastq_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], l
 def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Create deferred units for Dorado outputs produced by Snakemake."""
 
-    mapping = read_barcode_map(
-        args.barcode_map.resolve(),
-        args.sample_type,
-        getattr(args, "library_type", "wgs"),
-        getattr(args, "assay", ""),
-        known_library_types(_pipeline_root(args)),
-    )
+    mapping = None
+    if getattr(args, "barcode_map", None):
+        mapping = read_barcode_map(
+            args.barcode_map.resolve(),
+            args.sample_type,
+            getattr(args, "library_type", "wgs"),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+    else:
+        mapping, _ = discover_barcode_map(
+            args.input_dir,
+            args.sample_type,
+            getattr(args, "library_type", ""),
+            getattr(args, "assay", ""),
+            known_library_types(_pipeline_root(args)),
+        )
+
+    if not mapping:
+        kit = getattr(args, "dorado_kit", "") or getattr(args, "barcode_kit", "")
+        routing = _routing_module(_pipeline_root(args))
+        kit_size = routing.barcode_kit_size(kit) if kit else None
+        barcodes = []
+        if kit_size:
+            barcodes = [f"barcode{i:02d}" for i in range(1, kit_size + 1)]
+        else:
+            bams = discover_bams_by_barcode(args.input_dir)
+            fqs = discover_fastqs_by_barcode(args.input_dir)
+            barcodes = sorted(set(bams) | set(fqs))
+
+        if not barcodes:
+            raise SystemExit(
+                "Cannot determine barcodes for MinKNOW input without --barcode-map. "
+                "Provide --barcode-kit (e.g. SQK-RBK114-24) or --barcode-map."
+            )
+
+        library_type = resolve_library_type_for_assay(
+            getattr(args, "assay", ""), getattr(args, "library_type", ""), "wgs"
+        )
+        base_prefix = args.sequence_id or args.run_id or ""
+        mapping = {
+            barcode: {
+                "barcode": barcode,
+                "sample": make_barcode_sample_name(base_prefix, barcode),
+                "type": str(args.sample_type).strip().upper(),
+                "library_type": library_type,
+                "assay": str(getattr(args, "assay", "") or "").strip().lower(),
+            }
+            for barcode in sorted(barcodes)
+        }
+        print(
+            "Auto-inferred barcode map for MinKNOW input: "
+            + ", ".join(f"{bc}->{m['sample']}" for bc, m in sorted(mapping.items()))
+        )
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
@@ -1700,7 +1814,7 @@ def main() -> None:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_minknow_tables(args)
-    elif args.barcode_map:
+    elif args.barcode_map or discover_bams_by_barcode(args.input_dir):
         if samples_path.exists() and units_path.exists() and not args.force:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
