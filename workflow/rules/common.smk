@@ -371,6 +371,22 @@ def get_unit_alignment_bams(wildcards):
     return [get_unit_alignment_path(row) for _, row in rows.iterrows()]
 
 
+def get_barcode_unit_alignment(wildcards):
+    """Return the per-unit alignment for one preserved barcode."""
+
+    barcode = str(wildcards.barcode).strip()
+    if "barcode_name" not in units.columns:
+        raise WorkflowError("units.tsv has no barcode_name column.")
+    rows = _unit_rows(wildcards.sample, wildcards.type)
+    rows = rows[rows["barcode_name"].astype(str).str.strip() == barcode]
+    if len(rows) != 1:
+        raise WorkflowError(
+            "Expected exactly one unit for "
+            f"{wildcards.sample}/{wildcards.type}/{barcode}; found {len(rows)}."
+        )
+    return get_unit_alignment_path(rows.iloc[0])
+
+
 def get_unit_dorado_bam(wildcards):
     """Return the pipeline-owned demultiplexed BAM for a Dorado unit."""
 
@@ -704,10 +720,11 @@ def mutect2_enabled(sample=None, unit_type=None):
 
 
 def get_clairs_to_bed(wildcards):
-    """Return the design BED if configured, otherwise whole-genome contigs BED."""
-    resolved = get_resolved_design_bed()
-    if resolved:
-        return resolved
+    """Return the design BED for target-restricted samples if configured, otherwise whole-genome contigs BED."""
+    if sample_is_target_restricted(wildcards.sample):
+        resolved = get_resolved_design_bed()
+        if resolved:
+            return resolved
     return "references/genome_contigs.bed"
 
 
