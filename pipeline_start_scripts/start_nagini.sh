@@ -461,9 +461,12 @@ if [[ -n "$barcode_map" ]]; then
 elif [[ -d "$input_dir" ]]; then
     for candidate in \
         "$input_dir/barcode_map.csv" "$input_dir/barcode_map.tsv" \
+        "$input_dir/barcode-map.csv" "$input_dir/barcode-map.tsv" \
         "$input_dir/sample_sheet.csv" "$input_dir/sample_sheet.tsv" \
+        "$input_dir/sample-sheet.csv" "$input_dir/sample-sheet.tsv" \
         "$input_dir/samplesheet.csv" "$input_dir/samplesheet.tsv" \
         "$input_dir/sample_map.csv" "$input_dir/sample_map.tsv" \
+        "$input_dir/sample-map.csv" "$input_dir/sample-map.tsv" \
         "$input_dir/barcodes.csv" "$input_dir/barcodes.tsv"
     do
         if [[ -f "$candidate" ]]; then

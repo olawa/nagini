@@ -27,6 +27,7 @@ singularity_binds:
   - /data
   - /var/lib/minknow/data
   - /home
+  - /coldstorage
 
 # Pin before clinical use.
 CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"

@@ -503,7 +503,7 @@ def discover_barcode_map(
     for path in sorted(input_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in {".csv", ".tsv", ".tab"}:
             continue
-        stem = path.stem.lower()
+        stem = path.stem.lower().replace("-", "_")
         if not (
             stem.startswith("sample_sheet")
             or stem.startswith("samplesheet")
