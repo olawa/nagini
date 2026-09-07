@@ -70,6 +70,18 @@ files:
     input: null
     output: "reports/sv_summary/{sample}_{type}.json"
     when: sv_calling
+  - name: whole genome CNV summary
+    input: null
+    output: "reports/cnv_summary/{sample}_{type}.cnv.tsv"
+    when: cnv_calling
+  - name: whole genome CNV summary JSON
+    input: null
+    output: "reports/cnv_summary/{sample}_{type}.cnv.json"
+    when: cnv_calling
+  - name: Rindels ASCAT segments
+    input: null
+    output: "cnv/rindels/{sample}_{type}.ascat.bed"
+    when: cnv_calling
   - name: ClairS-TO concatenated VCF
     input: null
     output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"

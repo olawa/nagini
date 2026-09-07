@@ -327,6 +327,15 @@ arriba:
   container: "{{ARRIBA_CONTAINER}}"
   extra: ""
   protein_domains: ""
+# Copy Number Variant (CNV) calling with Rindels
+# Whole-genome read-count binning and segmentation (ASCAT model)
+# Operates genome-wide even in adaptive sampling mode.
+cnv_calling: true
+rindels:
+  binary: "rindels"
+  cnv_bin_size: 50000
+  extra_cnv: "--ont --only-cnv"
+  threads: 4
 
 bcr_abl:
   tolerance: 150

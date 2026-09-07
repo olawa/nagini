@@ -125,7 +125,12 @@ def write_test_inputs(root):
     cramino.write_text("Reads\t10\nYield [Gb]: 0.01\nMean quality: 14.2\n")
     cytoband = root / "cytoBand.txt"
     cytoband.write_text("chr1\t0\t100\tp36.33\tgneg\nchr2\t0\t100\tp25.3\tgneg\n")
-    return vcf, sv, translocations, coverage, cramino, cytoband
+    cnv = root / "cnv.tsv"
+    cnv.write_text(
+        "chrom\tstart\tend\tlength_kb\tcopy_number\tstate\tevent_type\tlogR\tpurity\tploidy\tcytoband\tis_target_region\ttarget_genes\n"
+        "chr1\t1000\t5000\t4.0\t3\tGAIN\tGAIN\t0.58\t0.80\t2.0\tp36.33\tTrue\tGENE1\n"
+    )
+    return vcf, sv, translocations, coverage, cramino, cytoband, cnv
 
 
 @unittest.skipIf(REPORT is None, "xlsxwriter not available")
@@ -241,13 +246,13 @@ class FullReportTest(unittest.TestCase):
     def _build(self, tmpdir):
 
         root = Path(tmpdir)
-        vcf, sv, translocations, coverage, cramino, cytoband = write_test_inputs(root)
+        vcf, sv, translocations, coverage, cramino, cytoband, cnv = write_test_inputs(root)
         output = root / "full_report.xlsx"
         REPORT.generate_report(
             str(output), "example", "N", "hg38", "VEP", str(vcf),
             str(sv), str(translocations), str(coverage), str(coverage), str(cramino),
             str(cytoband), caller="ClairS-TO", design_bed="/data/panel.bed",
-            platform="ont_r10_dorado_hac_4khz",
+            platform="ont_r10_dorado_hac_4khz", cnv_tsv=str(cnv),
         )
         return output
 
@@ -257,7 +262,7 @@ class FullReportTest(unittest.TestCase):
         self.assertEqual(
             list(sheets),
             [
-                "Overview", "SNVs and indels", "SVs", "Translocations",
+                "Overview", "SNVs and indels", "CNVs", "SVs", "Translocations",
                 "WGS coverage", "Target coverage", "Cramino QC",
             ],
         )
@@ -272,6 +277,31 @@ class FullReportTest(unittest.TestCase):
         self.assertIn("panel.bed", text)
         self.assertIn("PATHOGENIC", text)
         self.assertIn("TRANSLOCATION DETECTED", text)
+        self.assertIn("COPY NUMBER ALTERATIONS (RINDELS)", text)
+        self.assertIn("GAIN", text)
+
+    def test_cnv_sheet_is_present_and_populated(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sheets = read_workbook(self._build(tmpdir))
+        header = sheets["CNVs"][0]
+        row = dict(zip(header, sheets["CNVs"][1]))
+        self.assertEqual(row["chrom"], "chr1")
+        self.assertEqual(row["event_type"], "GAIN")
+        self.assertEqual(row["target_genes"], "GENE1")
+        self.assertEqual(row["is_target_region"], "True")
+
+    def test_sv_sheet_excludes_translocations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sheets = read_workbook(self._build(tmpdir))
+        sv_types = [row[2] for row in sheets["SVs"][1:]]
+        self.assertIn("DEL", sv_types)
+        self.assertNotIn("BND", sv_types)
+
+    def test_translocations_sheet_contains_bnd(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sheets = read_workbook(self._build(tmpdir))
+        trans_types = [row[2] for row in sheets["Translocations"][1:]]
+        self.assertIn("BND", trans_types)
 
     def test_structural_variants_are_annotated_with_cytobands(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -292,7 +322,7 @@ class FullReportTest(unittest.TestCase):
     def test_adaptive_sampling_enrichment_and_demux_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            vcf, sv, translocations, _, cramino, cytoband = write_test_inputs(root)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
             wgs_cov = root / "wgs_cov.tsv"
             wgs_cov.write_text("chrom\tlength\tbases\tmean\ntotal\t1000\t1000\t2.5\n")
             target_cov = root / "target_cov.tsv"

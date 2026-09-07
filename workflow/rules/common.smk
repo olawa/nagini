@@ -565,6 +565,34 @@ def sample_needs_sv_calling(sample):
     return _routing_call(nagini_routing.sample_needs_sv_calling, units, sample, assays)
 
 
+def sample_needs_cnv_calling(sample):
+    """Whether whole-genome CNV calling runs for this sample."""
+    if not config.get("cnv_calling", True):
+        return False
+    return _routing_call(nagini_routing.sample_needs_cnv_calling, units, sample, assays)
+
+
+def _find_rindels_binary():
+    """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
+    override = config.get("rindels", {}).get("binary", "") or config.get("bcr_abl", {}).get("rindels_binary", "")
+    if override and (os.path.isfile(override) or shutil.which(override)):
+        return override
+    candidates = [
+        os.path.expanduser("~/bin/rindels"),
+        "/home/cgu-lab/bin/rindels",
+        os.path.expanduser("~/tmp/tools/rindels/target/release/rindels"),
+        "/home/cgu-lab/tmp/tools/rindels/target/release/rindels",
+        os.path.expanduser("~/.cargo/bin/rindels"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    which_r = shutil.which("rindels")
+    if which_r:
+        return which_r
+    return "rindels"
+
+
 def sample_needs_rna_analysis(sample):
     """Whether the library is spliced and needs RNA-aware handling."""
 
@@ -805,6 +833,14 @@ def get_report_translocations_tsv(wildcards):
     return []
 
 
+def get_report_cnv_tsv(wildcards):
+    if sample_needs_cnv_calling(wildcards.sample):
+        return get_sample_type_path(
+            wildcards, "reports/cnv_summary", ".cnv.tsv"
+        )
+    return []
+
+
 def get_report_target_coverage(wildcards):
     if has_design_bed():
         return get_sample_type_path(
@@ -909,6 +945,7 @@ _PIPELINE_CONDITIONS = {
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
     "annotate_svs": lambda: bool(config.get("annotate_svs", False)),
     "has_design_bed": lambda: has_design_bed(),
+    "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }
@@ -928,6 +965,8 @@ _SAMPLE_CONDITIONS = {
     "sv_calling": sample_needs_sv_calling,
     "annotate_svs": sample_needs_sv_calling,
     "sample_needs_sv_calling": sample_needs_sv_calling,
+    "cnv_calling": sample_needs_cnv_calling,
+    "sample_needs_cnv_calling": sample_needs_cnv_calling,
     "sample_needs_rna_analysis": sample_needs_rna_analysis,
     "target_restricted": sample_is_target_restricted,
     "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),

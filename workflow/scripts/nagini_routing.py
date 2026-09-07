@@ -52,6 +52,7 @@ ASSAY_DEFAULTS = {
     "library_type": "wgs",
     "snv_calling": False,
     "sv_calling": False,
+    "cnv_calling": False,
     "target_restricted": False,
     "modules": [],
     # Tool settings that differ for this assay, as {section: {key: value}}.
@@ -68,6 +69,7 @@ BUILTIN_ASSAYS = {
         "library_type": "wgs",
         "snv_calling": True,
         "sv_calling": True,
+        "cnv_calling": True,
         "target_restricted": False,
     },
     "amplicon": {
@@ -92,6 +94,7 @@ BUILTIN_ASSAYS = {
         "library_type": "wgs",
         "snv_calling": True,
         "sv_calling": True,
+        "cnv_calling": True,
         "target_restricted": True,
     },
     "bcr_abl": {
@@ -281,6 +284,10 @@ def sample_needs_sv_calling(units, sample: str, assays: dict) -> bool:
     return bool(get_assay_definition(units, sample, assays)["sv_calling"])
 
 
+def sample_needs_cnv_calling(units, sample: str, assays: dict) -> bool:
+    return bool(get_assay_definition(units, sample, assays).get("cnv_calling", False))
+
+
 def sample_is_target_restricted(units, sample: str, assays: dict) -> bool:
     return bool(get_assay_definition(units, sample, assays)["target_restricted"])
 
@@ -398,6 +405,7 @@ PIPELINE_CONDITION_NAMES = {
     "annotate_small_variants",
     "annotate_svs",
     "has_design_bed",
+    "cnv_calling",
 }
 
 SAMPLE_CONDITION_NAMES = {
@@ -417,6 +425,8 @@ SAMPLE_CONDITION_NAMES = {
     "sample_needs_sv_calling",
     "sample_needs_rna_analysis",
     "target_restricted",
+    "cnv_calling",
+    "sample_needs_cnv_calling",
 }
 
 # Config flags that are legitimate `when:` values even though they are plain
@@ -425,6 +435,7 @@ CONFIG_FLAG_CONDITIONS = {
     "annotate_small_variants",
     "annotate_svs",
     "sv_calling",
+    "cnv_calling",
     "enable_rindels",
     "enable_bcftools_pileup",
 }

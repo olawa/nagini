@@ -721,11 +721,12 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     cytoband="", caller="", design_bed="", platform="",
                     target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
-                    bcr_abl_exon_coverage="", bcr_abl_plot_png=""):
+                    bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
+    cnv_columns, cnvs = parse_tsv(cnv_tsv)
     cytobands = CytobandLookup(cytoband)
     sv_columns, svs = annotate_sv_rows(sv_columns, svs, cytobands)
     translocation_columns, translocations = annotate_sv_rows(
@@ -748,8 +749,23 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     high_impact_snvs = [
         r for r in snvs if str(r.get("Impact", "")).upper() == "HIGH"
     ]
+
+    # Partition SVs into intra-chromosomal (DEL, DUP, INS, INV) vs inter-chromosomal / breakends
+    svs_intra = [
+        r for r in svs
+        if str(r.get("translocation", "")).lower() not in ("true", "1")
+        and str(r.get("svtype", "")).upper() not in ("BND", "TRA")
+    ]
     target_svs = [
-        r for r in svs if r.get("genes") and r.get("genes") != "."
+        r for r in svs_intra if r.get("genes") and r.get("genes") != "."
+    ]
+
+    cnv_non_diploid = [
+        c for c in cnvs if str(c.get("event_type", "")).upper() not in ("DIPLOID", "")
+    ]
+    target_cnvs = [
+        c for c in cnv_non_diploid
+        if str(c.get("is_target_region", "")).lower() in ("true", "1")
     ]
 
     cramino_dict = {row["Metric"]: row["Value"] for row in cramino_rows}
@@ -926,7 +942,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     overview.append([("PASS Small Variants", 7), ("High-confidence calls", 0), (pass_count, 0), ("PASS", 5)])
     overview.append([("ClinVar Pathogenic Variants", 7), ("Pathogenic / Likely Pathogenic", 0), (len(pathogenic_snvs), 0), ("ACTION REQUIRED" if pathogenic_snvs else "NONE", 4 if pathogenic_snvs else 5)])
     overview.append([("High Impact Variants", 7), ("Stop gained / frameshift / splice", 0), (len(high_impact_snvs), 0), ("REVIEW" if high_impact_snvs else "NONE", 6 if high_impact_snvs else 5)])
-    overview.append([("Total Structural Variants", 7), ("Sniffles2 SV calls", 0), (len(svs), 0), ("INFO", 0)])
+    if cnvs:
+        overview.append([("Total Copy Number Alterations", 7), ("Genome-wide CNV segments (Rindels)", 0), (len(cnv_non_diploid), 0), ("CNV DETECTED" if cnv_non_diploid else "NONE", 6 if cnv_non_diploid else 5)])
+        if target_cnvs:
+            overview.append([("Target-Overlapping CNVs", 7), ("CNVs overlapping design BED", 0), (len(target_cnvs), 0), ("REVIEW" if target_cnvs else "NONE", 6 if target_cnvs else 5)])
+    overview.append([("Structural Variants (Intra-chrom)", 7), ("Sniffles2 DEL / DUP / INS / INV", 0), (len(svs_intra), 0), ("INFO", 0)])
     overview.append([("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)])
     overview.append([("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)])
     if not has_bcr_abl:
@@ -980,6 +1000,22 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (v.get("ClinVar_Significance", ""), 4),
             ])
 
+    if cnv_non_diploid:
+        overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
+        overview.append([("COPY NUMBER ALTERATIONS (RINDELS)", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6)])
+        overview.append([("Chr", 1), ("Start", 1), ("End", 1), ("Length [kb]", 1), ("Copy Number", 1), ("Type", 1), ("Cytoband", 1)])
+        for c in cnv_non_diploid[:15]:
+            cn_style = 4 if str(c.get("event_type", "")).upper() == "LOSS" else 6
+            overview.append([
+                (c.get("chrom", ""), 0),
+                (c.get("start", 0), 0),
+                (c.get("end", 0), 0),
+                (c.get("length_kb", 0), 0),
+                (c.get("copy_number", "") or c.get("state", ""), cn_style),
+                (c.get("event_type", ""), cn_style),
+                (c.get("cytoband", "") or c.get("target_genes", ""), 0),
+            ])
+
     if translocations:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("TRANSLOCATIONS & REARRANGEMENTS (SNIFFLES2)", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
@@ -1020,7 +1056,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     sheets.extend([
         ("SNVs and indels", table(snv_columns, snvs)),
-        ("SVs", table(sv_columns, svs)),
+        ("CNVs", table(cnv_columns, cnvs)),
+        ("SVs", table(sv_columns, svs_intra)),
         ("Translocations", table(translocation_columns, translocations)),
         ("WGS coverage", table(wgs_columns, wgs_rows)),
         ("Target coverage", table(target_columns, target_rows)),
@@ -1060,6 +1097,7 @@ def run_from_snakemake(snakemake):
         bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
         bcr_abl_exon_coverage=_first_or_str(getattr(snakemake.input, "bcr_abl_exon_coverage", "")),
         bcr_abl_plot_png=_first_or_str(getattr(snakemake.input, "bcr_abl_plot_png", "")),
+        cnv_tsv=_first_or_str(getattr(snakemake.input, "cnv", "")),
     )
 
 
@@ -1088,6 +1126,7 @@ def main():
     parser.add_argument("--bcr-abl-phasing", default="")
     parser.add_argument("--bcr-abl-exon-coverage", default="")
     parser.add_argument("--bcr-abl-plot-png", default="")
+    parser.add_argument("--cnv-tsv", default="")
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,
@@ -1101,6 +1140,8 @@ def main():
         bcr_abl_mutations=args.bcr_abl_mutations,
         bcr_abl_phasing=args.bcr_abl_phasing,
         bcr_abl_exon_coverage=args.bcr_abl_exon_coverage,
+        bcr_abl_plot_png=args.bcr_abl_plot_png,
+        cnv_tsv=args.cnv_tsv,
     )
 
 
