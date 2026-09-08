@@ -570,6 +570,79 @@ def get_reference_chromosomes():
 reference_chromosomes = get_reference_chromosomes()
 
 
+_design_chromosomes_cache = []
+
+
+def get_design_chromosomes():
+    """Reference chromosomes that the design BED actually covers.
+
+    A target-restricted sample has nothing to call on a chromosome the design
+    never touches, so those shards should not be created at all rather than
+    run and produce an empty VCF.  Resolved on first use, since the design BED
+    helpers are defined further down this file.
+    """
+
+    if _design_chromosomes_cache:
+        return _design_chromosomes_cache[0]
+    bed = get_resolved_design_bed()
+    if not bed:
+        _design_chromosomes_cache.append(list(reference_chromosomes))
+        return _design_chromosomes_cache[0]
+    present = set()
+    with open(bed) as handle:
+        for line in handle:
+            if line.startswith(("#", "track", "browser")) or not line.strip():
+                continue
+            present.add(line.split("\t", 1)[0].strip())
+    covered = [name for name in reference_chromosomes if name in present]
+    _design_chromosomes_cache.append(covered or list(reference_chromosomes))
+    return _design_chromosomes_cache[0]
+
+
+def sample_calls_within_design(sample):
+    """Whether small-variant calling for this sample is confined to the design."""
+
+    return has_design_bed() and sample_is_target_restricted(sample)
+
+
+def get_snv_shard_chromosomes(sample):
+    """The chromosomes a per-chromosome caller should be sharded over."""
+
+    if sample_calls_within_design(sample):
+        return get_design_chromosomes()
+    return reference_chromosomes
+
+
+def get_deepvariant_regions_bed(wildcards):
+    """The design slice DeepVariant should be confined to, or nothing."""
+
+    if not sample_calls_within_design(wildcards.sample):
+        return []
+    return f"snv_indels/bed_split/design_bedfile_{wildcards.chr}.bed"
+
+
+def get_deepvariant_regions(wildcards):
+    """--regions for DeepVariant: the design slice, else the whole chromosome.
+
+    The Hydra rule always passes the bare chromosome, so a target-restricted
+    sample was called genome-wide while ClairS-TO ran only inside the design.
+    DeepVariant's --regions takes a BED, and snv_indels' bed_split already
+    produces one slice per chromosome for Mutect2, so reuse that.
+    """
+
+    bed = get_deepvariant_regions_bed(wildcards)
+    return f" --regions {bed} " if bed else f" --regions {wildcards.chr} "
+
+
+def get_deepvariant_shards(wildcards, template):
+    """The per-chromosome DeepVariant files to concatenate for one sample."""
+
+    return [
+        template.format(sample=wildcards.sample, type=wildcards.type, chr=name)
+        for name in get_snv_shard_chromosomes(wildcards.sample)
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Sample routing
 # ---------------------------------------------------------------------------

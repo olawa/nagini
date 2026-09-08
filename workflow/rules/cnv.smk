@@ -11,9 +11,15 @@ rule cnv_rindels:
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
     output:
+        # Rindels names its sidecars after the -o base, so -o must be
+        # {sample}_{type}.vcf for the segmentation to land on
+        # {sample}_{type}.ascat.bed. The parquet sidecars it also writes are
+        # deliberately not declared: which ones appear depends on the mode and
+        # the data, and declaring an output the mode cannot produce is what
+        # made this rule fail in the first place.
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
         ascat="cnv/rindels/{sample}_{type}.ascat.bed",
-        vcf=temp("cnv/rindels/{sample}_{type}.rindels.vcf"),
+        vcf="cnv/rindels/{sample}_{type}.vcf",
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         bin_size=config.get("rindels", {}).get("cnv_bin_size", 50000),
@@ -36,13 +42,34 @@ rule cnv_rindels:
         "{rule}: call whole-genome copy number variations with Rindels for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        {params.binary} \
+        exec > {log} 2>&1
+        RINDELS_BIN="{params.binary}"
+        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
+            echo "Error: Rindels binary not found at $RINDELS_BIN"
+            exit 1
+        fi
+
+        "$RINDELS_BIN" \
             -b {input.bam} \
             -r {input.ref} \
             --cnv-output {output.bins} \
             --cnv-bin-size {params.bin_size} \
             -o {output.vcf} \
-            {params.extra} &> {log}
+            {params.extra}
+
+        # Rindels skips the ASCAT segmentation when it finds fewer than 100
+        # heterozygous sites, which is a legitimate outcome for a shallow or
+        # genomically quiet sample. Leave a header-only file so the run
+        # reports no segments instead of dying on a missing output;
+        # cnv_summary already treats an empty file as zero segments.
+        if [ ! -f "{output.ascat}" ]; then
+            echo "ASCAT segmentation skipped by Rindels (too few heterozygous sites); see the log."
+            printf '%s\n' \
+                "# ASCAT-style Heuristic Copy Number Segments" \
+                "# NOTE: Rindels skipped segmentation for this sample (too few heterozygous sites)" \
+                "# Columns: chrom, start, end, CN_A, CN_B, BAF, logR, n_sites, state, n_het, n_hom, n_total" \
+                > "{output.ascat}"
+        fi
         """
 
 

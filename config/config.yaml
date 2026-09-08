@@ -340,7 +340,14 @@ cnv_calling: true
 rindels:
   binary: "rindels"
   cnv_bin_size: 50000
-  extra_cnv: "--ont --only-cnv"
+  # --sv-lite rather than --only-cnv: --only-cnv implies --no-snp, which
+  # leaves the ASCAT-style BAF segmentation without heterozygous markers, so
+  # it produces binned counts and parquet sidecars but no .ascat.bed for
+  # cnv_summary to read. --sv-lite keeps SNP calling (hence BAF, segmentation
+  # and purity/ploidy) and adds DEL/DUP/INV/TRA from pair and clip evidence
+  # without assembly, which is what a dic(9;20) or iAMP21 design is looking
+  # for. Use --ascat-markers with a common-SNP panel to keep --only-cnv fast.
+  extra_cnv: "--ont --sv-lite"
   threads: 4
 
 bcr_abl:

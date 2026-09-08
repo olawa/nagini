@@ -290,11 +290,16 @@ use rule tabix from snv_indels as snv_indels_clairs_to_vep_tabix with:
 # HYDRA-GENETICS MODULE: snv_indels / DeepVariant (Germline WGS)
 # ===========================================================================
 
+# The Hydra rule hands DeepVariant the bare chromosome as --regions, so a
+# target-restricted sample was called genome-wide while ClairS-TO ran only
+# inside the design.  Pass the design slice instead, and shard only over the
+# chromosomes the design covers.
 use rule deepvariant from snv_indels as snv_indels_deepvariant with:
     input:
         bam="alignment/nagini_bam/{sample}_{type}.bam",
         bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
+        bed=get_deepvariant_regions_bed,
     output:
         vcf=temp("snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz"),
         tbi=temp("snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz.tbi"),
@@ -302,19 +307,17 @@ use rule deepvariant from snv_indels as snv_indels_deepvariant with:
         model_type=config.get("deepvariant", {}).get("model_type", "ONT_R104"),
         output_gvcf="",
         int_res=lambda wildcards: f"snv_indels/deepvariant/{wildcards.sample}_{wildcards.type}_{wildcards.chr}",
-        regions=lambda wildcards: f" --regions {wildcards.chr} ",
+        regions=get_deepvariant_regions,
         extra=config.get("deepvariant", {}).get("extra", ""),
 
 
 use rule bcftools_concat from snv_indels as snv_indels_deepvariant_concat with:
     input:
-        calls=expand(
-            "snv_indels/deepvariant/{{sample}}_{{type}}_{chr}.vcf.gz",
-            chr=reference_chromosomes,
+        calls=lambda wildcards: get_deepvariant_shards(
+            wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz"
         ),
-        index=expand(
-            "snv_indels/deepvariant/{{sample}}_{{type}}_{chr}.vcf.gz.tbi",
-            chr=reference_chromosomes,
+        index=lambda wildcards: get_deepvariant_shards(
+            wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz.tbi"
         ),
     output:
         vcf="snv_indels/deepvariant/{sample}_{type}.vcf.gz",
