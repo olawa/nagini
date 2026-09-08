@@ -4,9 +4,23 @@
 import argparse
 import bisect
 import collections
+import gzip
 import json
 import os
 import sys
+
+
+def _open_text(path):
+    """Open a reference table, transparently handling gzip.
+
+    UCSC ships cytoBand and friends gzipped, and reading one with plain open()
+    yields binary noise rather than an error, so the annotation would silently
+    come out empty.
+    """
+
+    if str(path).endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path, "r")
 
 
 class CytobandLookup:
@@ -15,7 +29,7 @@ class CytobandLookup:
     def __init__(self, cytoband_file):
         self.bands_by_chr = collections.defaultdict(list)
         if cytoband_file and os.path.isfile(cytoband_file):
-            with open(cytoband_file, "r") as handle:
+            with _open_text(cytoband_file) as handle:
                 for line in handle:
                     if line.startswith("#") or not line.strip():
                         continue
@@ -49,7 +63,7 @@ def read_target_bed(bed_path):
     intervals = collections.defaultdict(list)
     if not bed_path or not os.path.isfile(bed_path):
         return intervals
-    with open(bed_path, "r") as handle:
+    with _open_text(bed_path) as handle:
         for line in handle:
             line = line.strip()
             if not line or line.startswith("#") or line.startswith("track") or line.startswith("browser"):

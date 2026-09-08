@@ -1,3 +1,4 @@
+import gzip
 import importlib.util
 import tempfile
 import unittest
@@ -10,6 +11,36 @@ SPEC.loader.exec_module(CNV_SUMMARY)
 
 
 class CnvSummaryTest(unittest.TestCase):
+    def test_a_gzipped_cytoband_file_is_read(self):
+        """UCSC ships cytoBand gzipped, and plain open() yields binary noise.
+
+        The failure mode is silent: no exception, just no band annotation, so
+        this asserts the bands actually come back.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plain = Path(tmpdir) / "cytoBand.txt"
+            rows = "chr9\t0\t2200000\tp24.3\tgneg\nchr9\t2200000\t4600000\tp24.2\tgpos25\n"
+            plain.write_text(rows)
+            gzipped = Path(tmpdir) / "cytoBand.txt.gz"
+            with gzip.open(gzipped, "wt") as handle:
+                handle.write(rows)
+
+            for path in (plain, gzipped):
+                lookup = CNV_SUMMARY.CytobandLookup(str(path))
+                self.assertEqual(lookup.get_band("chr9", 1000), "p24.3", path.name)
+                self.assertEqual(lookup.get_band("chr9", 3000000), "p24.2", path.name)
+
+    def test_a_gzipped_target_bed_is_read(self):
+        """A design or SV-annotation BED can be bgzipped, as on marvin."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bed = Path(tmpdir) / "targets.bed.gz"
+            with gzip.open(bed, "wt") as handle:
+                handle.write("chr9\t100\t200\tABL1\n")
+            intervals = CNV_SUMMARY.read_target_bed(str(bed))
+            self.assertEqual(intervals["chr9"], [(100, 200, "ABL1")])
+
     def test_classify_event(self):
         self.assertEqual(CNV_SUMMARY.classify_event(1, 2, "Amp", 0.5), "GAIN")
         self.assertEqual(CNV_SUMMARY.classify_event(2, 3, "Amp", 1.2), "AMPLIFICATION")

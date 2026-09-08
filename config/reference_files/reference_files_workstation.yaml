@@ -52,6 +52,11 @@ reference_builds:
       type: file
       url: file:/data/references/clinvar.vcf.gz.tbi
       checksum: ''
+    cytoband:
+      path: cytoBand.txt.gz
+      type: file
+      url: file:/data/references/cytoBand.txt.gz
+      checksum: ''
     gene_annotation:
       path: gencode.v46.annotation.sorted.gtf
       type: file
