@@ -7,8 +7,8 @@ __license__ = "GPL-3"
 rule mosdepth_genome:
     """Calculate windowed whole-genome coverage with the Hydra wrapper."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
     output:
         bed="qc/mosdepth/{sample}_{type}.regions.bed.gz",
         dist="qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt",

@@ -270,7 +270,7 @@ class OutputConditionTest(unittest.TestCase):
         entries = [
             entry
             for entry in output_spec["files"]
-            if "nagini_fastq" in entry["output"]
+            if "reads/merged" in entry["output"]
         ]
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].get("when"), "merged_fastq")

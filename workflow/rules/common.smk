@@ -345,8 +345,8 @@ def get_unit_input_type(wildcards):
 
 
 # Every per-unit alignment carries a token naming where its reads came from.
-# It is not decoration: one rule per input type writes into nagini_align, and
-# Snakemake needs their output patterns to differ, while a single run may mix
+# It is not decoration: one rule per input type writes into alignment/units
+# and Snakemake needs their output patterns to differ, while a single run may mix
 # input types across units so a ruleorder cannot decide it. Reading as
 # provenance ("from_ubam") rather than as a state ("unmapped_bam") keeps the
 # name from contradicting the aligned file it is on.
@@ -361,7 +361,7 @@ def get_unit_alignment_path(row):
         raise WorkflowError(
             f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam, aligned_bam or dorado_bam."
         )
-    return "alignment/nagini_align/{}_{}_{}_{}.{}.bam".format(
+    return "alignment/units/{}_{}_{}_{}.{}.bam".format(
         row["sample"],
         row["type"],
         row["processing_unit"],

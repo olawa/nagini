@@ -50,7 +50,7 @@ Example starting from existing aligned BAM files:
 pipeline_start_scripts/start_nagini.sh \
   --site workstation \
   --input-type aligned_bam \
-  --inbox-path /data/analysis/run_01/alignment/nagini_bam \
+  --inbox-path /data/analysis/run_01/alignment/merged \
   --analysis-dir /data/analysis/run_01
 ```
 
@@ -106,7 +106,7 @@ On workstations and local compute, Nagini dynamically scales compute-heavy seque
 
 The workflow produces:
 
-- **Alignments:** Sorted, indexed BAM files under `alignment/nagini_bam/`;
+- **Alignments:** Sorted, indexed BAM files under `alignment/merged/`;
 - **Quality Control:** Cramino read metrics, Mosdepth WGS/target coverage under `qc/`, and an aggregated `qc/multiqc/multiqc_nanopore.html` dashboard;
 - **Small Variants:** Filtered, normalized VCFs under `snv_indels/`;
 - **Structural Variants:** Sniffles2 VCFs, SV summaries, and translocation tables under `cnv_sv/` and `reports/sv_summary/`;

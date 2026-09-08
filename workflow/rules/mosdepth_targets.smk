@@ -7,8 +7,8 @@ __license__ = "GPL-3"
 rule mosdepth_targets:
     """Calculate target-region and per-base coverage with the Hydra wrapper."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         bed=lambda wildcards: get_resolved_design_bed(),
     output:
         bed="qc/mosdepth_bed/{sample}_{type}.regions.bed.gz",

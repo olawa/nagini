@@ -9,8 +9,8 @@ rule samtools_merge_bam:
     input:
         bams=get_unit_alignment_bams,
     output:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
     params:
         extra=config.get("samtools_merge_bam", {}).get("extra", ""),
     log:

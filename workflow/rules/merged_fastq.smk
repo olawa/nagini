@@ -15,7 +15,7 @@ rule merged_fastq:
     input:
         bams=get_sample_source_bams,
     output:
-        fastq="reads/nagini_fastq/{sample}_{type}.fastq.gz",
+        fastq="reads/merged/{sample}_{type}.fastq.gz",
     params:
         extra=config.get("samtools_fastq", {}).get("extra", "-n -T MM,ML"),
     log:

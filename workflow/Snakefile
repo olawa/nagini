@@ -76,8 +76,8 @@ module cnv_sv:
 
 use rule sniffles2_call from cnv_sv as cnv_sv_sniffles2_call with:
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
     output:
         vcf="cnv_sv/sniffles2_call/{sample}_{type}.vcf",
@@ -132,8 +132,8 @@ use rule bed_split from snv_indels as snv_indels_bed_split
 
 use rule gatk_mutect2 from snv_indels as snv_indels_gatk_mutect2 with:
     input:
-        map="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        map="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         fasta=config["reference"]["fasta"],
         bed="snv_indels/bed_split/design_bedfile_{chr}.bed",
 
@@ -226,8 +226,8 @@ use rule tabix from snv_indels as snv_indels_vep_tabix with:
 
 use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
         bed=get_clairs_to_bed,
     params:
@@ -296,8 +296,8 @@ use rule tabix from snv_indels as snv_indels_clairs_to_vep_tabix with:
 # chromosomes the design covers.
 use rule deepvariant from snv_indels as snv_indels_deepvariant with:
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
         bed=get_deepvariant_regions_bed,
     output:
@@ -393,7 +393,7 @@ module qc:
 
 use rule cramino from qc as qc_cramino with:
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
+        bam="alignment/merged/{sample}_{type}.bam",
     output:
         txt="qc/cramino/{sample}_{type}.txt",
         arrow="qc/cramino/{sample}_{type}.arrow",

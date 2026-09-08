@@ -9,7 +9,7 @@ rule pad_target_bed:
     input:
         bed=lambda wildcards: get_resolved_design_bed(),
     output:
-        bed="alignment/target_bam/targets_padded_25kb.bed",
+        bed="alignment/target/targets_padded_25kb.bed",
     params:
         padding_bp=lambda wildcards: config.get("target_bam", {}).get("padding_bp", 25000),
     log:
@@ -39,12 +39,12 @@ rule pad_target_bed:
 rule extract_target_bam:
     """Extract reads overlapping padded target regions into a target-only BAM."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
-        bed="alignment/target_bam/targets_padded_25kb.bed",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        bed="alignment/target/targets_padded_25kb.bed",
     output:
-        bam="alignment/target_bam/{sample}_{type}.target.bam",
-        bai="alignment/target_bam/{sample}_{type}.target.bam.bai",
+        bam="alignment/target/{sample}_{type}.target.bam",
+        bai="alignment/target/{sample}_{type}.target.bam.bai",
     params:
         extra=config.get("extract_target_bam", {}).get("extra", ""),
     log:

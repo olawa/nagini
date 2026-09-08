@@ -16,7 +16,7 @@ if _dorado_aligner not in ("minimap2", "dorado"):
     )
 
 _dorado_alignment_raw = temp(
-    "alignment/nagini_dorado_align/"
+    "alignment/units_unsorted/"
     "{sample}_{type}_{processing_unit}_{barcode}.unsorted.bam"
 )
 
@@ -138,16 +138,16 @@ rule finalize_dorado_bam_alignment:
     """Add sample metadata, coordinate-sort, and index an aligned Dorado unit."""
     input:
         bam=(
-            "alignment/nagini_dorado_align/"
+            "alignment/units_unsorted/"
             "{sample}_{type}_{processing_unit}_{barcode}.unsorted.bam"
         ),
     output:
         bam=(
-            "alignment/nagini_align/"
+            "alignment/units/"
             "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam"
         ),
         bai=(
-            "alignment/nagini_align/"
+            "alignment/units/"
             "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam.bai"
         ),
     params:

@@ -3,21 +3,21 @@ directory: "."
 files:
   - name: aligned BAM
     input: null
-    output: "alignment/nagini_bam/{sample}_{type}.bam"
+    output: "alignment/merged/{sample}_{type}.bam"
   - name: aligned BAM index
     input: null
-    output: "alignment/nagini_bam/{sample}_{type}.bam.bai"
+    output: "alignment/merged/{sample}_{type}.bam.bai"
   - name: merged FASTQ per sample
     input: null
-    output: "reads/nagini_fastq/{sample}_{type}.fastq.gz"
+    output: "reads/merged/{sample}_{type}.fastq.gz"
     when: merged_fastq
   - name: target region BAM (+/-25kb)
     input: null
-    output: "alignment/target_bam/{sample}_{type}.target.bam"
+    output: "alignment/target/{sample}_{type}.target.bam"
     when: target_metrics
   - name: target region BAM index
     input: null
-    output: "alignment/target_bam/{sample}_{type}.target.bam.bai"
+    output: "alignment/target/{sample}_{type}.target.bam.bai"
     when: target_metrics
   - name: read and sequence statistics
     input: null

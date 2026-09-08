@@ -116,7 +116,14 @@ Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
 
 ## Vad som produceras
 
-* `alignment/nagini_bam/`: en sammanslagen, sorterad BAM och `.bai` per sample/type.
+* `alignment/units/`: en alignad BAM per units.tsv-rad, alltså per flowcell och
+  barcode. Suffixet namnger inputen den kom från: `.from_ubam`, `.from_fastq`,
+  `.from_aligned` eller `.from_dorado`.
+* `alignment/merged/`: en sammanslagen, sorterad BAM och `.bai` per sample/type,
+  hopslagen från `alignment/units/` med en `@RG` per unit.
+* `alignment/target/`: reads som överlappar `reference.design_bed` ±25 kb, för
+  target-restricted assays.
+* `reads/merged/`: en FASTQ per prov med `merged_fastq: true`.
 * `qc/cramino/`: läs-/sekvensmängd och read-statistik.
 * `qc/mosdepth/`: whole-genome coverage.
 * `qc/mosdepth_bed/`: coverage mot `reference.design_bed`, inklusive per-base BED.

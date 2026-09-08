@@ -7,8 +7,8 @@ __license__ = "GPL-3"
 rule cnv_rindels:
     """Run Rindels in CNV-only mode to produce whole-genome binned read counts and ASCAT segments."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
     output:
         # Rindels names its sidecars after the -o base, so -o must be

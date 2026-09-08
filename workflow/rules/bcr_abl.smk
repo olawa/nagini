@@ -69,8 +69,8 @@ def _find_rindels_binary():
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         features=lambda wildcards: (
             config.get("bcr_abl", {}).get("features_json", "")
             or _bcr_abl_resource("bcr_abl_features.json")
@@ -115,8 +115,8 @@ rule bcr_abl_fusion_counts:
 rule bcr_abl_branford_calling:
     """Force-call BCR-ABL1 kinase domain resistance mutations at high depth."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         bed=lambda wildcards: _branford_bed(),
         features=lambda wildcards: (
             config.get("bcr_abl", {}).get("features_json", "")
@@ -185,8 +185,8 @@ rule bcr_abl_branford_calling:
 rule bcr_abl_phasing:
     """Single-molecule phasing of compound resistance mutations from long reads."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
     output:
         tsv="reports/bcr_abl/{sample}_{type}.phasing.tsv",
@@ -224,8 +224,8 @@ rule bcr_abl_phasing:
 rule bcr_abl_exon_coverage:
     """Calculate depth and coverage metrics across BCR and ABL1 exons."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         bed=lambda wildcards: _bcr_abl_exons_bed(),
     output:
         tsv="reports/bcr_abl/{sample}_{type}.exon_coverage.tsv",
@@ -267,8 +267,8 @@ rule bcr_abl_draw_fusions:
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
         phasing="reports/bcr_abl/{sample}_{type}.phasing.tsv",
         exon_coverage="reports/bcr_abl/{sample}_{type}.exon_coverage.tsv",
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
     output:
         pdf="reports/bcr_abl/{sample}_{type}.fusion_plot.pdf",
         png="reports/bcr_abl/{sample}_{type}.fusion_plot.png",
@@ -451,8 +451,8 @@ rule bcr_abl_draw_fusions:
 rule bcr_abl_bcftools_pileup:
     """Run bcftools mpileup and call across BCR-ABL1 target exons at full depth."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
         bed=lambda wildcards: _bcr_abl_exons_bed(),
     output:
@@ -492,8 +492,8 @@ rule bcr_abl_bcftools_pileup:
 rule bcr_abl_rindels:
     """Run Rindels in targeted ONT BCR-ABL1 amplicon mode."""
     input:
-        bam="alignment/nagini_bam/{sample}_{type}.bam",
-        bai="alignment/nagini_bam/{sample}_{type}.bam.bai",
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
     output:
         vcf="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz",
