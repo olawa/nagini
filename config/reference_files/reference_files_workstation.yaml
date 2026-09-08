@@ -88,6 +88,12 @@ reference_builds:
       type: file
       url: file:/data/references/hs1.mmi
       checksum: ''
+    # T2T has no UCSC cytoBand table; the consortium ships its own BED.
+    cytoband:
+      path: chm13v2.0_cytobands_allchrs.bed
+      type: file
+      url: file:/data/references/chm13v2.0_cytobands_allchrs.bed
+      checksum: ''
   hg19:
     fasta:
       path: hg19/hg19.fa
