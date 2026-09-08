@@ -11,8 +11,8 @@ rule minimap2_unmapped_bam_align:
         target=lambda wildcards: get_reference_target_for_unit(wildcards),
 
     output:
-        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam",
-        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.unmapped_bam.bam.bai",
+        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.from_ubam.bam",
+        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.from_ubam.bam.bai",
     params:
         preset=lambda wildcards: get_minimap2_preset_for_unit(wildcards),
         extra=config.get("minimap2_align", {}).get("extra", ""),

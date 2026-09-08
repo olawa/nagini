@@ -733,6 +733,48 @@ def merge_fastq_files(input_files: list[Path], output: Path) -> None:
         raise
 
 
+def flowcell_token_from_path(path: Path) -> str:
+    """The flowcell a MinKNOW BAM came from, as a filename-safe token.
+
+    MinKNOW names its run directory ``<date>_<time>_<position>_<flowcell>_<id>``,
+    which is the only place the flowcell is recorded for an already
+    demultiplexed BAM.  Naming the processing unit after it makes a merged
+    multi-flowcell sample say which flowcell each unit came from, instead of
+    a counter whose order depends on how the files happened to sort.
+    """
+
+    for parent in path.parents:
+        parts = parent.name.split("_")
+        if len(parts) >= 5 and re.fullmatch(r"\d{8}", parts[0]) and re.fullmatch(r"\d{4}", parts[1]):
+            token = f"{parts[-2]}-{parts[-1]}"
+            if re.fullmatch(r"[A-Za-z0-9.-]+", token):
+                return token
+    return ""
+
+
+def name_processing_units(bam_paths: list[Path], barcode: str) -> list[tuple[Path, str]]:
+    """Pair each BAM with a processing unit that is unique for the sample.
+
+    A flowcell can hold several BAMs for one barcode (MinKNOW splits large
+    outputs into ``_0.bam``, ``_1.bam``), so the token alone is not unique;
+    the second and later files within one flowcell get a counter.  Inputs with
+    no recognisable MinKNOW run directory keep the old positional naming.
+    """
+
+    tokens = [(path, flowcell_token_from_path(path)) for path in bam_paths]
+    if not all(token for _, token in tokens):
+        return [
+            (path, f"{barcode}_{index:03d}")
+            for index, (path, _) in enumerate(tokens, start=1)
+        ]
+    seen: defaultdict[str, int] = defaultdict(int)
+    named = []
+    for path, token in tokens:
+        seen[token] += 1
+        named.append((path, token if seen[token] == 1 else f"{token}-{seen[token]}"))
+    return named
+
+
 def make_bam_tables_from_barcode_map(
     args: argparse.Namespace,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
@@ -811,14 +853,16 @@ def make_bam_tables_from_barcode_map(
 
         sample_name = assignment["sample"]
         samples_by_name.setdefault(sample_name, {"sample": sample_name})
-        for index, bam_path in enumerate(sorted(bams_by_barcode[barcode]), start=1):
+        for bam_path, unit_name in name_processing_units(
+            sorted(bams_by_barcode[barcode]), barcode
+        ):
             units.append(
                 {
                     "sample": sample_name,
                     "type": assignment["type"],
                     "platform": "ONT",
                     "machine": "unknown",
-                    "processing_unit": f"{barcode}_{index:03d}",
+                    "processing_unit": unit_name,
                     # Hydra's ONT schema accepts flowcell-style values such as
                     # BC/NB but rejects Dorado's numeric barcode05 identifiers.
                     # Keep the original Dorado identifier in barcode_name and
@@ -830,7 +874,7 @@ def make_bam_tables_from_barcode_map(
                     "fastq2": "UNUSED",
                     "bam": str(bam_path),
                     "methylation": args.methylation,
-                    "run_id": run_id,
+                    "run_id": flowcell_token_from_path(bam_path) or run_id,
                     "basecalling_model": args.basecalling_model,
                     "library_type": assignment.get(
                         "library_type", getattr(args, "library_type", "wgs")

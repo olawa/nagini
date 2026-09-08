@@ -11,8 +11,8 @@ rule minimap2_fastq_align:
         target=lambda wildcards: get_reference_target_for_unit(wildcards),
 
     output:
-        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam",
-        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.fastq.bam.bai",
+        bam="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.from_fastq.bam",
+        bai="alignment/nagini_align/{sample}_{type}_{processing_unit}_{barcode}.from_fastq.bam.bai",
     params:
         preset=lambda wildcards: get_minimap2_preset_for_unit(wildcards),
         extra=config.get("minimap2_align", {}).get("extra", ""),

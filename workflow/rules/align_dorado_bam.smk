@@ -144,11 +144,11 @@ rule finalize_dorado_bam_alignment:
     output:
         bam=(
             "alignment/nagini_align/"
-            "{sample}_{type}_{processing_unit}_{barcode}.dorado_bam.bam"
+            "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam"
         ),
         bai=(
             "alignment/nagini_align/"
-            "{sample}_{type}_{processing_unit}_{barcode}.dorado_bam.bam.bai"
+            "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam.bai"
         ),
     params:
         read_group=lambda wildcards: get_minimap2_read_group(wildcards),

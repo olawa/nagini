@@ -344,12 +344,18 @@ def get_unit_input_type(wildcards):
     return str(get_unit(wildcards)["input_type"]).strip().lower()
 
 
+# Every per-unit alignment carries a token naming where its reads came from.
+# It is not decoration: one rule per input type writes into nagini_align, and
+# Snakemake needs their output patterns to differ, while a single run may mix
+# input types across units so a ruleorder cannot decide it. Reading as
+# provenance ("from_ubam") rather than as a state ("unmapped_bam") keeps the
+# name from contradicting the aligned file it is on.
 def get_unit_alignment_path(row):
     suffix = {
-        "fastq": "fastq",
-        "unmapped_bam": "unmapped_bam",
-        "aligned_bam": "aligned_bam",
-        "dorado_bam": "dorado_bam",
+        "fastq": "from_fastq",
+        "unmapped_bam": "from_ubam",
+        "aligned_bam": "from_aligned",
+        "dorado_bam": "from_dorado",
     }.get(str(row["input_type"]).strip().lower())
     if suffix is None:
         raise WorkflowError(

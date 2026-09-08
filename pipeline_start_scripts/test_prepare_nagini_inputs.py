@@ -127,6 +127,78 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(PREPARE.make_barcode_sample_name("RUN_bc1", "barcode01"), "RUN_bc1")
         self.assertEqual(PREPARE.make_barcode_sample_name("barcode01", "barcode01"), "bc1")
 
+    def test_multi_flowcell_units_are_named_after_the_flowcell(self):
+        """A merged sample has to say which flowcell each unit came from.
+
+        A positional counter ordered the units by how the paths happened to
+        sort, which says nothing about which run a read came from once four
+        flowcells of one sample are merged.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "inbox"
+            runs = {
+                "20260625_1307_P2S-03608-B_PBE84335_b84b698e": ["reads_0.bam"],
+                "20260721_1258_P2S-03608-B_PBE89162_f41da7bd": ["reads_0.bam", "reads_1.bam"],
+            }
+            for run, names in runs.items():
+                barcode_dir = root / run / "bam_pass" / "barcode01"
+                barcode_dir.mkdir(parents=True)
+                for name in names:
+                    (barcode_dir / name).touch()
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type,assay\nbarcode01,PT_1,T,adaptive\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = mapping
+            args.sample_type = "T"
+            args.input_type = "unmapped_bam"
+            args.sequence_id = "inbox"
+            args.run_id = ""
+            args.methylation = "Yes"
+            args.basecalling_model = "sup"
+
+            _, units = PREPARE.make_bam_tables_from_barcode_map(args)
+
+        by_unit = {row["processing_unit"]: row for row in units}
+        self.assertEqual(
+            sorted(by_unit),
+            ["PBE84335-b84b698e", "PBE89162-f41da7bd", "PBE89162-f41da7bd-2"],
+        )
+        # run_id follows the flowcell too, so QC can tell the runs apart.
+        self.assertEqual(by_unit["PBE84335-b84b698e"]["run_id"], "PBE84335-b84b698e")
+        # A second file within one flowcell still needs a unique unit.
+        self.assertEqual(len({row["processing_unit"] for row in units}), 3)
+
+    def test_units_keep_positional_names_without_a_minknow_run_directory(self):
+        """Dorado demux output has no run directory to read a flowcell from."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "demux"
+            (root / "barcode01").mkdir(parents=True)
+            (root / "barcode01" / "a.bam").touch()
+            (root / "barcode01" / "b.bam").touch()
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text("barcode,sample,type\nbarcode01,PT_1,T\n")
+
+            args = type("Args", (), {})()
+            args.input_dir = root
+            args.barcode_map = mapping
+            args.sample_type = "T"
+            args.input_type = "unmapped_bam"
+            args.sequence_id = "demux"
+            args.run_id = ""
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+
+            _, units = PREPARE.make_bam_tables_from_barcode_map(args)
+
+        self.assertEqual(
+            sorted(row["processing_unit"] for row in units),
+            ["barcode01_001", "barcode01_002"],
+        )
+
     def test_bam_tables_without_barcode_map_infers_bc_sample_names(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "bams"
