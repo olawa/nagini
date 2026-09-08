@@ -56,6 +56,30 @@ class AssayRegistryTest(unittest.TestCase):
         self.assertTrue(adaptive["target_restricted"])
         self.assertEqual(routing.minimap2_preset(adaptive["library_type"]), "map-ont")
 
+    def test_adaptive_cnv_sv_drops_the_small_variant_callers(self):
+        """A structural workup should not pay for ClairS-TO and DeepVariant.
+
+        Coverage, copy number and translocations are what an aneuploidy or
+        rearrangement question needs; the small-variant callers dominate the
+        runtime and answer a different question.
+        """
+
+        assays = routing.resolve_assays({})
+        lean = assays["adaptive_cnv_sv"]
+        self.assertFalse(lean["snv_calling"])
+        self.assertTrue(lean["sv_calling"])
+        self.assertTrue(lean["cnv_calling"])
+        self.assertTrue(lean["target_restricted"])
+        self.assertEqual(lean["library_type"], "wgs")
+        self.assertEqual(routing.minimap2_preset(lean["library_type"]), "map-ont")
+        # It differs from `adaptive` in exactly one respect.
+        adaptive = assays["adaptive"]
+        differing = {
+            key for key in routing.ASSAY_DEFAULTS
+            if key != "description" and adaptive[key] != lean[key]
+        }
+        self.assertEqual(differing, {"snv_calling"})
+
     def test_a_new_assay_is_a_config_edit(self):
         assays = routing.resolve_assays(
             {

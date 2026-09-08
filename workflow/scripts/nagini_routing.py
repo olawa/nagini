@@ -97,6 +97,18 @@ BUILTIN_ASSAYS = {
         "cnv_calling": True,
         "target_restricted": True,
     },
+    # Adaptive sampling read as a structural workup: what an aneuploidy or
+    # rearrangement question needs (coverage, copy number, translocations)
+    # without the small-variant callers, which dominate the runtime and answer
+    # a question this workup is not asking.
+    "adaptive_cnv_sv": {
+        "description": "Adaptive sampling, structural workup: coverage, CNV, SV and translocations, no small variants",
+        "library_type": "wgs",
+        "snv_calling": False,
+        "sv_calling": True,
+        "cnv_calling": True,
+        "target_restricted": True,
+    },
     "bcr_abl": {
         "description": "BCR-ABL1 cDNA amplicon: fusion isoforms and kinase-domain resistance",
         "library_type": "cdna",
