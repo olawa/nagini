@@ -10,11 +10,11 @@ files:
   - name: target region BAM (+/-25kb)
     input: null
     output: "alignment/target_bam/{sample}_{type}.target.bam"
-    when: has_design_bed
+    when: target_metrics
   - name: target region BAM index
     input: null
     output: "alignment/target_bam/{sample}_{type}.target.bam.bai"
-    when: has_design_bed
+    when: target_metrics
   - name: read and sequence statistics
     input: null
     output: "qc/cramino/{sample}_{type}.txt"
@@ -33,19 +33,19 @@ files:
   - name: target region coverage summary
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
-    when: has_design_bed
+    when: target_metrics
   - name: target region per-base coverage BED
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz"
-    when: has_design_bed
+    when: target_metrics
   - name: target coverage distribution
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
-    when: has_design_bed
+    when: target_metrics
   - name: target region distribution
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
-    when: has_design_bed
+    when: target_metrics
   - name: Sniffles2 structural variant VCF
     input: null
     output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"

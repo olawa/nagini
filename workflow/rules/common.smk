@@ -640,6 +640,29 @@ def has_design_bed():
     return bool(get_resolved_design_bed())
 
 
+def sample_has_target_metrics(sample):
+    """Whether target-region outputs are meaningful for this sample.
+
+    A design BED existing in the config is not enough: in a run that mixes an
+    adaptive-sampling panel with a plain WGS control, the control was never
+    enriched for those regions, so a target BAM and target coverage for it
+    would be an artefact of the config rather than of the experiment.
+    """
+
+    return has_design_bed() and sample_is_target_restricted(sample)
+
+
+def get_sample_design_bed(sample):
+    """The design BED for one sample, empty unless its assay is confined to it.
+
+    Annotations keyed off the design (CNV target overlap, the report header)
+    must not claim a WGS sample was sequenced against a panel it shares a
+    flowcell with.
+    """
+
+    return get_resolved_design_bed() if sample_has_target_metrics(sample) else ""
+
+
 def get_minimap2_preset_for_unit(wildcards):
     """Return the minimap2 preset for a unit, from its library type."""
 
@@ -842,7 +865,7 @@ def get_report_cnv_tsv(wildcards):
 
 
 def get_report_target_coverage(wildcards):
-    if has_design_bed():
+    if sample_has_target_metrics(wildcards.sample):
         return get_sample_type_path(
             wildcards, "qc/mosdepth_bed", ".mosdepth.summary.txt"
         )
@@ -850,7 +873,7 @@ def get_report_target_coverage(wildcards):
 
 
 def get_report_target_dist(wildcards):
-    if has_design_bed():
+    if sample_has_target_metrics(wildcards.sample):
         return get_sample_type_path(
             wildcards, "qc/mosdepth_bed", ".mosdepth.global.dist.txt"
         )
@@ -945,6 +968,9 @@ _PIPELINE_CONDITIONS = {
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
     "annotate_svs": lambda: bool(config.get("annotate_svs", False)),
     "has_design_bed": lambda: has_design_bed(),
+    "target_metrics": lambda: any(
+        sample_has_target_metrics(s) for s in get_samples(samples)
+    ),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
@@ -969,6 +995,7 @@ _SAMPLE_CONDITIONS = {
     "sample_needs_cnv_calling": sample_needs_cnv_calling,
     "sample_needs_rna_analysis": sample_needs_rna_analysis,
     "target_restricted": sample_is_target_restricted,
+    "target_metrics": sample_has_target_metrics,
     "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }

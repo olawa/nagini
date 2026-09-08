@@ -217,6 +217,28 @@ class OutputConditionTest(unittest.TestCase):
         output_spec = yaml.safe_load((REPO / "config/output_files.yaml").read_text())
         self.assertEqual(routing.unknown_conditions(output_spec, self.assays), [])
 
+    def test_target_outputs_are_gated_per_sample_not_per_run(self):
+        """A design BED in the config must not hand target outputs to a WGS sample.
+
+        `target_metrics` is `has_design_bed` AND the sample's assay being
+        target-restricted; gating these outputs on the run-level flag alone
+        produced a target BAM for a plain WGS control sharing a flowcell with
+        an adaptive panel.
+        """
+
+        output_spec = yaml.safe_load((REPO / "config/output_files.yaml").read_text())
+        target_entries = [
+            entry
+            for entry in output_spec["files"]
+            if "target_bam" in entry["output"] or "mosdepth_bed" in entry["output"]
+        ]
+        self.assertTrue(target_entries)
+        for entry in target_entries:
+            self.assertEqual(entry.get("when"), "target_metrics", entry["output"])
+        self.assertTrue(routing.is_known_condition("target_metrics", self.assays))
+        self.assertIn("target_metrics", routing.SAMPLE_CONDITION_NAMES)
+        self.assertIn("target_metrics", routing.PIPELINE_CONDITION_NAMES)
+
     def test_a_typo_is_reported(self):
         spec = {"files": [{"name": "x", "output": "x", "when": "sv_callng"}]}
         self.assertEqual(routing.unknown_conditions(spec, self.assays), ["sv_callng"])

@@ -405,6 +405,7 @@ PIPELINE_CONDITION_NAMES = {
     "annotate_small_variants",
     "annotate_svs",
     "has_design_bed",
+    "target_metrics",
     "cnv_calling",
 }
 
@@ -425,6 +426,7 @@ SAMPLE_CONDITION_NAMES = {
     "sample_needs_sv_calling",
     "sample_needs_rna_analysis",
     "target_restricted",
+    "target_metrics",
     "cnv_calling",
     "sample_needs_cnv_calling",
 }

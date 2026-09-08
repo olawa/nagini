@@ -414,7 +414,7 @@ def get_multiqc_input_files(wildcards):
         barcode = str(row.get("barcode", "")).strip()
         if unit_type in included_types:
             for tf in template_files:
-                if "mosdepth_bed" in tf and not has_design_bed():
+                if "mosdepth_bed" in tf and not sample_has_target_metrics(sample):
                     continue
                 if "sv_summary" in tf and not sample_needs_sv_calling(sample):
                     continue

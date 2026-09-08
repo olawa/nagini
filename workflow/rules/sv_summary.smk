@@ -19,7 +19,7 @@ rule sv_summary:
         ),
         annotation_bed=lambda wildcards: (
             config.get("reference", {}).get("sv_annotation_bed", "")
-            or get_resolved_design_bed()
+            or get_sample_design_bed(wildcards.sample)
             or []
         ),
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],

@@ -50,7 +50,7 @@ rule cnv_summary:
     """Summarise Rindels ASCAT CNV segments and annotate with cytobands and target regions."""
     input:
         ascat="cnv/rindels/{sample}_{type}.ascat.bed",
-        target_bed=lambda wildcards: get_resolved_design_bed() or [],
+        target_bed=lambda wildcards: get_sample_design_bed(wildcards.sample) or [],
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
         tsv="reports/cnv_summary/{sample}_{type}.cnv.tsv",

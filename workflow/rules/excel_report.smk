@@ -31,7 +31,7 @@ rule nagini_excel_report:
         ),
         cytoband=get_cytoband_file,
         small_variant_caller=get_small_variant_caller(),
-        design_bed=lambda wildcards: config.get("reference", {}).get("design_bed", ""),
+        design_bed=lambda wildcards: get_sample_design_bed(wildcards.sample),
         clairs_to_platform=lambda wildcards: config.get("clairs_to_call", {}).get("platform", ""),
         barcode=get_sample_barcode_name,
     log:
