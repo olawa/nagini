@@ -64,6 +64,11 @@ properties:
     description: Annotate normalized filtered small variants with an offline VEP cache.
   annotate_svs:
     type: boolean
+  merged_fastq:
+    type: boolean
+    description: >
+      Write one FASTQ per sample, merged across flowcells, to
+      reads/nagini_fastq/. Unaligned BAM input only.
   gatk_merge_mutect_stats:
     $ref: "#/definitions/tool_config"
   gatk_filter_mutect_calls:

@@ -72,6 +72,8 @@ methylation="No"
 tumor_content=""
 cores=""
 filter_reads=""
+merged_fastq=""
+barcode_map_origin=""
 filter_qv=""
 filter_len=""
 filter_binary=""
@@ -135,6 +137,8 @@ Options:
   --clairs-to-platform MODEL    ClairS-TO platform model (auto-selected from basecalling model if omitted).
   --clairs-to-container IMAGE   Override default ClairS-TO container image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
+  --merged-fastq                Also write one FASTQ per sample (merged across flowcells)
+                                to reads/nagini_fastq/. Unaligned BAM input only.
   --tumor-content FLOAT         Optional value added to samples.tsv.
   --filter-reads                Enable pre-alignment read filtering (nanofilter).
   --no-filter-reads             Disable pre-alignment read filtering.
@@ -372,6 +376,14 @@ while [[ $# -gt 0 ]]; do
             tumor_content="$2"
             shift 2
             ;;
+        --merged-fastq)
+            merged_fastq=true
+            shift
+            ;;
+        --no-merged-fastq)
+            merged_fastq=false
+            shift
+            ;;
         --filter-reads)
             filter_reads=true
             shift
@@ -471,7 +483,7 @@ elif [[ -d "$input_dir" ]]; then
     do
         if [[ -f "$candidate" ]]; then
             barcode_map="$(absolute_path "$candidate")"
-            echo "Auto-detected barcode map in inbox: $barcode_map"
+            barcode_map_origin="auto-detected in inbox"
             break
         fi
     done
@@ -565,14 +577,45 @@ mkdir -p "$analysis_dir"
 if [[ -z "$sequence_id" ]]; then
     sequence_id="$(basename "$input_dir")"
 fi
-echo "Input directory: $input_dir"
-echo "Analysis directory: $analysis_dir"
-echo "Input type: $input_type"
-echo "Sequence ID: $sequence_id"
-echo "Site: $site"
-echo "Site config: $site_config"
-echo "Reference registry: $reference_files"
-[[ -n "$barcode_map" ]] && echo "Barcode map: $barcode_map"
+# A launch banner rather than a flat list of echos: which inbox, which
+# analysis directory and which site config were picked is what a rerun is
+# reconstructed from, and grouping keeps the three apart at a glance.
+section() { printf '\n%s\n' "$1"; }
+field() { printf '  %-18s %s\n' "$1" "$2"; }
+field_if() { [[ -n "$2" ]] && field "$1" "$2"; return 0; }
+
+section "Input"
+field "directory" "$input_dir"
+field "type" "$input_type"
+field "sequence id" "$sequence_id"
+if [[ -n "$barcode_map" ]]; then
+    if [[ -n "$barcode_map_origin" ]]; then
+        field "barcode map" "$barcode_map ($barcode_map_origin)"
+    else
+        field "barcode map" "$barcode_map"
+    fi
+fi
+field_if "barcode kit" "$barcode_kit"
+field_if "basecalling model" "$basecalling_model"
+field_if "methylation" "$methylation"
+
+section "Analysis"
+field "directory" "$analysis_dir"
+field_if "assay" "${assay:-from barcode map}"
+field_if "library type" "$library_type"
+field_if "sample type" "$sample_type"
+field_if "reference build" "$reference_build"
+field "variant caller" "${small_variant_caller:-auto (ClairS-TO + DeepVariant)}"
+field_if "design bed" "$bed_file"
+field_if "merged fastq" "$merged_fastq"
+
+section "Site"
+field "site" "$site"
+field "config" "$site_config"
+field "reference registry" "$reference_files"
+field "profile" "$profile"
+field_if "pipeline" "$pipeline_path"
+printf '\n'
 
 prepare_cmd=(
     python3 "$pipeline_path/pipeline_start_scripts/prepare_nagini_inputs.py"
@@ -612,6 +655,8 @@ prepare_cmd=(
 [[ -n "$cores" ]] && prepare_cmd+=(--cores "$cores")
 [[ -n "$tumor_content" ]] && prepare_cmd+=(--tumor-content "$tumor_content")
 [[ -n "$library_root" ]] && prepare_cmd+=(--library-root "$library_root")
+[[ "$merged_fastq" == "true" ]] && prepare_cmd+=(--merged-fastq)
+[[ "$merged_fastq" == "false" ]] && prepare_cmd+=(--no-merged-fastq)
 [[ "$filter_reads" == "true" ]] && prepare_cmd+=(--filter-reads)
 [[ "$filter_reads" == "false" ]] && prepare_cmd+=(--no-filter-reads)
 [[ -n "$filter_qv" ]] && prepare_cmd+=(--filter-qv "$filter_qv")
@@ -642,6 +687,7 @@ barcode_map: "${barcode_map:-}"
 barcode_kit: "${barcode_kit:-}"
 basecalling_model: "$basecalling_model"
 fastq_status: "$fastq_status"
+merged_fastq: "${merged_fastq:-}"
 dorado_device: "${dorado_device:-}"
 dorado_models_directory: "${dorado_models_directory:-}"
 dorado_demux_output_format: "$dorado_demux_output_format"

@@ -273,6 +273,20 @@ def parse_args() -> argparse.Namespace:
         help="Disable pre-alignment read filtering.",
     )
     parser.add_argument(
+        "--merged-fastq",
+        dest="merged_fastq",
+        action="store_true",
+        default=None,
+        help="Write one FASTQ per sample, merged across flowcells, to reads/nagini_fastq/.",
+    )
+    parser.add_argument(
+        "--no-merged-fastq",
+        dest="merged_fastq",
+        action="store_false",
+        default=None,
+        help="Do not write a merged per-sample FASTQ (the default).",
+    )
+    parser.add_argument(
         "--filter-qv",
         default="",
         help="Minimum mean read quality QV for nanofilter (e.g. 20).",
@@ -1760,6 +1774,9 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
 
     if getattr(args, "cores", None):
         config["cores"] = int(args.cores)
+
+    if getattr(args, "merged_fastq", None) is not None:
+        config["merged_fastq"] = bool(args.merged_fastq)
 
     read_filter_overrides = {}
     if getattr(args, "filter_reads", None) is not None:

@@ -7,6 +7,10 @@ files:
   - name: aligned BAM index
     input: null
     output: "alignment/nagini_bam/{sample}_{type}.bam.bai"
+  - name: merged FASTQ per sample
+    input: null
+    output: "reads/nagini_fastq/{sample}_{type}.fastq.gz"
+    when: merged_fastq
   - name: target region BAM (+/-25kb)
     input: null
     output: "alignment/target_bam/{sample}_{type}.target.bam"

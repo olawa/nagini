@@ -229,6 +229,12 @@ samtools_fastq:
   # comments back into SAM auxiliary fields; -Y controls supplementary clips.
   extra: "-n -T MM,ML"
 
+# Write one FASTQ per sample to reads/nagini_fastq/, merged across flowcells,
+# for archiving or handing the reads to another tool. Off by default: for a
+# whole-genome run it roughly doubles the space the reads take on disk. Only
+# available for unaligned BAM input, since it is built from the source BAMs.
+merged_fastq: false
+
 mosdepth:
   by: "500"
   container: "docker://hydragenetics/mosdepth:0.3.2"

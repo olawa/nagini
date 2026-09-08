@@ -371,6 +371,64 @@ def get_unit_alignment_bams(wildcards):
     return [get_unit_alignment_path(row) for _, row in rows.iterrows()]
 
 
+# Input types that carry their reads in a BAM that has not been aligned yet,
+# and can therefore be turned back into FASTQ without undoing an alignment.
+UNALIGNED_BAM_INPUT_TYPES = ("unmapped_bam", "dorado_bam")
+
+
+def sample_source_bams_are_unaligned(sample, unit_type=None):
+    """Whether every unit of this sample came in as an unaligned BAM."""
+
+    rows = _unit_rows(sample, unit_type) if unit_type else units[
+        units["sample"].astype(str).str.strip() == str(sample).strip()
+    ]
+    if rows.empty:
+        return False
+    return all(
+        str(row["input_type"]).strip().lower() in UNALIGNED_BAM_INPUT_TYPES
+        for _, row in rows.iterrows()
+    )
+
+
+def sample_has_merged_fastq(sample):
+    """Whether one FASTQ per sample is asked for and can be produced.
+
+    The FASTQ is built from the source BAMs rather than from the merged
+    alignment: re-extracting reads from an aligned BAM means undoing the
+    reverse-complementing minimap2 did, which the MM/ML modified-base tags
+    have to follow exactly.  Going back to the unaligned input sidesteps that
+    entirely, and costs one pass over files the run already reads.
+    """
+
+    return bool(config.get("merged_fastq", False)) and sample_source_bams_are_unaligned(
+        sample
+    )
+
+
+def get_sample_source_bams(wildcards):
+    """Every unaligned source BAM for one sample, across all its flowcells."""
+
+    rows = _unit_rows(wildcards.sample, wildcards.type)
+    if rows.empty:
+        raise WorkflowError(f"No units.tsv rows for {wildcards.sample}/{wildcards.type}.")
+    bams = []
+    for _, row in rows.iterrows():
+        input_type = str(row["input_type"]).strip().lower()
+        if input_type not in UNALIGNED_BAM_INPUT_TYPES:
+            raise WorkflowError(
+                f"{wildcards.sample}/{wildcards.type} has a unit with "
+                f"input_type={input_type}; a merged FASTQ needs unaligned BAM input."
+            )
+        bam = str(row.get("bam", "") or "").strip()
+        if not bam:
+            raise WorkflowError(
+                f"units.tsv column bam is empty for {wildcards.sample}/{wildcards.type}/"
+                f"{row['processing_unit']}."
+            )
+        bams.append(bam)
+    return bams
+
+
 def get_barcode_unit_alignment(wildcards):
     """Return the per-unit alignment for one preserved barcode."""
 
@@ -971,6 +1029,9 @@ _PIPELINE_CONDITIONS = {
     "target_metrics": lambda: any(
         sample_has_target_metrics(s) for s in get_samples(samples)
     ),
+    "merged_fastq": lambda: any(
+        sample_has_merged_fastq(s) for s in get_samples(samples)
+    ),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
@@ -996,6 +1057,7 @@ _SAMPLE_CONDITIONS = {
     "sample_needs_rna_analysis": sample_needs_rna_analysis,
     "target_restricted": sample_is_target_restricted,
     "target_metrics": sample_has_target_metrics,
+    "merged_fastq": sample_has_merged_fastq,
     "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }

@@ -406,6 +406,7 @@ PIPELINE_CONDITION_NAMES = {
     "annotate_svs",
     "has_design_bed",
     "target_metrics",
+    "merged_fastq",
     "cnv_calling",
 }
 
@@ -427,6 +428,7 @@ SAMPLE_CONDITION_NAMES = {
     "sample_needs_rna_analysis",
     "target_restricted",
     "target_metrics",
+    "merged_fastq",
     "cnv_calling",
     "sample_needs_cnv_calling",
 }

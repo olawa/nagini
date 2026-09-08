@@ -239,6 +239,20 @@ class OutputConditionTest(unittest.TestCase):
         self.assertIn("target_metrics", routing.SAMPLE_CONDITION_NAMES)
         self.assertIn("target_metrics", routing.PIPELINE_CONDITION_NAMES)
 
+    def test_the_merged_fastq_output_is_gated_per_sample(self):
+        """The FASTQ is built from source BAMs, so it is not always possible."""
+
+        output_spec = yaml.safe_load((REPO / "config/output_files.yaml").read_text())
+        entries = [
+            entry
+            for entry in output_spec["files"]
+            if "nagini_fastq" in entry["output"]
+        ]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].get("when"), "merged_fastq")
+        self.assertIn("merged_fastq", routing.SAMPLE_CONDITION_NAMES)
+        self.assertIn("merged_fastq", routing.PIPELINE_CONDITION_NAMES)
+
     def test_a_typo_is_reported(self):
         spec = {"files": [{"name": "x", "output": "x", "when": "sv_callng"}]}
         self.assertEqual(routing.unknown_conditions(spec, self.assays), ["sv_callng"])
