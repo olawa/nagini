@@ -58,6 +58,7 @@ rule cnv_rindels:
             --cnv-output {output.bins} \
             --cnv-bin-size {params.bin_size} \
             -o {output.vcf} \
+            -t {threads} \
             {params.extra}
 
         # Rindels skips the ASCAT segmentation when it finds fewer than 100

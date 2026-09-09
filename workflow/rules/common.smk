@@ -232,11 +232,15 @@ def _scale_workstation_resources(cfg):
         "dorado_alignment",
         "clairs_to_call",
         "sniffles2_call",
+        # Both rindels rules read this one section, and both are a single
+        # compute-heavy job per sample.
+        "rindels",
         "vep",
     )
     for rule_name in full_core_rules:
-        if rule_name in cfg and isinstance(cfg[rule_name], dict):
-            cfg[rule_name]["threads"] = cores
+        if rule_name in cfg and not isinstance(cfg[rule_name], dict):
+            continue
+        cfg.setdefault(rule_name, {})["threads"] = cores
 
     # Moderate parallel / intermediate rules scaled proportionally:
     moderate_core_rules = {
