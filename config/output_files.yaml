@@ -86,6 +86,14 @@ files:
     input: null
     output: "cnv/rindels/{sample}_{type}.ascat.bed"
     when: cnv_calling
+  - name: Rindels variant VCF
+    input: null
+    output: "cnv/rindels/{sample}_{type}.vcf.gz"
+    when: cnv_calling
+  - name: Rindels variant VCF index
+    input: null
+    output: "cnv/rindels/{sample}_{type}.vcf.gz.tbi"
+    when: cnv_calling
   - name: ClairS-TO concatenated VCF
     input: null
     output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"

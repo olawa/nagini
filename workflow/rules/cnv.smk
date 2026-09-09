@@ -13,13 +13,19 @@ rule cnv_rindels:
     output:
         # Rindels names its sidecars after the -o base, so -o must be
         # {sample}_{type}.vcf for the segmentation to land on
-        # {sample}_{type}.ascat.bed. The parquet sidecars it also writes are
-        # deliberately not declared: which ones appear depends on the mode and
-        # the data, and declaring an output the mode cannot produce is what
-        # made this rule fail in the first place.
+        # {sample}_{type}.ascat.bed, and the VCF is compressed afterwards
+        # rather than by passing -o *.vcf.gz: with a .gz suffix rindels keeps
+        # the full name for some sidecars (X.vcf.gz.report_baf.parquet) and
+        # strips it for others (X.baf.bed), and .ascat.bed is the one file the
+        # CNV report cannot do without. The parquet sidecars stay undeclared:
+        # which ones appear depends on the mode and the data, as
+        # sv_added_snpengine_del.tsv appearing for only three of five samples
+        # shows, and declaring an output that may not appear is what made this
+        # rule fail in the first place.
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
         ascat="cnv/rindels/{sample}_{type}.ascat.bed",
-        vcf="cnv/rindels/{sample}_{type}.vcf",
+        vcf="cnv/rindels/{sample}_{type}.vcf.gz",
+        tbi="cnv/rindels/{sample}_{type}.vcf.gz.tbi",
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         bin_size=config.get("rindels", {}).get("cnv_bin_size", 50000),
@@ -52,14 +58,21 @@ rule cnv_rindels:
             exit 1
         fi
 
+        VCF_PLAIN="cnv/rindels/{wildcards.sample}_{wildcards.type}.vcf"
+
         "$RINDELS_BIN" \
             -b {input.bam} \
             -r {input.ref} \
             --cnv-output {output.bins} \
             --cnv-bin-size {params.bin_size} \
-            -o {output.vcf} \
+            -o "$VCF_PLAIN" \
             -t {threads} \
             {params.extra}
+
+        # A whole-genome --sv-lite VCF is 100-200 MB uncompressed and worth
+        # random access, so compress and index it in place.
+        bgzip -@ {threads} -f "$VCF_PLAIN"
+        tabix -p vcf -f "{output.vcf}"
 
         # Rindels skips the ASCAT segmentation when it finds fewer than 100
         # heterozygous sites, which is a legitimate outcome for a shallow or
