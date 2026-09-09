@@ -23,7 +23,10 @@ rule cnv_rindels:
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         bin_size=config.get("rindels", {}).get("cnv_bin_size", 50000),
-        extra=config.get("rindels", {}).get("extra_cnv", "--ont --only-cnv"),
+        # Keep this in step with config.yaml's rindels.extra_cnv: --only-cnv
+        # implies --no-snp, which leaves ASCAT without heterozygous markers and
+        # produces no .ascat.bed at all.
+        extra=config.get("rindels", {}).get("extra_cnv", "--ont --sv-lite"),
     log:
         "logs/cnv_rindels/{sample}_{type}.log",
     benchmark:
