@@ -98,6 +98,37 @@ use rule bgzip from cnv_sv as cnv_sv_sniffles2_bgzip with:
         )
 
 
+# A whole-genome --sv-lite VCF is 100-200 MB of text and worth random access.
+# cnv_rindels itself runs on the host, so the compression happens here, in the
+# container that has htslib, exactly as it does for Sniffles2.
+use rule bgzip from cnv_sv as cnv_rindels_bgzip with:
+    input:
+        vcf="cnv/rindels/{sample}_{type}.vcf",
+    output:
+        gz="cnv/rindels/{sample}_{type}.vcf.gz",
+    log:
+        "logs/cnv_rindels_bgzip/{sample}_{type}.vcf.gz.log",
+    benchmark:
+        repeat(
+            "benchmarks/cnv_rindels_bgzip/{sample}_{type}.vcf.gz.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from cnv_sv as cnv_rindels_tabix with:
+    input:
+        gz="cnv/rindels/{sample}_{type}.vcf.gz",
+    output:
+        tbi="cnv/rindels/{sample}_{type}.vcf.gz.tbi",
+    log:
+        "logs/cnv_rindels_tabix/{sample}_{type}.vcf.gz.tbi.log",
+    benchmark:
+        repeat(
+            "benchmarks/cnv_rindels_tabix/{sample}_{type}.vcf.gz.tbi.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
 use rule tabix from cnv_sv as cnv_sv_sniffles2_tabix with:
     input:
         gz="cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz",
