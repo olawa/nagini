@@ -925,6 +925,52 @@ for _sample in get_samples(samples):
         )
 
 
+def validate_design_bed():
+    """Reject a malformed design BED here rather than inside a caller.
+
+    A single blank line in the T2T design was enough to make ClairS-TO exit
+    with "list index out of range" after the whole alignment stage had already
+    run.  The BED is passed verbatim to tools whose parsers assume three
+    fields per line, so check it once, at DAG build, where it costs nothing.
+    """
+
+    bed = get_resolved_design_bed()
+    if not bed:
+        return
+    problems = []
+    with open(bed) as handle:
+        for number, line in enumerate(handle, start=1):
+            stripped = line.rstrip("\n")
+            if stripped.startswith(("#", "track", "browser")):
+                continue
+            if not stripped.strip():
+                problems.append(f"line {number}: blank line")
+                continue
+            fields = stripped.split("\t")
+            if len(fields) < 3:
+                problems.append(
+                    f"line {number}: {len(fields)} tab-separated field(s), need at least 3"
+                )
+                continue
+            try:
+                start, end = int(fields[1]), int(fields[2])
+            except ValueError:
+                problems.append(f"line {number}: non-integer start/end {fields[1:3]}")
+                continue
+            if end <= start:
+                problems.append(f"line {number}: end {end} is not after start {start}")
+    if problems:
+        raise WorkflowError(
+            "Malformed design BED {}:\n  {}\nTools that take this file verbatim "
+            "(ClairS-TO, mosdepth, samtools view -L) fail on it.".format(
+                bed, "\n  ".join(problems)
+            )
+        )
+
+
+validate_design_bed()
+
+
 def get_sample_type_path(wildcards, directory, suffix):
     """Build report paths from normalized sample/type components.
 

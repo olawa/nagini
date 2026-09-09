@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 
+REPO = Path(__file__).resolve().parents[1]
 SCRIPT = Path(__file__).with_name("prepare_nagini_inputs.py")
 SPEC = importlib.util.spec_from_file_location("prepare_nagini_inputs", SCRIPT)
 PREPARE = importlib.util.module_from_spec(SPEC)
@@ -126,6 +127,26 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(PREPARE.make_barcode_sample_name("", "barcode10"), "bc10")
         self.assertEqual(PREPARE.make_barcode_sample_name("RUN_bc1", "barcode01"), "RUN_bc1")
         self.assertEqual(PREPARE.make_barcode_sample_name("barcode01", "barcode01"), "bc1")
+
+    def test_the_shipped_design_beds_are_well_formed(self):
+        """A blank line in the T2T design made ClairS-TO exit after alignment.
+
+        The BED is handed verbatim to tools whose parsers assume three fields
+        per line, so the shipped assets have to be clean.
+        """
+
+        beds = sorted((REPO / "workflow/resources/adaptive").glob("*.bed"))
+        self.assertTrue(beds)
+        for bed in beds:
+            for number, line in enumerate(bed.read_text().splitlines(), start=1):
+                if line.startswith(("#", "track", "browser")):
+                    continue
+                with self.subTest(bed=bed.name, line=number):
+                    self.assertTrue(line.strip(), "blank line")
+                    fields = line.split("\t")
+                    self.assertGreaterEqual(len(fields), 3, fields)
+                    start, end = int(fields[1]), int(fields[2])
+                    self.assertGreater(end, start)
 
     def test_multi_flowcell_units_are_named_after_the_flowcell(self):
         """A merged sample has to say which flowcell each unit came from.

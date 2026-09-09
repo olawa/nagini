@@ -1870,6 +1870,18 @@ def validate_assays(args: argparse.Namespace, units: list[dict[str, str]]) -> No
         )
     print(f"Assays in this run: {', '.join(requested)}")
 
+    # A per-sample assay column wins over --assay by design, which is easy to
+    # forget when the map is auto-detected in the inbox: the flag looks like it
+    # took effect and the run quietly does the other workup.
+    flag = str(getattr(args, "assay", "") or "").strip().lower()
+    if flag and flag not in requested:
+        print(
+            f"NOTE: --assay {flag} was overridden by the assay column in the "
+            f"barcode map; this run uses {', '.join(requested)}. Remove that "
+            "column, or set it to the assay you want.",
+            file=sys.stderr,
+        )
+
 
 def validate_barcode_kit(args: argparse.Namespace, units: list[dict[str, str]]) -> None:
     """Catch a barcode the kit cannot produce before anything is queued."""
