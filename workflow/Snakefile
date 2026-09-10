@@ -430,6 +430,25 @@ use rule cramino from qc as qc_cramino with:
         arrow="qc/cramino/{sample}_{type}.arrow",
 
 
+# Read statistics over the whole BAM are dominated by the reads adaptive
+# sampling rejected: a few hundred bases each, at a lower identity than a read
+# the pore sequenced to the end. The same statistics over the target BAM
+# describe the reads the assay actually calls from.
+use rule cramino from qc as qc_cramino_target with:
+    input:
+        bam="alignment/target/{sample}_{type}.target.bam",
+    output:
+        txt="qc/cramino_target/{sample}_{type}.txt",
+        arrow="qc/cramino_target/{sample}_{type}.arrow",
+    log:
+        "qc/cramino_target/{sample}_{type}.output.log",
+    benchmark:
+        repeat(
+            "qc/cramino_target/{sample}_{type}.output.benchmark.tsv",
+            config.get("cramino", {}).get("benchmark_repeats", 1),
+        )
+
+
 def get_multiqc_input_files(wildcards):
     report_name = getattr(wildcards, "report", "nanopore")
     report_cfg = config.get("multiqc", {}).get("reports", {}).get(report_name, {})

@@ -1049,6 +1049,14 @@ def sample_has_rindels_sv(sample):
     return "--only-cnv" not in extra and "--no-sv" not in extra
 
 
+def get_report_target_cramino(wildcards):
+    """Read statistics over the target BAM, for target-restricted samples."""
+
+    if sample_has_target_metrics(wildcards.sample):
+        return get_sample_type_path(wildcards, "qc/cramino_target", ".txt")
+    return []
+
+
 def get_report_rindels_sv_tsv(wildcards):
     if sample_has_rindels_sv(wildcards.sample):
         return get_sample_type_path(wildcards, "reports/sv_summary_rindels", ".tsv")

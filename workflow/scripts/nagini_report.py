@@ -275,6 +275,38 @@ def _sv_position(value, default=0):
         return default
 
 
+def preview_rows(rows, limit, priority=None, rank=None):
+    """Choose which rows a preview table shows, and say what it left out.
+
+    The Overview previews the full sheets, so it has to cap. Taking the first
+    N in genomic order dropped exactly the rows that matter: an iAMP21 segment
+    on chr21 sits past row 20 and vanished while fifteen balanced whole-
+    chromosome gains were shown. Rows that `priority` marks are always kept,
+    the rest are filled by `rank` descending, and the result is returned in
+    the caller's original order with the number omitted.
+    """
+
+    if len(rows) <= limit:
+        return list(rows), 0
+
+    order = {id(row): index for index, row in enumerate(rows)}
+    must = [row for row in rows if priority and priority(row)]
+    rest = [row for row in rows if not (priority and priority(row))]
+    if rank is not None:
+        rest.sort(key=rank, reverse=True)
+
+    selected = must[:limit] + rest[: max(limit - len(must), 0)]
+    selected.sort(key=lambda row: order[id(row)])
+    return selected, len(rows) - len(selected)
+
+
+def _float_or_zero(value):
+    try:
+        return abs(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def merge_caller_rows(*sources):
     """Combine per-caller tables into one, with a leading Caller column.
 
@@ -745,7 +777,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
                     bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv="",
-                    rindels_sv_tsv="", rindels_translocations_tsv=""):
+                    rindels_sv_tsv="", rindels_translocations_tsv="",
+                    target_cramino=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
@@ -779,6 +812,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     wgs_columns, wgs_rows = parse_tsv(wgs_coverage)
     target_columns, target_rows = parse_tsv(target_coverage)
     cramino_columns, cramino_rows = parse_cramino(cramino)
+    # The same statistics over the target BAM only. Genome-wide read metrics
+    # on an adaptive run describe mostly rejected reads, which is not the
+    # population any call is made from.
+    _target_cramino_columns, target_cramino_rows = parse_cramino(target_cramino)
+    target_cramino_dict = {row["Metric"]: row["Value"] for row in target_cramino_rows}
 
     bcr_abl_fusion_rows = parse_bcr_abl_tsv(bcr_abl_fusion)
     bcr_abl_mutation_rows = parse_bcr_abl_tsv(bcr_abl_mutations)
@@ -822,7 +860,41 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         "Total reads",
         "Read count",
     )
-    mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
+    # cramino reports alignment identity rather than a basecall Q in some
+    # versions, so both are looked up and the label follows what was found.
+    _quality_keys = (
+        "Mean read quality",
+        "Mean quality",
+        "Average read quality",
+        "Mean base quality",
+        "Median read quality",
+        "Quality",
+        "Q-score",
+    )
+    _identity_keys = ("Mean identity", "Median identity", "Identity")
+    mean_q = _find_metric(cramino_dict, *_quality_keys)
+    read_accuracy_label = "Mean Base Quality (Q)"
+    read_accuracy_hint = "Average basecall Q-score"
+    if not mean_q:
+        identity = _find_metric(cramino_dict, *_identity_keys)
+        if identity:
+            mean_q = identity
+            read_accuracy_label = "Mean Read Identity [%]"
+            read_accuracy_hint = "Alignment identity, all reads"
+
+    target_accuracy = _find_metric(target_cramino_dict, *_identity_keys) or _find_metric(
+        target_cramino_dict, *_quality_keys
+    )
+    target_accuracy_n50 = _find_metric(
+        target_cramino_dict, "Read length N50", "N50", "N50 read length"
+    )
+    target_accuracy_reads = _find_metric(
+        target_cramino_dict,
+        "Number of reads",
+        "Number of alignments",
+        "Total reads",
+        "Read count",
+    )
     n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
     median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
 
@@ -1010,7 +1082,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
             [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
             [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
-            [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
+            [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
             [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
             [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
             [("BCR-ABL1 Fusion Reads", 7), ("Total fusion-spanning reads (deduplicated)", 0), (total_fusion_reads, 0), ("PASS" if total_fusion_reads > 0 else "INFO", 5 if total_fusion_reads > 0 else 0)],
@@ -1022,7 +1094,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
             [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
             [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
-            [("Mean Base Quality (Q)", 7), ("Average basecall Q-score", 0), (mean_q or "N/A", 0), (q_status, q_style)],
+            [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
             [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
             [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
             [("Mean Target Coverage", 7), ("Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
@@ -1031,6 +1103,14 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             [("Target Breadth (>=30x)", 7), ("% target bases >= 30x depth", 0), (pct_30x_str, 0), ("PASS" if (pct_30x and pct_30x >= 0.85) else ("INFO" if pct_30x is not None else "N/A"), 5 if (pct_30x and pct_30x >= 0.85) else 0)],
             [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
         ])
+        if target_cramino_rows:
+            overview.extend([
+                [("", 0), ("", 0), ("", 0), ("", 0)],
+                [("ON-TARGET READ STATISTICS", 3), ("Reads overlapping the design +/-25 kb", 3), ("VALUE", 3), ("STATUS", 3)],
+                [("On-Target Read Accuracy", 7), ("Identity or Q of reads in the design", 0), (target_accuracy or "N/A", 0), ("INFO", 0)],
+                [("On-Target Reads", 7), ("Reads overlapping the design", 0), (target_accuracy_reads or "N/A", 0), ("INFO", 0)],
+                [("On-Target Read Length N50 [bp]", 7), ("N50 of reads in the design", 0), (target_accuracy_n50 or "N/A", 0), ("INFO", 0)],
+            ])
 
     overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
     overview.append([("VARIANT CALLING SUMMARY", 3), ("", 3), ("COUNT", 3), ("FLAG / ACTION", 3)])
@@ -1085,7 +1165,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("PATHOGENIC & LIKELY PATHOGENIC VARIANTS (CLINVAR)", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4)])
         overview.append([("Gene", 1), ("Chr", 1), ("Position", 1), ("Change", 1), ("VAF", 1), ("Consequence", 1), ("ClinVar Significance", 1)])
-        for v in pathogenic_snvs[:15]:
+        snv_preview, snv_omitted = preview_rows(pathogenic_snvs, 15)
+        for v in snv_preview:
             overview.append([
                 (v.get("Gene", ""), 0),
                 (v.get("Chromosome", ""), 0),
@@ -1095,12 +1176,27 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (v.get("Consequence", ""), 0),
                 (v.get("ClinVar_Significance", ""), 4),
             ])
+        if snv_omitted:
+            overview.append([
+                (f"... {snv_omitted} further variant(s) on the SNVs and indels sheet", 0),
+                ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0),
+            ])
 
     if cnv_non_diploid:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("COPY NUMBER ALTERATIONS (RINDELS)", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6)])
         overview.append([("Chr", 1), ("Start", 1), ("End", 1), ("Length [kb]", 1), ("Copy Number", 1), ("Type", 1), ("Cytoband", 1)])
-        for c in cnv_non_diploid[:15]:
+        cnv_preview, cnv_omitted = preview_rows(
+            cnv_non_diploid,
+            25,
+            # A segment overlapping the design, or an outright amplification or
+            # loss, is the finding. It must not be crowded out by balanced
+            # whole-chromosome gains that happen to sort earlier.
+            priority=lambda c: str(c.get("is_target_region", "")).lower() in ("true", "1")
+            or str(c.get("event_type", "")).upper() in ("AMPLIFICATION", "LOSS"),
+            rank=lambda c: _float_or_zero(c.get("log2_ratio", 0)),
+        )
+        for c in cnv_preview:
             cn_style = 4 if str(c.get("event_type", "")).upper() == "LOSS" else 6
             overview.append([
                 (c.get("chrom", ""), 0),
@@ -1111,12 +1207,23 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (c.get("event_type", ""), cn_style),
                 (c.get("cytoband", "") or c.get("target_genes", ""), 0),
             ])
+        if cnv_omitted:
+            overview.append([
+                (f"... {cnv_omitted} further segment(s) on the CNVs sheet", 0),
+                ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0),
+            ])
 
     if translocations:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("TRANSLOCATIONS & REARRANGEMENTS", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
         overview.append([("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Notation", 1), ("Genes", 1)])
-        for t in translocations[:15]:
+        trans_preview, trans_omitted = preview_rows(
+            translocations,
+            15,
+            # A breakend that lands in a design gene is the reportable one.
+            priority=lambda t: bool(t.get("genes")) and t.get("genes") != ".",
+        )
+        for t in trans_preview:
             overview.append([
                 (t.get("sample", sample), 0),
                 (t.get("svtype", "BND"), 0),
@@ -1126,12 +1233,18 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (t.get("Cytogenetic_Notation", "") or t.get("svtype", ""), 8),
                 (t.get("genes", ""), 0),
             ])
+        if trans_omitted:
+            overview.append([
+                (f"... {trans_omitted} further breakend(s) on the Translocations sheet", 0),
+                ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0),
+            ])
 
     if low_cov_20x:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("LOW-COVERAGE TARGET REGIONS (<20x)", 6), ("", 6), ("", 6), ("", 6)])
         overview.append([("Region / Target", 1), ("Mean Depth", 1), ("Status", 1), ("Description", 1)])
-        for reg, d in low_cov_20x[:15]:
+        low_cov_preview = low_cov_20x[:15]
+        for reg, d in low_cov_preview:
             st = "SEVERELY LOW (<10x)" if d < 10.0 else "SUBOPTIMAL (<20x)"
             st_style = 4 if d < 10.0 else 6
             overview.append([
@@ -1139,6 +1252,15 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (f"{d:.1f}x", st_style),
                 (st, st_style),
                 ("Target depth below 20x threshold", 0),
+            ])
+        if len(low_cov_20x) > len(low_cov_preview):
+            overview.append([
+                (
+                    f"... {len(low_cov_20x) - len(low_cov_preview)} further region(s) "
+                    "below 20x",
+                    0,
+                ),
+                ("", 0), ("", 0), ("", 0),
             ])
 
     sheets = [
@@ -1178,6 +1300,7 @@ def run_from_snakemake(snakemake):
         snv_vcf=_first_or_str(getattr(snakemake.input, "snv_vcf", "")),
         sv_tsv=_first_or_str(getattr(snakemake.input, "sv", "")),
         translocations_tsv=_first_or_str(getattr(snakemake.input, "translocations", "")),
+        target_cramino=_first_or_str(getattr(snakemake.input, "target_cramino", "")),
         rindels_sv_tsv=_first_or_str(getattr(snakemake.input, "rindels_sv", "")),
         rindels_translocations_tsv=_first_or_str(
             getattr(snakemake.input, "rindels_translocations", "")

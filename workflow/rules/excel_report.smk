@@ -19,6 +19,7 @@ rule nagini_excel_report:
         target_dist=get_report_target_dist,
         demux_summary=get_report_demux_summary,
         cramino="qc/cramino/{sample}_{type}.txt",
+        target_cramino=get_report_target_cramino,
         bcr_abl_fusion=get_report_bcr_abl_fusion,
         bcr_abl_mutations=get_report_bcr_abl_mutations,
         bcr_abl_phasing=get_report_bcr_abl_phasing,
@@ -65,6 +66,7 @@ rule nagini_excel_report:
 # sample, with an empty string where the file does not exist.
 _SUMMARY_OPTIONAL_KEYS = (
     "target_coverages",
+    "target_craminos",
     "snv_vcfs",
     "bcr_abl_fusions",
     "bcr_abl_mutations",
@@ -99,6 +101,11 @@ def summary_report_files():
                     "reports": f"reports/{s}_{t}.nagini_report.xlsx",
                     "craminos": f"qc/cramino/{s}_{t}.txt",
                     "wgs_coverages": f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt",
+                    "target_craminos": (
+                        f"qc/cramino_target/{s}_{t}.txt"
+                        if sample_has_target_metrics(s)
+                        else ""
+                    ),
                     "target_coverages": (
                         f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt"
                         if sample_has_target_metrics(s)
@@ -162,6 +169,7 @@ rule nagini_summary_excel_report:
         sequence_id=lambda wildcards: config.get("sequence_id", os.path.basename(os.getcwd())),
         # Aligned to sample_names, unlike input, which cannot carry a gap.
         target_coverage_paths=lambda wildcards: get_summary_report_paths("target_coverages"),
+        target_cramino_paths=lambda wildcards: get_summary_report_paths("target_craminos"),
         design_bed=lambda wildcards: get_resolved_design_bed(),
         snv_vcf_paths=lambda wildcards: get_summary_report_paths("snv_vcfs"),
         bcr_abl_fusion_paths=lambda wildcards: get_summary_report_paths("bcr_abl_fusions"),

@@ -402,6 +402,105 @@ class FullReportTest(unittest.TestCase):
         # 27.46 / 3.77, not 3.77 / 3.77.
         self.assertIn("Target Fold Enrichment\tTarget / WGS coverage ratio\t7.3x\tPASS", text)
 
+    def test_the_cnv_preview_keeps_the_target_and_amplified_segments(self):
+        """An iAMP21 segment sits past row 20 of a genome-wide segmentation.
+
+        The Overview took the first fifteen in genomic order, so fifteen
+        balanced whole-chromosome gains were shown and the amplification the
+        assay exists to find was dropped.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            header = (
+                "sample\ttype\tchrom\tstart\tend\tlength_kb\tcopy_number"
+                "\tlog2_ratio\tevent_type\tstate\tcytoband\tis_target_region\ttarget_genes\n"
+            )
+            lines = [header]
+            # Twenty balanced gains, then the findings, as in the real run.
+            for index in range(1, 31):
+                lines.append(
+                    f"gustaf1\tT\tfiller{index}\t1000\t200000\t199.0\t4\t0.05"
+                    "\tGAIN\tBalAmp\tp13-q13\tFalse\t.\n"
+                )
+            lines.append(
+                "gustaf1\tT\tchr21\t297525\t45076114\t44778.6\t6\t1.496"
+                "\tAMPLIFICATION\tAmp\tp13-q22.3\tTrue\tchr21:11000000-45090682\n"
+            )
+            lines.append(
+                "gustaf1\tT\tchr22\t2382280\t48864040\t46481.8\t4\t0.201"
+                "\tGAIN\tBalAmp\tp13-q13.32\tTrue\tchr22:11000000-25000000\n"
+            )
+            cnv = root / "cnv.tsv"
+            cnv.write_text("".join(lines))
+
+            output = root / "cnv_preview.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+                cnv_tsv=str(cnv),
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+
+        # Both findings survive the cap, and the cap is stated.
+        self.assertIn("AMPLIFICATION", text)
+        self.assertIn("p13-q22.3", text)
+        self.assertIn("p13-q13.32", text)
+        self.assertIn("further segment(s) on the CNVs sheet", text)
+        # Genomic order is preserved, so chr21 still follows the fillers.
+        self.assertLess(text.index("filler1\t"), text.index("p13-q22.3"))
+
+    def test_on_target_read_statistics_are_reported_separately(self):
+        """Genome-wide read metrics on an adaptive run describe rejected reads.
+
+        Most reads in the BAM are the few hundred bases the pore read before
+        rejecting them, so their identity and N50 say little about the reads
+        any call is made from.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            target_cramino = root / "target.cramino.txt"
+            target_cramino.write_text(
+                "Number of alignments\t412000\n"
+                "Yield [Gb]\t6.24\n"
+                "Mean identity\t97.8\n"
+                "N50\t14200\n"
+            )
+            output = root / "on_target.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+                target_cramino=str(target_cramino),
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+
+        self.assertIn("ON-TARGET READ STATISTICS", text)
+        self.assertIn("On-Target Read Accuracy", text)
+        self.assertIn("97.8", text)
+        self.assertIn("412000", text)
+        self.assertIn("14200", text)
+
+    def test_no_on_target_block_without_a_target_bam(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            output = root / "wgs_only.xlsx"
+            REPORT.generate_report(
+                str(output), "plain", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+        self.assertNotIn("ON-TARGET READ STATISTICS", text)
+
     def test_chromosomes_outside_the_design_are_not_low_coverage_targets(self):
         """A real mosdepth --by summary, from the T2T run.
 

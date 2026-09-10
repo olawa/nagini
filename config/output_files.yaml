@@ -22,6 +22,10 @@ files:
   - name: read and sequence statistics
     input: null
     output: "qc/cramino/{sample}_{type}.txt"
+  - name: on-target read and sequence statistics
+    input: null
+    output: "qc/cramino_target/{sample}_{type}.txt"
+    when: target_metrics
   - name: whole genome coverage summary
     input: null
     output: "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
