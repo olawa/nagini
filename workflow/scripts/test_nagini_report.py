@@ -319,6 +319,47 @@ class FullReportTest(unittest.TestCase):
         self.assertEqual(row["ClinVar_Significance"], "Pathogenic")
         self.assertIn("gnomAD_AF", row)
 
+    def test_target_depth_comes_from_the_in_region_total(self):
+        """mosdepth --by writes both "total" and "total_region", total first.
+
+        Substring-matching "total" picked the genome-wide mean as the target
+        mean, so an adaptive run reported its background depth as target depth
+        and 1.0x fold enrichment. Numbers here are from a real T2T run.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            wgs_cov = root / "wgs_cov.tsv"
+            wgs_cov.write_text(
+                "chrom\tlength\tbases\tmean\n"
+                "total\t3117292070\t11764076766\t3.77\n"
+                "total_region\t3117292070\t11764076766\t3.77\n"
+            )
+            target_cov = root / "target_cov.tsv"
+            target_cov.write_text(
+                "chrom\tlength\tbases\tmean\n"
+                "chr20\t66210255\t1515011884\t22.88\n"
+                "chr20_region\t39999999\t1452460259\t36.31\n"
+                "total\t3117292070\t11764076766\t3.77\n"
+                "total_region\t120090681\t3298010922\t27.46\n"
+            )
+            output = root / "t2t_report.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), str(wgs_cov), str(target_cov),
+                str(cramino), str(cytoband), caller="ClairS-TO",
+                design_bed="/data/dic_9_20_iamp21_T2T.bed",
+                platform="ont_r10_dorado_sup_5khz",
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+
+        self.assertIn("Mean Target Coverage\tMean depth in target BED\t27.46", text)
+        # 27.46 / 3.77, not 3.77 / 3.77.
+        self.assertIn("Target Fold Enrichment\tTarget / WGS coverage ratio\t7.3x\tPASS", text)
+
     def test_adaptive_sampling_enrichment_and_demux_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

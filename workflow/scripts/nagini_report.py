@@ -780,9 +780,24 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         (str(row.get("mean", "")) for row in wgs_rows if str(row.get("chrom", "")).lower() == "total"),
         (str(wgs_rows[0].get("mean", "")) if wgs_rows else "")
     )
+    # mosdepth --by writes both a whole-reference "total" row and an in-region
+    # "total_region" row, and "total" sorts first.  Substring-matching "total"
+    # therefore picked the genome-wide mean as the target mean, which made the
+    # target depth read like the background and fold enrichment like 1.0x.
     target_cov = next(
-        (str(row.get("mean", "")) for row in target_rows if "total" in str(row.get("chrom", "")).lower()),
-        (str(target_rows[0].get("mean", "")) if target_rows else "")
+        (
+            str(row.get("mean", ""))
+            for row in target_rows
+            if str(row.get("chrom", "")).strip().lower() == "total_region"
+        ),
+        next(
+            (
+                str(row.get("mean", ""))
+                for row in target_rows
+                if str(row.get("chrom", "")).strip().lower() == "total"
+            ),
+            (str(target_rows[0].get("mean", "")) if target_rows else ""),
+        ),
     )
 
     try:
