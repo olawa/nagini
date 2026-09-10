@@ -58,37 +58,69 @@ rule nagini_excel_report:
         "../scripts/nagini_report.py"
 
 
-def get_summary_report_inputs(wildcards):
-    res = {
-        "reports": [],
-        "craminos": [],
-        "wgs_coverages": [],
-        "snv_vcfs": [],
-        "bcr_abl_fusions": [],
-        "bcr_abl_mutations": [],
-        "bcr_abl_phasings": [],
-        "bcr_abl_exons": [],
-        "bcr_abl_plots": [],
-    }
+# Keys whose file exists only for some assays. Everything that reads them has
+# to align them to the sample list by position, so they are built once, per
+# sample, with an empty string where the file does not exist.
+_SUMMARY_OPTIONAL_KEYS = (
+    "snv_vcfs",
+    "bcr_abl_fusions",
+    "bcr_abl_mutations",
+    "bcr_abl_phasings",
+    "bcr_abl_exons",
+    "bcr_abl_plots",
+)
+
+
+def summary_report_files():
+    """One row per sample/type with every summary input, "" when absent.
+
+    The optional files exist only for some assays. Appending them only for
+    qualifying samples and then indexing the compacted list by sample position
+    attributed one sample's variants to another as soon as a run mixed assays,
+    so the alignment is built here and both the rule's input and its params
+    are derived from it.
+    """
+
+    rows = []
     for sample in get_samples(samples):
         s = str(sample).strip()
         for unit_type in get_unit_types_for_sample(sample):
             t = str(unit_type).strip()
-            res["reports"].append(f"reports/{s}_{t}.nagini_report.xlsx")
-            res["craminos"].append(f"qc/cramino/{s}_{t}.txt")
-            res["wgs_coverages"].append(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt")
-
+            snv_vcf = ""
             if sample_needs_dna_variant_calling(s):
-                vcf_suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-                res["snv_vcfs"].append(f"snv_indels/clairs_to_postprocess/{s}_{t}{vcf_suffix}")
+                suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
+                snv_vcf = f"snv_indels/clairs_to_postprocess/{s}_{t}{suffix}"
+            bcr = sample_has_assay_module(s, "bcr_abl")
+            rows.append(
+                {
+                    "reports": f"reports/{s}_{t}.nagini_report.xlsx",
+                    "craminos": f"qc/cramino/{s}_{t}.txt",
+                    "wgs_coverages": f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt",
+                    "snv_vcfs": snv_vcf,
+                    "bcr_abl_fusions": f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv" if bcr else "",
+                    "bcr_abl_mutations": f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv" if bcr else "",
+                    "bcr_abl_phasings": f"reports/bcr_abl/{s}_{t}.phasing.tsv" if bcr else "",
+                    "bcr_abl_exons": f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv" if bcr else "",
+                    "bcr_abl_plots": f"reports/bcr_abl/{s}_{t}.fusion_plot.png" if bcr else "",
+                }
+            )
+    return rows
 
-            if sample_has_assay_module(s, "bcr_abl"):
-                res["bcr_abl_fusions"].append(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv")
-                res["bcr_abl_mutations"].append(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv")
-                res["bcr_abl_phasings"].append(f"reports/bcr_abl/{s}_{t}.phasing.tsv")
-                res["bcr_abl_exons"].append(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv")
-                res["bcr_abl_plots"].append(f"reports/bcr_abl/{s}_{t}.fusion_plot.png")
-    return res
+
+def get_summary_report_inputs(wildcards):
+    """The files the summary depends on. Snakemake inputs cannot be empty."""
+
+    rows = summary_report_files()
+    return {
+        key: [row[key] for row in rows if row[key]]
+        for key in rows[0]
+    } if rows else {}
+
+
+def get_summary_report_paths(key):
+    """One entry per sample for an optional input, "" where it does not exist."""
+
+    return [row[key] for row in summary_report_files()]
 
 
 rule nagini_summary_excel_report:
@@ -120,6 +152,13 @@ rule nagini_summary_excel_report:
         ],
         reference_build=lambda wildcards: config.get("reference", {}).get("build", config.get("reference_build", "hg38")),
         sequence_id=lambda wildcards: config.get("sequence_id", os.path.basename(os.getcwd())),
+        # Aligned to sample_names, unlike input, which cannot carry a gap.
+        snv_vcf_paths=lambda wildcards: get_summary_report_paths("snv_vcfs"),
+        bcr_abl_fusion_paths=lambda wildcards: get_summary_report_paths("bcr_abl_fusions"),
+        bcr_abl_mutation_paths=lambda wildcards: get_summary_report_paths("bcr_abl_mutations"),
+        bcr_abl_phasing_paths=lambda wildcards: get_summary_report_paths("bcr_abl_phasings"),
+        bcr_abl_exon_paths=lambda wildcards: get_summary_report_paths("bcr_abl_exons"),
+        bcr_abl_plot_paths=lambda wildcards: get_summary_report_paths("bcr_abl_plots"),
     log:
         "logs/nagini_summary_excel_report/summary.log",
     threads: 1

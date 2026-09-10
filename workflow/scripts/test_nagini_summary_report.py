@@ -65,6 +65,45 @@ class SummaryReportTest(unittest.TestCase):
                 self.assertIn("BCR-ABL (sample1)", wb_xml)
 
 
+    def test_a_run_without_small_variant_calling_says_so(self):
+        """"Not assessed" and "none found" are different clinical statements.
+
+        An assay with snv_calling off produces no VCF, and reporting that as
+        "No high-confidence PASS variants detected" reads as a negative
+        finding rather than as a question the run did not ask.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            cramino = tmp / "s.cramino.txt"
+            cramino.write_text("Yield [Gb]\t0.15\nNumber of reads\t50000\n")
+            record = {
+                "sample": "gustaf1", "type": "T", "barcode": "barcode01",
+                "assay": "adaptive_cnv_sv", "cramino": str(cramino),
+                "wgs_coverage": "", "snv_vcf": "", "bcr_abl_fusion": "",
+                "bcr_abl_mutations": "", "bcr_abl_phasing": "",
+                "bcr_abl_exon_coverage": "",
+            }
+            out = str(tmp / "summary.xlsx")
+            build_summary_report(
+                output_path=out, sequence_id="T2T", reference_build="hs1",
+                sample_records=[record],
+            )
+            text = _shared_strings(out)
+
+        self.assertIn("was not part of this run's assay", text)
+        self.assertNotIn("No high-confidence PASS variants detected", text)
+
+
+def _shared_strings(xlsx_path):
+    """Every string in the workbook, which is where cell text lives."""
+
+    import zipfile
+
+    with zipfile.ZipFile(xlsx_path, "r") as archive:
+        return archive.read("xl/sharedStrings.xml").decode("utf-8")
+
+
 if __name__ == "__main__":
     unittest.main()
 

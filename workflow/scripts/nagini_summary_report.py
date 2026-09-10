@@ -292,7 +292,19 @@ def build_summary_report(
             (pv["status"], 5),
         ])
     if len(pass_var_rows) == 1:
-        pass_var_rows.append([("No high-confidence PASS variants detected across samples", 0)] + [("", 0)] * 12)
+        # An assay with snv_calling off produces no VCF at all. Reporting that
+        # as "none detected" reads as a negative finding rather than as a
+        # question this run did not ask.
+        assessed = any(
+            record.get("snv_vcf") or record.get("bcr_abl_mutations")
+            for record in sample_records
+        )
+        note = (
+            "No high-confidence PASS variants detected across samples"
+            if assessed
+            else "Small variant calling was not part of this run's assay; no variants were assessed"
+        )
+        pass_var_rows.append([(note, 0)] + [("", 0)] * 12)
     sheets.append(("PASS Variants", pass_var_rows, TABLE))
 
     # -----------------------------------------------------------------------
@@ -442,12 +454,18 @@ def run_from_snakemake(snakemake):
 
     craminos = list(getattr(snakemake.input, "craminos", []))
     wgs_covs = list(getattr(snakemake.input, "wgs_coverages", []))
-    snv_vcfs = list(getattr(snakemake.input, "snv_vcfs", []))
-    bcr_fusions = list(getattr(snakemake.input, "bcr_abl_fusions", []))
-    bcr_mutations = list(getattr(snakemake.input, "bcr_abl_mutations", []))
-    bcr_phasings = list(getattr(snakemake.input, "bcr_abl_phasings", []))
-    bcr_exons = list(getattr(snakemake.input, "bcr_abl_exons", []))
-    bcr_plots = list(getattr(snakemake.input, "bcr_abl_plots", []))
+
+    # The optional per-sample files come from params, not input: a Snakemake
+    # input list cannot hold an empty entry, so it is compacted to the samples
+    # that have the file, and indexing that by sample position attributed one
+    # sample's variants to another. The params lists carry one entry per
+    # sample with "" where the file does not exist.
+    snv_vcfs = list(getattr(snakemake.params, "snv_vcf_paths", []))
+    bcr_fusions = list(getattr(snakemake.params, "bcr_abl_fusion_paths", []))
+    bcr_mutations = list(getattr(snakemake.params, "bcr_abl_mutation_paths", []))
+    bcr_phasings = list(getattr(snakemake.params, "bcr_abl_phasing_paths", []))
+    bcr_exons = list(getattr(snakemake.params, "bcr_abl_exon_paths", []))
+    bcr_plots = list(getattr(snakemake.params, "bcr_abl_plot_paths", []))
 
     sample_records = []
     for i, name in enumerate(sample_names):
