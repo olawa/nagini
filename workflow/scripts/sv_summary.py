@@ -1,4 +1,4 @@
-"""Create compact TSV/JSON summaries from a Sniffles2-style VCF.
+"""Create compact TSV/JSON summaries of the structural variants in a VCF.
 
 This is intentionally a small, dependency-light report step.  It recognises
 symbolic SVs and breakend notation, and optionally adds overlapping BED column
@@ -138,6 +138,8 @@ def main():
     cytoband_value = getattr(snakemake_input, "cytoband", "")
     cytoband_path = str(cytoband_value) if cytoband_value else ""
     cytobands = CytobandLookup(cytoband_path)
+    # Which caller produced this VCF, so two callers' rows can share a table.
+    caller = str(getattr(snakemake.params, "caller", "") or "Sniffles2")
 
     records = []
     counts = collections.Counter()
@@ -152,7 +154,13 @@ def main():
             info = parse_info(info_text)
             svtype = str(info.get("SVTYPE", ""))
             if not svtype:
-                svtype = "BND" if "[" in alt or "]" in alt else "OTHER"
+                # Sniffles2 emits only structural records, but a caller run in
+                # a combined mode (rindels --sv-lite) writes SNVs and indels
+                # into the same VCF. Without this, every one of those millions
+                # of records became an "OTHER" row in the report.
+                if "[" not in alt and "]" not in alt:
+                    continue
+                svtype = "BND"
             try:
                 position = int(pos)
             except ValueError:
@@ -176,6 +184,7 @@ def main():
             record = {
                 "sample": str(snakemake.wildcards.sample),
                 "type": str(snakemake.wildcards.type),
+                "caller": caller,
                 "svtype": svtype,
                 "chrom": chrom,
                 "pos": position,
@@ -204,6 +213,7 @@ def main():
     columns = [
         "sample",
         "type",
+        "caller",
         "svtype",
         "chrom",
         "pos",
@@ -233,6 +243,7 @@ def main():
     summary = {
         "sample": str(snakemake.wildcards.sample),
         "type": str(snakemake.wildcards.type),
+        "caller": caller,
         "input_vcf": vcf_path,
         "total_records": len(records),
         "svtype_counts": dict(sorted(counts.items())),

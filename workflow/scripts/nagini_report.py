@@ -275,6 +275,29 @@ def _sv_position(value, default=0):
         return default
 
 
+def merge_caller_rows(*sources):
+    """Combine per-caller tables into one, with a leading Caller column.
+
+    Column sets can differ between callers -- an older summary may lack a
+    column a newer one writes -- so the union is taken and missing values are
+    left blank rather than shifting a row's fields.
+    """
+
+    columns = ["caller"]
+    for source_columns, _rows, _name in sources:
+        for column in source_columns:
+            if column != "caller" and column not in columns:
+                columns.append(column)
+
+    merged = []
+    for _source_columns, rows, name in sources:
+        for row in rows:
+            new_row = dict(row)
+            new_row["caller"] = str(row.get("caller", "") or name)
+            merged.append({column: new_row.get(column, "") for column in columns})
+    return columns, merged
+
+
 def annotate_sv_rows(columns, rows, cytobands):
     """Add cytoband columns to SV summaries when a UCSC file is configured."""
 
@@ -721,7 +744,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     cytoband="", caller="", design_bed="", platform="",
                     target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
-                    bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv=""):
+                    bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv="",
+                    rindels_sv_tsv="", rindels_translocations_tsv=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
@@ -731,6 +755,26 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     sv_columns, svs = annotate_sv_rows(sv_columns, svs, cytobands)
     translocation_columns, translocations = annotate_sv_rows(
         translocation_columns, translocations, cytobands
+    )
+
+    # Two callers reach the same breakpoints by different evidence: Sniffles2
+    # from split and spanning reads, Rindels --sv-lite from pair and clip
+    # evidence without assembly. One table with a Caller column lets a
+    # dic(9;20) call be corroborated instead of read from one caller alone.
+    rindels_sv_columns, rindels_svs = parse_tsv(rindels_sv_tsv)
+    rindels_sv_columns, rindels_svs = annotate_sv_rows(
+        rindels_sv_columns, rindels_svs, cytobands
+    )
+    rindels_trans_columns, rindels_translocations = parse_tsv(rindels_translocations_tsv)
+    rindels_trans_columns, rindels_translocations = annotate_sv_rows(
+        rindels_trans_columns, rindels_translocations, cytobands
+    )
+    sv_columns, svs = merge_caller_rows(
+        (sv_columns, svs, "Sniffles2"), (rindels_sv_columns, rindels_svs, "Rindels")
+    )
+    translocation_columns, translocations = merge_caller_rows(
+        (translocation_columns, translocations, "Sniffles2"),
+        (rindels_trans_columns, rindels_translocations, "Rindels"),
     )
     wgs_columns, wgs_rows = parse_tsv(wgs_coverage)
     target_columns, target_rows = parse_tsv(target_coverage)
@@ -961,7 +1005,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         overview.append([("Total Copy Number Alterations", 7), ("Genome-wide CNV segments (Rindels)", 0), (len(cnv_non_diploid), 0), ("CNV DETECTED" if cnv_non_diploid else "NONE", 6 if cnv_non_diploid else 5)])
         if target_cnvs:
             overview.append([("Target-Overlapping CNVs", 7), ("CNVs overlapping design BED", 0), (len(target_cnvs), 0), ("REVIEW" if target_cnvs else "NONE", 6 if target_cnvs else 5)])
-    overview.append([("Structural Variants (Intra-chrom)", 7), ("Sniffles2 DEL / DUP / INS / INV", 0), (len(svs_intra), 0), ("INFO", 0)])
+    overview.append([("Structural Variants (Intra-chrom)", 7), ("DEL / DUP / INS / INV, all callers", 0), (len(svs_intra), 0), ("INFO", 0)])
     overview.append([("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)])
     overview.append([("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)])
     if not has_bcr_abl:
@@ -1033,7 +1077,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     if translocations:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
-        overview.append([("TRANSLOCATIONS & REARRANGEMENTS (SNIFFLES2)", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
+        overview.append([("TRANSLOCATIONS & REARRANGEMENTS", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
         overview.append([("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Notation", 1), ("Genes", 1)])
         for t in translocations[:15]:
             overview.append([
@@ -1097,6 +1141,10 @@ def run_from_snakemake(snakemake):
         snv_vcf=_first_or_str(getattr(snakemake.input, "snv_vcf", "")),
         sv_tsv=_first_or_str(getattr(snakemake.input, "sv", "")),
         translocations_tsv=_first_or_str(getattr(snakemake.input, "translocations", "")),
+        rindels_sv_tsv=_first_or_str(getattr(snakemake.input, "rindels_sv", "")),
+        rindels_translocations_tsv=_first_or_str(
+            getattr(snakemake.input, "rindels_translocations", "")
+        ),
         wgs_coverage=_first_or_str(getattr(snakemake.input, "wgs_coverage", "")),
         target_coverage=_first_or_str(getattr(snakemake.input, "target_coverage", "")),
         cramino=_first_or_str(getattr(snakemake.input, "cramino", "")),

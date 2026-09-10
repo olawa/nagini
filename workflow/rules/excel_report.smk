@@ -11,6 +11,8 @@ rule nagini_excel_report:
         snv_tbi=get_report_snv_tbi,
         sv=get_report_sv_tsv,
         translocations=get_report_translocations_tsv,
+        rindels_sv=get_report_rindels_sv_tsv,
+        rindels_translocations=get_report_rindels_translocations_tsv,
         cnv=get_report_cnv_tsv,
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
         target_coverage=get_report_target_coverage,

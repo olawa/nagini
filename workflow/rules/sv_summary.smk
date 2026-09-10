@@ -29,6 +29,7 @@ rule sv_summary:
         json="reports/sv_summary/{sample}_{type}.json",
     params:
         extra=config.get("sv_summary", {}).get("extra", ""),
+        caller="Sniffles2",
     log:
         "logs/sv_summary/{sample}_{type}.log",
     benchmark:
@@ -49,5 +50,53 @@ rule sv_summary:
         "../../envs/nagini.yaml"
     message:
         "{rule}: summarise structural variants in {input.vcf}"
+    script:
+        "../scripts/sv_summary.py"
+
+
+rule sv_summary_rindels:
+    """The same summary over the Rindels call set, for a second opinion.
+
+    Rindels --sv-lite derives DEL/DUP/INV/TRA from pair and clip evidence
+    without assembly, which is a different evidence path from Sniffles2's.
+    Running both and tagging the caller lets a dic(9;20) breakpoint be
+    corroborated rather than taken on one caller's word.
+    """
+    input:
+        vcf="cnv/rindels/{sample}_{type}.vcf.gz",
+        tbi="cnv/rindels/{sample}_{type}.vcf.gz.tbi",
+        annotation_bed=lambda wildcards: (
+            config.get("reference", {}).get("sv_annotation_bed", "")
+            or get_sample_design_bed(wildcards.sample)
+            or []
+        ),
+        cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
+    output:
+        tsv="reports/sv_summary_rindels/{sample}_{type}.tsv",
+        translocations="reports/sv_summary_rindels/{sample}_{type}.translocations.tsv",
+        json="reports/sv_summary_rindels/{sample}_{type}.json",
+    params:
+        extra=config.get("sv_summary", {}).get("extra", ""),
+        caller="Rindels",
+    log:
+        "logs/sv_summary_rindels/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/sv_summary_rindels/{sample}_{type}.tsv",
+            config.get("sv_summary", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("sv_summary", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("sv_summary", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("sv_summary", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("sv_summary", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("sv_summary", {}).get("threads", 1),
+        time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("sv_summary", {}).get("container", config["default_container"])
+    conda:
+        "../../envs/nagini.yaml"
+    message:
+        "{rule}: summarise Rindels structural variants for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/sv_summary.py"

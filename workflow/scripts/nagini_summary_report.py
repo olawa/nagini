@@ -63,6 +63,19 @@ def build_summary_report(
     display_id = seq_clean if (seq_clean and seq_clean.lower() not in {"run", "default"}) else parent_dir
     date_str = datetime.now().strftime("%Y-%m-%d")
 
+    # Whether any sample in this run is a BCR-ABL1 workup, decided before the
+    # header is built. An adaptive-sampling run carries no fusion, isoform,
+    # resistance or phasing data, and five columns of "-" per sample invite
+    # the reader to look for a result that was never part of the assay.
+    run_has_bcr_abl = any(
+        str(record.get("assay", "")).strip().lower() == "bcr_abl"
+        or record.get("bcr_abl_fusion")
+        or record.get("bcr_abl_mutations")
+        or record.get("bcr_abl_phasing")
+        or record.get("bcr_abl_exon_coverage")
+        for record in sample_records
+    )
+
     # -----------------------------------------------------------------------
     # 1. OVERVIEW SHEET
     # -----------------------------------------------------------------------
@@ -86,12 +99,20 @@ def build_summary_report(
             ("Mean Q", 1),
             ("N50 [bp]", 1),
             ("Median [bp]", 1),
-            ("Mean Target / KD Depth", 1),
-            ("BCR-ABL1 Fusion Reads", 1),
-            ("BCR-ABL1 Enrichment", 1),
-            ("Primary Isoform", 1),
-            ("Resistance Mutations", 1),
-            ("Compound Phasing", 1),
+            ("Mean Target / KD Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
+        ]
+        + (
+            [
+                ("BCR-ABL1 Fusion Reads", 1),
+                ("BCR-ABL1 Enrichment", 1),
+                ("Primary Isoform", 1),
+                ("Resistance Mutations", 1),
+                ("Compound Phasing", 1),
+            ]
+            if run_has_bcr_abl
+            else []
+        )
+        + [
             ("Status", 1),
         ],
     ]
@@ -193,24 +214,34 @@ def build_summary_report(
         elif not yield_gb or (raw_reads_num < 100):
             sample_status, sample_style = ("REVIEW", 6)
 
-        overview_rows.append([
-            (sample_name, 10),
-            (sample_type, 0),
-            (barcode or "-", 0),
-            (assay, 0),
-            (yield_gb or "-", 0),
-            (total_reads_str or "-", 0),
-            (mean_q or "-", 0),
-            (n50_bp or "-", 0),
-            (median_len or "-", 0),
-            (kd_depth_str, 0),
-            (total_fusion_reads if is_bcr_abl else "-", 0),
-            (target_enrich_str if is_bcr_abl else "-", 0),
-            (prim_iso, 8 if prim_iso not in ("-", "None detected") else 0),
-            (mut_str, 4 if det_muts else 0),
-            (phase_str, 4 if cis_pairs else (6 if trans_pairs else 0)),
-            (sample_status, sample_style),
-        ])
+        overview_rows.append(
+            [
+                (sample_name, 10),
+                (sample_type, 0),
+                (barcode or "-", 0),
+                (assay, 0),
+                (yield_gb or "-", 0),
+                (total_reads_str or "-", 0),
+                (mean_q or "-", 0),
+                (n50_bp or "-", 0),
+                (median_len or "-", 0),
+                (kd_depth_str, 0),
+            ]
+            + (
+                [
+                    (total_fusion_reads if is_bcr_abl else "-", 0),
+                    (target_enrich_str if is_bcr_abl else "-", 0),
+                    (prim_iso, 8 if prim_iso not in ("-", "None detected") else 0),
+                    (mut_str, 4 if det_muts else 0),
+                    (phase_str, 4 if cis_pairs else (6 if trans_pairs else 0)),
+                ]
+                if run_has_bcr_abl
+                else []
+            )
+            + [
+                (sample_status, sample_style),
+            ]
+        )
 
         # Collect PASS variants for PASS Variants tab
         if mutation_rows:

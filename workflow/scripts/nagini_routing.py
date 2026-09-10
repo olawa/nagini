@@ -420,6 +420,7 @@ PIPELINE_CONDITION_NAMES = {
     "target_metrics",
     "merged_fastq",
     "cnv_calling",
+    "rindels_sv",
 }
 
 SAMPLE_CONDITION_NAMES = {
@@ -443,6 +444,7 @@ SAMPLE_CONDITION_NAMES = {
     "merged_fastq",
     "cnv_calling",
     "sample_needs_cnv_calling",
+    "rindels_sv",
 }
 
 # Config flags that are legitimate `when:` values even though they are plain

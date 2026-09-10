@@ -290,18 +290,60 @@ class FullReportTest(unittest.TestCase):
         self.assertEqual(row["target_genes"], "GENE1")
         self.assertEqual(row["is_target_region"], "True")
 
+    @staticmethod
+    def _column(sheet, name):
+        """Read a column by name; the SV tables gained a leading Caller."""
+
+        index = sheet[0].index(name)
+        return [row[index] for row in sheet[1:]]
+
     def test_sv_sheet_excludes_translocations(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sheets = read_workbook(self._build(tmpdir))
-        sv_types = [row[2] for row in sheets["SVs"][1:]]
+        sv_types = self._column(sheets["SVs"], "svtype")
         self.assertIn("DEL", sv_types)
         self.assertNotIn("BND", sv_types)
 
     def test_translocations_sheet_contains_bnd(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sheets = read_workbook(self._build(tmpdir))
-        trans_types = [row[2] for row in sheets["Translocations"][1:]]
-        self.assertIn("BND", trans_types)
+        self.assertIn("BND", self._column(sheets["Translocations"], "svtype"))
+
+    def test_both_callers_share_one_sv_table(self):
+        """Sniffles2 and Rindels reach breakpoints by different evidence.
+
+        A single table with a Caller column lets a call be corroborated
+        instead of read from one caller alone.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            rindels_sv = root / "rindels_sv.tsv"
+            rindels_sv.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\tpos\tend\tchrom2\ttranslocation\n"
+                "example\tT\tRindels\tDUP\tchr21\t100\t9000\t\tFalse\n"
+            )
+            rindels_trans = root / "rindels_trans.tsv"
+            rindels_trans.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\tpos\tend\tchrom2\ttranslocation\n"
+                "example\tT\tRindels\tBND\tchr9\t400\t400\tchr21\tTrue\n"
+            )
+            output = root / "two_callers.xlsx"
+            REPORT.generate_report(
+                str(output), "example", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), str(rest[0]) if rest else "",
+                "", str(cramino), str(cytoband),
+                rindels_sv_tsv=str(rindels_sv),
+                rindels_translocations_tsv=str(rindels_trans),
+            )
+            sheets = read_workbook(output)
+
+        self.assertEqual(sheets["SVs"][0][0], "caller")
+        self.assertEqual(set(self._column(sheets["SVs"], "caller")), {"Sniffles2", "Rindels"})
+        self.assertIn("DUP", self._column(sheets["SVs"], "svtype"))
+        trans = sheets["Translocations"]
+        self.assertEqual(set(self._column(trans, "caller")), {"Sniffles2", "Rindels"})
 
     def test_structural_variants_are_annotated_with_cytobands(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -63,6 +63,10 @@ class SummaryReportTest(unittest.TestCase):
                 self.assertIn("Overview", wb_xml)
                 self.assertIn("BCR-ABL1 Overview", wb_xml)
                 self.assertIn("BCR-ABL (sample1)", wb_xml)
+            # A bcr_abl run keeps the columns an adaptive run drops.
+            text = _shared_strings(out_xlsx)
+            self.assertIn("BCR-ABL1 Fusion Reads", text)
+            self.assertIn("Mean Target / KD Depth", text)
 
 
     def test_a_run_without_small_variant_calling_says_so(self):
@@ -93,6 +97,16 @@ class SummaryReportTest(unittest.TestCase):
 
         self.assertIn("was not part of this run's assay", text)
         self.assertNotIn("No high-confidence PASS variants detected", text)
+        # An adaptive run has no fusion, isoform, resistance or phasing data.
+        for column in (
+            "BCR-ABL1 Fusion Reads",
+            "BCR-ABL1 Enrichment",
+            "Primary Isoform",
+            "Resistance Mutations",
+            "Compound Phasing",
+        ):
+            self.assertNotIn(column, text)
+        self.assertIn("Mean Target Depth", text)
 
 
 def _shared_strings(xlsx_path):

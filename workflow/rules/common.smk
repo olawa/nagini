@@ -1035,6 +1035,34 @@ def get_report_sv_tsv(wildcards):
     return []
 
 
+def sample_has_rindels_sv(sample):
+    """Whether a Rindels structural call set exists for this sample.
+
+    Rindels runs for CNV, and in --sv-lite it also reports DEL/DUP/INV/TRA, so
+    the second call set exists exactly when CNV calling does and the mode is
+    not the CNV-only one that disables SV.
+    """
+
+    if not sample_needs_cnv_calling(sample):
+        return False
+    extra = str(config.get("rindels", {}).get("extra_cnv", "")).lower()
+    return "--only-cnv" not in extra and "--no-sv" not in extra
+
+
+def get_report_rindels_sv_tsv(wildcards):
+    if sample_has_rindels_sv(wildcards.sample):
+        return get_sample_type_path(wildcards, "reports/sv_summary_rindels", ".tsv")
+    return []
+
+
+def get_report_rindels_translocations_tsv(wildcards):
+    if sample_has_rindels_sv(wildcards.sample):
+        return get_sample_type_path(
+            wildcards, "reports/sv_summary_rindels", ".translocations.tsv"
+        )
+    return []
+
+
 def get_report_translocations_tsv(wildcards):
     if sample_needs_sv_calling(wildcards.sample):
         return get_sample_type_path(
@@ -1161,6 +1189,9 @@ _PIPELINE_CONDITIONS = {
     "merged_fastq": lambda: any(
         sample_has_merged_fastq(s) for s in get_samples(samples)
     ),
+    "rindels_sv": lambda: any(
+        sample_has_rindels_sv(s) for s in get_samples(samples)
+    ),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
@@ -1187,6 +1218,7 @@ _SAMPLE_CONDITIONS = {
     "target_restricted": sample_is_target_restricted,
     "target_metrics": sample_has_target_metrics,
     "merged_fastq": sample_has_merged_fastq,
+    "rindels_sv": sample_has_rindels_sv,
     "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }

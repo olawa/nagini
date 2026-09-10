@@ -86,6 +86,14 @@ files:
     input: null
     output: "cnv/rindels/{sample}_{type}.ascat.bed"
     when: cnv_calling
+  - name: Rindels structural variant summary
+    input: null
+    output: "reports/sv_summary_rindels/{sample}_{type}.tsv"
+    when: rindels_sv
+  - name: Rindels translocation table
+    input: null
+    output: "reports/sv_summary_rindels/{sample}_{type}.translocations.tsv"
+    when: rindels_sv
   - name: Rindels variant VCF
     input: null
     output: "cnv/rindels/{sample}_{type}.vcf.gz"
