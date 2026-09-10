@@ -518,6 +518,25 @@ def _optional_reference_path(key):
     return value if value and os.path.isfile(value) else ""
 
 
+def get_gene_annotation(wildcards=None):
+    return _optional_reference_path("gene_annotation")
+
+
+def get_rindels_annotation_args():
+    """--gtf and coding-only annotation for Rindels, when a GTF is installed.
+
+    Deliberately not --exonic: that limits the whole analysis to exons, which
+    would gut the genome-wide read-count binning the CNV segmentation is built
+    on. Annotating instead keeps the call set genome-wide and lets the report
+    pick out the coding and splice variants.
+    """
+
+    gtf = get_gene_annotation()
+    if not gtf:
+        return ""
+    return f"--gtf {gtf} --annotate --annot-coding-only"
+
+
 def get_clinvar_vcf(wildcards=None):
     return _optional_reference_path("clinvar")
 

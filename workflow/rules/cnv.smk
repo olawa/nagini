@@ -10,6 +10,7 @@ rule cnv_rindels:
         bam="alignment/merged/{sample}_{type}.bam",
         bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
+        gtf=lambda wildcards: get_gene_annotation() or [],
     output:
         # Rindels names its sidecars after the -o base, so -o must be
         # {sample}_{type}.vcf for the segmentation to land on
@@ -36,6 +37,9 @@ rule cnv_rindels:
         # implies --no-snp, which leaves ASCAT without heterozygous markers and
         # produces no .ascat.bed at all.
         extra=config.get("rindels", {}).get("extra_cnv", "--ont --sv-lite"),
+        # Gene annotation when the reference build has a GTF installed, so the
+        # call set carries genes and consequences rather than coordinates only.
+        annotation=lambda wildcards: get_rindels_annotation_args(),
     log:
         "logs/cnv_rindels/{sample}_{type}.log",
     benchmark:
@@ -68,6 +72,7 @@ rule cnv_rindels:
             --cnv-bin-size {params.bin_size} \
             -o {output.vcf} \
             -t {threads} \
+            {params.annotation} \
             {params.extra}
 
         # Rindels skips the ASCAT segmentation when it finds fewer than 100

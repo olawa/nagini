@@ -4,9 +4,11 @@ from pathlib import Path
 
 try:
     import xlsxwriter
+    import nagini_summary_report as SUMMARY_MODULE
     from nagini_summary_report import build_summary_report
 except ImportError:
     xlsxwriter = None
+    SUMMARY_MODULE = None
     build_summary_report = None
 
 
@@ -107,6 +109,46 @@ class SummaryReportTest(unittest.TestCase):
         ):
             self.assertNotIn(column, text)
         self.assertIn("Mean Target Depth", text)
+
+
+class StackedTablesTest(unittest.TestCase):
+    def test_the_sample_column_leads_and_columns_are_unioned(self):
+        """Five samples' calls should be readable in one place.
+
+        Callers and versions can write different column sets, so the union is
+        taken and blanks are left rather than shifting a row's fields.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            first = tmp / "a.tsv"
+            first.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\n"
+                "gustaf1\tT\tSniffles2\tDEL\tchr9\n"
+            )
+            # A second sample whose table carries an extra column.
+            second = tmp / "b.tsv"
+            second.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\tgenes\n"
+                "gustaf2\tT\tRindels\tBND\tchr21\tRUNX1\n"
+            )
+            records = [
+                {"sample": "gustaf1", "type": "T", "sv_tsv": str(first)},
+                {"sample": "gustaf2", "type": "T", "sv_tsv": str(second)},
+            ]
+            rows = SUMMARY_MODULE.stack_sample_tables(records, ("sv_tsv",))
+
+        header = [cell[0] for cell in rows[0]]
+        self.assertEqual(header[0], "sample")
+        self.assertIn("genes", header)
+        body = [[cell[0] for cell in row] for row in rows[1:]]
+        self.assertEqual([row[0] for row in body], ["gustaf1", "gustaf2"])
+        # The sample without a genes column gets a blank, not a shifted row.
+        self.assertEqual(body[0][header.index("genes")], "")
+        self.assertEqual(body[1][header.index("genes")], "RUNX1")
+
+    def test_no_sheet_when_no_sample_produced_the_table(self):
+        self.assertEqual(SUMMARY_MODULE.stack_sample_tables([{"sample": "x"}], ("cnv_tsv",)), [])
 
 
 def _shared_strings(xlsx_path):

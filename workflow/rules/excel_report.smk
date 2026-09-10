@@ -67,6 +67,11 @@ rule nagini_excel_report:
 _SUMMARY_OPTIONAL_KEYS = (
     "target_coverages",
     "target_craminos",
+    "sv_tsvs",
+    "translocation_tsvs",
+    "rindels_sv_tsvs",
+    "rindels_translocation_tsvs",
+    "cnv_tsvs",
     "snv_vcfs",
     "bcr_abl_fusions",
     "bcr_abl_mutations",
@@ -112,6 +117,31 @@ def summary_report_files():
                         else ""
                     ),
                     "snv_vcfs": snv_vcf,
+                    "sv_tsvs": (
+                        f"reports/sv_summary/{s}_{t}.tsv"
+                        if sample_needs_sv_calling(s)
+                        else ""
+                    ),
+                    "translocation_tsvs": (
+                        f"reports/sv_summary/{s}_{t}.translocations.tsv"
+                        if sample_needs_sv_calling(s)
+                        else ""
+                    ),
+                    "rindels_sv_tsvs": (
+                        f"reports/sv_summary_rindels/{s}_{t}.tsv"
+                        if sample_has_rindels_sv(s)
+                        else ""
+                    ),
+                    "rindels_translocation_tsvs": (
+                        f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv"
+                        if sample_has_rindels_sv(s)
+                        else ""
+                    ),
+                    "cnv_tsvs": (
+                        f"reports/cnv_summary/{s}_{t}.cnv.tsv"
+                        if sample_needs_cnv_calling(s)
+                        else ""
+                    ),
                     "bcr_abl_fusions": f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv" if bcr else "",
                     "bcr_abl_mutations": f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv" if bcr else "",
                     "bcr_abl_phasings": f"reports/bcr_abl/{s}_{t}.phasing.tsv" if bcr else "",
@@ -170,6 +200,13 @@ rule nagini_summary_excel_report:
         # Aligned to sample_names, unlike input, which cannot carry a gap.
         target_coverage_paths=lambda wildcards: get_summary_report_paths("target_coverages"),
         target_cramino_paths=lambda wildcards: get_summary_report_paths("target_craminos"),
+        sv_tsv_paths=lambda wildcards: get_summary_report_paths("sv_tsvs"),
+        translocation_tsv_paths=lambda wildcards: get_summary_report_paths("translocation_tsvs"),
+        rindels_sv_tsv_paths=lambda wildcards: get_summary_report_paths("rindels_sv_tsvs"),
+        rindels_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
+            "rindels_translocation_tsvs"
+        ),
+        cnv_tsv_paths=lambda wildcards: get_summary_report_paths("cnv_tsvs"),
         design_bed=lambda wildcards: get_resolved_design_bed(),
         snv_vcf_paths=lambda wildcards: get_summary_report_paths("snv_vcfs"),
         bcr_abl_fusion_paths=lambda wildcards: get_summary_report_paths("bcr_abl_fusions"),

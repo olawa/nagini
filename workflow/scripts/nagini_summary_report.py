@@ -47,6 +47,47 @@ except ImportError:
     )
 
 
+def stack_sample_tables(sample_records, keys):
+    """Concatenate one TSV per sample into styled rows, sample column first.
+
+    Column sets can differ between samples and between callers, so the union
+    is taken in first-seen order and missing values are left blank rather than
+    shifting a row's fields. Returns [] when no sample produced the table, so
+    the caller can leave the sheet out entirely.
+    """
+
+    tables = []
+    for record in sample_records:
+        for key in keys:
+            path = record.get(key, "")
+            if path and os.path.isfile(path):
+                columns, rows = parse_tsv(path)
+                if rows:
+                    tables.append((columns, rows, record))
+
+    if not tables:
+        return []
+
+    ordered = []
+    for columns, _rows, _record in tables:
+        for column in columns:
+            if column not in ordered:
+                ordered.append(column)
+    # The sample is what makes a stacked table readable, so it leads.
+    for leading in ("type", "sample"):
+        if leading in ordered:
+            ordered.insert(0, ordered.pop(ordered.index(leading)))
+
+    out = [[(column, 1) for column in ordered]]
+    for _columns, rows, record in tables:
+        for row in rows:
+            values = dict(row)
+            values.setdefault("sample", record.get("sample", ""))
+            values.setdefault("type", record.get("type", ""))
+            out.append([(values.get(column, ""), 0) for column in ordered])
+    return out
+
+
 def build_summary_report(
     output_path: str,
     sequence_id: str,
@@ -121,6 +162,9 @@ def build_summary_report(
             ("Mean Target / KD Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
             ("Mean WGS Depth", 1),
             ("Fold Enrichment", 1),
+            ("On-Target Accuracy", 1),
+            ("On-Target N50 [bp]", 1),
+            ("On-Target Median [bp]", 1),
         ]
         + (
             [
@@ -150,6 +194,7 @@ def build_summary_report(
         cramino_path = s.get("cramino", "")
         wgs_cov_path = s.get("wgs_coverage", "")
         target_cov_path = s.get("target_coverage", "")
+        target_cramino_path = s.get("target_cramino", "")
         snv_vcf_path = s.get("snv_vcf", "")
         fusion_tsv_path = s.get("bcr_abl_fusion", "")
         mut_tsv_path = s.get("bcr_abl_mutations", "")
@@ -168,9 +213,41 @@ def build_summary_report(
             "Total reads",
             "Read count",
         )
-        mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
+        # cramino reports alignment identity rather than a basecall Q in the
+        # versions in use, which is why this column read "-".
+        quality_keys = (
+            "Mean read quality",
+            "Mean quality",
+            "Average read quality",
+            "Mean base quality",
+            "Median read quality",
+            "Quality",
+            "Q-score",
+        )
+        identity_keys = ("Mean identity", "Median identity", "Identity")
+        mean_q = _find_metric(cramino_dict, *quality_keys) or _find_metric(
+            cramino_dict, *identity_keys
+        )
         n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
         median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
+
+        # The same statistics over the target BAM. On an adaptive run the
+        # genome-wide numbers describe mostly rejected reads, so accuracy and
+        # length on target are the ones that say anything about the calls.
+        target_cramino_dict = {}
+        if target_cramino_path and os.path.exists(target_cramino_path):
+            target_cramino_dict = {
+                row["Metric"]: row["Value"] for row in parse_cramino(target_cramino_path)[1]
+            }
+        on_target_accuracy = _find_metric(
+            target_cramino_dict, *identity_keys
+        ) or _find_metric(target_cramino_dict, *quality_keys)
+        on_target_n50 = _find_metric(
+            target_cramino_dict, "Read length N50", "N50", "N50 read length"
+        )
+        on_target_median = _find_metric(
+            target_cramino_dict, "Median read length", "Median length", "Median"
+        )
 
 
         # Parse BCR-ABL1 metrics if present
@@ -280,6 +357,9 @@ def build_summary_report(
                 (kd_depth_str, 0),
                 (wgs_depth_str, 0),
                 (fold_enrich_str, 0),
+                (on_target_accuracy or "-", 0),
+                (on_target_n50 or "-", 0),
+                (on_target_median or "-", 0),
             ]
             + (
                 [
@@ -391,6 +471,21 @@ def build_summary_report(
         )
         pass_var_rows.append([(note, 0)] + [("", 0)] * 12)
     sheets.append(("PASS Variants", pass_var_rows, TABLE))
+
+    # -----------------------------------------------------------------------
+    # 2b. THE PER-SAMPLE CALL TABLES, STACKED
+    # -----------------------------------------------------------------------
+    # The same sheets the per-sample workbooks carry, concatenated across the
+    # run. The TSVs already lead with a sample column, so a finding can be read
+    # across five samples in one place instead of by opening five files.
+    for sheet_name, keys in (
+        ("SVs", ("sv_tsv", "rindels_sv_tsv")),
+        ("Translocations", ("translocations_tsv", "rindels_translocations_tsv")),
+        ("CNVs", ("cnv_tsv",)),
+    ):
+        stacked = stack_sample_tables(sample_records, keys)
+        if stacked:
+            sheets.append((sheet_name, stacked, TABLE))
 
     # -----------------------------------------------------------------------
     # 3. MULTI-SAMPLE BCR-ABL1 OVERVIEW (if BCR-ABL1 assay data present)
@@ -546,6 +641,12 @@ def run_from_snakemake(snakemake):
     # sample's variants to another. The params lists carry one entry per
     # sample with "" where the file does not exist.
     target_covs = list(getattr(snakemake.params, "target_coverage_paths", []))
+    target_craminos = list(getattr(snakemake.params, "target_cramino_paths", []))
+    sv_tsvs = list(getattr(snakemake.params, "sv_tsv_paths", []))
+    trans_tsvs = list(getattr(snakemake.params, "translocation_tsv_paths", []))
+    rindels_sv_tsvs = list(getattr(snakemake.params, "rindels_sv_tsv_paths", []))
+    rindels_trans_tsvs = list(getattr(snakemake.params, "rindels_translocation_tsv_paths", []))
+    cnv_tsvs = list(getattr(snakemake.params, "cnv_tsv_paths", []))
     snv_vcfs = list(getattr(snakemake.params, "snv_vcf_paths", []))
     bcr_fusions = list(getattr(snakemake.params, "bcr_abl_fusion_paths", []))
     bcr_mutations = list(getattr(snakemake.params, "bcr_abl_mutation_paths", []))
@@ -566,6 +667,14 @@ def run_from_snakemake(snakemake):
             "cramino": craminos[i] if i < len(craminos) else "",
             "wgs_coverage": wgs_covs[i] if i < len(wgs_covs) else "",
             "target_coverage": target_covs[i] if i < len(target_covs) else "",
+            "target_cramino": target_craminos[i] if i < len(target_craminos) else "",
+            "sv_tsv": sv_tsvs[i] if i < len(sv_tsvs) else "",
+            "translocations_tsv": trans_tsvs[i] if i < len(trans_tsvs) else "",
+            "rindels_sv_tsv": rindels_sv_tsvs[i] if i < len(rindels_sv_tsvs) else "",
+            "rindels_translocations_tsv": (
+                rindels_trans_tsvs[i] if i < len(rindels_trans_tsvs) else ""
+            ),
+            "cnv_tsv": cnv_tsvs[i] if i < len(cnv_tsvs) else "",
             "snv_vcf": snv_vcfs[i] if i < len(snv_vcfs) else "",
             "bcr_abl_fusion": bcr_fusions[i] if i < len(bcr_fusions) else "",
             "bcr_abl_mutations": bcr_mutations[i] if i < len(bcr_mutations) else "",
