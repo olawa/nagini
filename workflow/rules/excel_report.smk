@@ -64,6 +64,7 @@ rule nagini_excel_report:
 # to align them to the sample list by position, so they are built once, per
 # sample, with an empty string where the file does not exist.
 _SUMMARY_OPTIONAL_KEYS = (
+    "target_coverages",
     "snv_vcfs",
     "bcr_abl_fusions",
     "bcr_abl_mutations",
@@ -98,6 +99,11 @@ def summary_report_files():
                     "reports": f"reports/{s}_{t}.nagini_report.xlsx",
                     "craminos": f"qc/cramino/{s}_{t}.txt",
                     "wgs_coverages": f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt",
+                    "target_coverages": (
+                        f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt"
+                        if sample_has_target_metrics(s)
+                        else ""
+                    ),
                     "snv_vcfs": snv_vcf,
                     "bcr_abl_fusions": f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv" if bcr else "",
                     "bcr_abl_mutations": f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv" if bcr else "",
@@ -155,6 +161,8 @@ rule nagini_summary_excel_report:
         reference_build=lambda wildcards: config.get("reference", {}).get("build", config.get("reference_build", "hg38")),
         sequence_id=lambda wildcards: config.get("sequence_id", os.path.basename(os.getcwd())),
         # Aligned to sample_names, unlike input, which cannot carry a gap.
+        target_coverage_paths=lambda wildcards: get_summary_report_paths("target_coverages"),
+        design_bed=lambda wildcards: get_resolved_design_bed(),
         snv_vcf_paths=lambda wildcards: get_summary_report_paths("snv_vcfs"),
         bcr_abl_fusion_paths=lambda wildcards: get_summary_report_paths("bcr_abl_fusions"),
         bcr_abl_mutation_paths=lambda wildcards: get_summary_report_paths("bcr_abl_mutations"),

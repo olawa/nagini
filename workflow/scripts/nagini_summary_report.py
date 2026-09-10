@@ -52,6 +52,7 @@ def build_summary_report(
     sequence_id: str,
     reference_build: str,
     sample_records: List[Dict[str, Any]],
+    design_bed: str = "",
 ) -> None:
     """Build the multi-sample workbook."""
     sheets = []
@@ -86,6 +87,24 @@ def build_summary_report(
         [("Sequence ID / Run", 7), (display_id, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
         [("Reference Genome", 7), (reference_build, 0), ("Total Samples", 7), (len(sample_records), 0)],
         [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
+        [
+            ("Target Region / Panel", 7),
+            (os.path.basename(design_bed) if design_bed else "Whole Genome (WGS)", 0),
+            ("Assays", 7),
+            (
+                ", ".join(
+                    sorted(
+                        {
+                            str(record.get("assay", "") or "").strip()
+                            for record in sample_records
+                            if str(record.get("assay", "") or "").strip()
+                        }
+                    )
+                )
+                or "-",
+                0,
+            ),
+        ],
 
         [("", 0), ("", 0), ("", 0), ("", 0)],
         [("SAMPLE QUALITY CONTROL & SEQUENCING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
@@ -100,6 +119,8 @@ def build_summary_report(
             ("N50 [bp]", 1),
             ("Median [bp]", 1),
             ("Mean Target / KD Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
+            ("Mean WGS Depth", 1),
+            ("Fold Enrichment", 1),
         ]
         + (
             [
@@ -128,6 +149,7 @@ def build_summary_report(
         assay = s.get("assay", "wgs")
         cramino_path = s.get("cramino", "")
         wgs_cov_path = s.get("wgs_coverage", "")
+        target_cov_path = s.get("target_coverage", "")
         snv_vcf_path = s.get("snv_vcf", "")
         fusion_tsv_path = s.get("bcr_abl_fusion", "")
         mut_tsv_path = s.get("bcr_abl_mutations", "")
@@ -138,7 +160,14 @@ def build_summary_report(
         _, cramino_rows = parse_cramino(cramino_path)
         cramino_dict = {row["Metric"]: row["Value"] for row in cramino_rows}
         yield_gb = _find_metric(cramino_dict, "Yield [Gb]", "Yield", "Bases")
-        total_reads_str = _find_metric(cramino_dict, "Number of reads", "Total reads", "Read count")
+        total_reads_str = _find_metric(
+            cramino_dict,
+            "Number of reads",
+            # cramino labels this "Number of alignments".
+            "Number of alignments",
+            "Total reads",
+            "Read count",
+        )
         mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
         n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
         median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
@@ -177,6 +206,14 @@ def build_summary_report(
             pct = (total_fusion_reads / raw_reads_num) * 100.0
             target_enrich_str = f"{pct:.2f}%"
 
+        wgs_depth_str = "N/A"
+        if wgs_cov_path and os.path.exists(wgs_cov_path):
+            _, rows = parse_tsv(wgs_cov_path)
+            for row in rows:
+                if str(row.get("chrom", "")).strip().lower() == "total":
+                    wgs_depth_str = f"{float(row.get('mean', 0.0)):.2f}x"
+                    break
+
         # Target / Kinase coverage
         kd_depth_str = "N/A"
         if exon_rows:
@@ -187,12 +224,17 @@ def build_summary_report(
         elif mutation_rows:
             avg_d = sum(int(r.get("depth", 0)) for r in mutation_rows) / len(mutation_rows)
             kd_depth_str = f"{avg_d:.1f}x"
-        elif wgs_cov_path and os.path.exists(wgs_cov_path):
-            _, wgs_rows = parse_tsv(wgs_cov_path)
-            for wr in wgs_rows:
-                if str(wr.get("chrom", "")).lower() == "total":
-                    kd_depth_str = f"{float(wr.get('mean', 0.0)):.2f}x"
+        elif target_cov_path and os.path.exists(target_cov_path):
+            # mosdepth --by writes both "total" (whole reference) and
+            # "total_region" (inside the BED). Reading the wrong one reported
+            # background depth in a column labelled target depth.
+            _, target_rows = parse_tsv(target_cov_path)
+            for row in target_rows:
+                if str(row.get("chrom", "")).strip().lower() == "total_region":
+                    kd_depth_str = f"{float(row.get('mean', 0.0)):.2f}x"
                     break
+        else:
+            kd_depth_str = wgs_depth_str
 
         prim_iso = next((r["fusion_isoform"] for r in fusion_rows if r.get("status") == "PRIMARY"), ("None detected" if is_bcr_abl else "-"))
         det_muts = [r["mutation"] for r in mutation_rows if str(r.get("status", "")).upper() == "DETECTED"]
@@ -207,6 +249,16 @@ def build_summary_report(
             phase_str = f"TRANS ({', '.join(trans_pairs)})"
         elif is_bcr_abl:
             phase_str = "N/A (<2 muts)"
+
+        # Target depth alone says nothing about whether the enrichment worked;
+        # the ratio to background does.
+        fold_enrich_str = "-"
+        if target_cov_path:
+            try:
+                fold = float(kd_depth_str.rstrip("x")) / float(wgs_depth_str.rstrip("x"))
+                fold_enrich_str = f"{fold:.1f}x"
+            except (ValueError, ZeroDivisionError, AttributeError):
+                fold_enrich_str = "-"
 
         sample_status, sample_style = ("PASS", 5)
         if det_muts or cis_pairs:
@@ -226,6 +278,8 @@ def build_summary_report(
                 (n50_bp or "-", 0),
                 (median_len or "-", 0),
                 (kd_depth_str, 0),
+                (wgs_depth_str, 0),
+                (fold_enrich_str, 0),
             ]
             + (
                 [
@@ -491,6 +545,7 @@ def run_from_snakemake(snakemake):
     # that have the file, and indexing that by sample position attributed one
     # sample's variants to another. The params lists carry one entry per
     # sample with "" where the file does not exist.
+    target_covs = list(getattr(snakemake.params, "target_coverage_paths", []))
     snv_vcfs = list(getattr(snakemake.params, "snv_vcf_paths", []))
     bcr_fusions = list(getattr(snakemake.params, "bcr_abl_fusion_paths", []))
     bcr_mutations = list(getattr(snakemake.params, "bcr_abl_mutation_paths", []))
@@ -510,6 +565,7 @@ def run_from_snakemake(snakemake):
             "assay": assay,
             "cramino": craminos[i] if i < len(craminos) else "",
             "wgs_coverage": wgs_covs[i] if i < len(wgs_covs) else "",
+            "target_coverage": target_covs[i] if i < len(target_covs) else "",
             "snv_vcf": snv_vcfs[i] if i < len(snv_vcfs) else "",
             "bcr_abl_fusion": bcr_fusions[i] if i < len(bcr_fusions) else "",
             "bcr_abl_mutations": bcr_mutations[i] if i < len(bcr_mutations) else "",
@@ -524,6 +580,7 @@ def run_from_snakemake(snakemake):
         sequence_id=seq_id,
         reference_build=ref_build,
         sample_records=sample_records,
+        design_bed=str(getattr(snakemake.params, "design_bed", "") or ""),
     )
 
 

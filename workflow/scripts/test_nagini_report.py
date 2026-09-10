@@ -402,6 +402,58 @@ class FullReportTest(unittest.TestCase):
         # 27.46 / 3.77, not 3.77 / 3.77.
         self.assertIn("Target Fold Enrichment\tTarget / WGS coverage ratio\t7.3x\tPASS", text)
 
+    def test_chromosomes_outside_the_design_are_not_low_coverage_targets(self):
+        """A real mosdepth --by summary, from the T2T run.
+
+        Every chromosome gets a "<chrom>_region" row, length 0 when the design
+        never touches it. Counting those as target regions reported chr18,
+        chr19, chrY and chrM as severely low-coverage targets and pushed the
+        run to ACTION REQUIRED.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            wgs_cov = root / "wgs_cov.tsv"
+            wgs_cov.write_text(
+                "chrom\tlength\tbases\tmean\ntotal\t3117292070\t11764076766\t3.77\n"
+            )
+            target_cov = root / "target_cov.tsv"
+            target_cov.write_text(
+                "chrom\tlength\tbases\tmean\n"
+                "chr18\t80542538\t200000000\t2.48\n"
+                "chr18_region\t0\t0\t0.00\n"
+                "chr20\t66210255\t1515011884\t22.88\n"
+                "chr20_region\t39999999\t1452460259\t36.31\n"
+                "chr21\t45090682\t1087568923\t24.12\n"
+                "chr21_region\t34090682\t1050000581\t30.80\n"
+                "chr22\t51324926\t471771500\t9.19\n"
+                "chr22_region\t14000000\t366511938\t26.18\n"
+                "chrY\t62460029\t22282056\t0.36\n"
+                "chrY_region\t0\t0\t0.00\n"
+                "chrM\t16569\t624408\t37.69\n"
+                "chrM_region\t0\t0\t0.00\n"
+                "total\t3117292070\t11764076766\t3.77\n"
+                "total_region\t120090681\t3298010922\t27.46\n"
+            )
+            output = root / "regions.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), str(wgs_cov), str(target_cov),
+                str(cramino), str(cytoband),
+                design_bed="/data/dic_9_20_iamp21_T2T.bed",
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+
+        self.assertIn("Mean Target Coverage\tMean depth in target BED\t27.46", text)
+        # Every design region is above 20x, so there is nothing to flag.
+        self.assertIn("Low-Coverage Regions (<20x)\tTarget regions below 20x depth\t0", text)
+        self.assertNotIn("LOW-COVERAGE TARGET REGIONS", text)
+        for absent in ("chr18", "chrY", "chrM"):
+            self.assertNotIn(f"{absent}\t0.00x", text)
+
     def test_adaptive_sampling_enrichment_and_demux_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

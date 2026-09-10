@@ -814,7 +814,14 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     cramino_dict = {row["Metric"]: row["Value"] for row in cramino_rows}
     yield_gb = _find_metric(cramino_dict, "Yield [Gb]", "Yield", "Bases")
-    total_reads = _find_metric(cramino_dict, "Number of reads", "Total reads", "Read count")
+    total_reads = _find_metric(
+        cramino_dict,
+        "Number of reads",
+        # cramino labels this "Number of alignments".
+        "Number of alignments",
+        "Total reads",
+        "Read count",
+    )
     mean_q = _find_metric(cramino_dict, "Mean read quality", "Mean quality", "Average read quality", "Mean base quality", "Median read quality", "Quality", "Q-score")
     n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
     median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
@@ -920,16 +927,46 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
     low_cov_20x = []
     if not has_bcr_abl:
-        for r in target_rows:
-            chrom_name = str(r.get("chrom", "")).strip()
-            if not chrom_name or chrom_name.lower() == "total":
-                continue
+        # mosdepth --by writes a whole-reference row per chromosome as well as
+        # a "<chrom>_region" row for the part inside the BED, and a chromosome
+        # the design never touches still gets a _region row of length 0.
+        # Treating every row as a target region listed chromosomes that are
+        # not in the design at 0.00x as severely low-coverage targets, and
+        # mixed whole-chromosome means in among the real ones.
+        region_rows = [
+            row
+            for row in target_rows
+            if str(row.get("chrom", "")).strip().lower().endswith("_region")
+            and str(row.get("chrom", "")).strip().lower() != "total_region"
+        ]
+        if region_rows:
+            candidates = []
+            for row in region_rows:
+                try:
+                    covered = float(str(row.get("length", 0)).split()[0])
+                except (ValueError, TypeError):
+                    covered = 0.0
+                if covered <= 0:
+                    continue  # chromosome absent from the design
+                name = str(row.get("chrom", "")).strip()
+                candidates.append((name[: -len("_region")], row))
+        else:
+            # A summary written without --by, or one that names each interval
+            # instead: fall back to every row that is not the run total.
+            candidates = [
+                (str(row.get("chrom", "")).strip(), row)
+                for row in target_rows
+                if str(row.get("chrom", "")).strip()
+                and str(row.get("chrom", "")).strip().lower() != "total"
+            ]
+
+        for name, row in candidates:
             try:
-                m_cov = float(str(r.get("mean", 0)).split()[0])
+                m_cov = float(str(row.get("mean", 0)).split()[0])
             except (ValueError, TypeError):
                 continue
             if m_cov < 20.0:
-                low_cov_20x.append((chrom_name, m_cov))
+                low_cov_20x.append((name, m_cov))
         low_cov_20x.sort(key=lambda x: x[1])
         low_20x_count = len(low_cov_20x)
         low_cov_status, low_cov_style = (
