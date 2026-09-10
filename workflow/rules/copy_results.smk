@@ -3,52 +3,45 @@ __copyright__ = "Copyright 2026, Ola Wallerman"
 __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
-"""Generate Hydra-style copy rules for output entries with an input path."""
+"""Copy the deliverables named in the output spec into results/.
+
+An entry in config/output_files.yaml with an `input:` path is produced in
+place by its own rule and copied here, so results/ holds the run's
+deliverables while the working directories keep the intermediates. Entries
+with `input: null` are delivered in place only; read-level data (the merged
+and target BAMs, the merged FASTQ, per-base coverage) is deliberately among
+them, since copying it would roughly double a run's footprint.
+
+This used to generate one rule per entry by exec'ing decorator source. That
+broke on Snakemake 9, which cannot resolve a rule whose source file it has
+never seen, and it had carried two latent bugs the whole time: `when:` was
+read as a plain config flag, so no conditional entry ever produced a copy
+rule, and mem_mb was emitted as a string. One generic rule needs none of it.
+"""
 
 
-output_directory = pathlib.Path(output_spec.get("directory", "./"))
-copy_rule_strings = []
-for file_definition in output_spec["files"]:
-    if file_definition.get("when") and not config.get(file_definition["when"], False):
-        continue
-    if file_definition["input"] is None:
-        continue
-
-    rule_name = "_copy_{}".format(
-        "_".join(re.split(r"\W{1,}", file_definition["name"].strip().lower()))
-    )
-    input_file = pathlib.Path(file_definition["input"])
-    output_file = output_directory / pathlib.Path(file_definition["output"])
-    copy_resources = config.get("_copy", {})
-    mem_mb = copy_resources.get("mem_mb", config["default_resources"]["mem_mb"])
-    mem_per_cpu = copy_resources.get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])
-    partition = copy_resources.get("partition", config["default_resources"]["partition"])
-    threads = copy_resources.get("threads", config["default_resources"]["threads"])
-    time = copy_resources.get("time", config["default_resources"]["time"])
-    copy_container = copy_resources.get("container", config["default_container"])
-
-    copy_rule_strings.append(
-        "\n".join(
-            [
-                f'@workflow.rule(name="{rule_name}")',
-                f'@workflow.input("{input_file}")',
-                f'@workflow.output("{output_file}")',
-                f'@workflow.log("logs/{rule_name}_{output_file.name}.log")',
-                f'@workflow.container("{copy_container}")',
-                f'@workflow.resources(time="{time}", threads={threads}, mem_mb="{mem_mb}", '
-                f'mem_per_cpu={mem_per_cpu}, partition="{partition}")',
-                f'@workflow.shellcmd("{copy_container}")',
-                "@workflow.run\n",
-                f"def __rule_{rule_name}(input, output, params, wildcards, threads, resources, "
-                "log, version, rule, conda_env, container_img, singularity_args, use_singularity, "
-                "env_modules, bench_record, jobid, is_shell, bench_iteration, cleanup_scripts, "
-                "shadow_dir, edit_notebook, conda_base_path, basedir, runtime_sourcecache_path, "
-                "__is_snakemake_rule_func=True):",
-                '\tshell("(cp --preserve=timestamps {input[0]} {output[0]}) &> {log}", '
-                "bench_record=bench_record, bench_iteration=bench_iteration)\n\n",
-            ]
-        )
-    )
-
-if copy_rule_strings:
-    exec(compile("\n".join(copy_rule_strings), "copy_result_files", "exec"), workflow.globals)
+rule copy_to_results:
+    """Copy one deliverable into results/, leaving the in-place file alone."""
+    input:
+        # results/<path> comes from <path>; the constraint stops results/
+        # from being its own source.
+        lambda wildcards: wildcards.path,
+    output:
+        "results/{path}",
+    wildcard_constraints:
+        path=r"(?!results/).+",
+    log:
+        "logs/copy_to_results/{path}.log",
+    threads: 1
+    resources:
+        mem_mb=config.get("_copy", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("_copy", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("_copy", {}).get("partition", config["default_resources"]["partition"]),
+        threads=1,
+        time=config.get("_copy", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("_copy", {}).get("container", config["default_container"])
+    message:
+        "{rule}: deliver {input} to {output}"
+    shell:
+        "(cp --preserve=timestamps {input} {output}) &> {log}"

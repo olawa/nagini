@@ -20,267 +20,267 @@ files:
     output: "alignment/target/{sample}_{type}.target.bam.bai"
     when: target_metrics
   - name: read and sequence statistics
-    input: null
-    output: "qc/cramino/{sample}_{type}.txt"
+    input: "qc/cramino/{sample}_{type}.txt"
+    output: "results/qc/cramino/{sample}_{type}.txt"
   - name: on-target read and sequence statistics
-    input: null
-    output: "qc/cramino_target/{sample}_{type}.txt"
+    input: "qc/cramino_target/{sample}_{type}.txt"
+    output: "results/qc/cramino_target/{sample}_{type}.txt"
     when: target_metrics
   - name: whole genome coverage summary
-    input: null
-    output: "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
+    input: "qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
+    output: "results/qc/mosdepth/{sample}_{type}.mosdepth.summary.txt"
   - name: whole genome coverage regions
     input: null
     output: "qc/mosdepth/{sample}_{type}.regions.bed.gz"
   - name: whole genome coverage distribution
-    input: null
-    output: "qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
+    input: "qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
+    output: "results/qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt"
   - name: whole genome window distribution
-    input: null
-    output: "qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
+    input: "qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
+    output: "results/qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt"
   - name: target region coverage summary
-    input: null
-    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+    input: "qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
+    output: "results/qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt"
     when: target_metrics
   - name: target region per-base coverage BED
     input: null
     output: "qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz"
     when: target_metrics
   - name: target coverage distribution
-    input: null
-    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+    input: "qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
+    output: "results/qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt"
     when: target_metrics
   - name: target region distribution
-    input: null
-    output: "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+    input: "qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
+    output: "results/qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt"
     when: target_metrics
   - name: Sniffles2 structural variant VCF
-    input: null
-    output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
+    input: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
+    output: "results/cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
     when: sv_calling
   - name: Sniffles2 structural variant index
-    input: null
-    output: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
+    input: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
+    output: "results/cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
     when: sv_calling
   - name: Sniffles2 SNF evidence
-    input: null
-    output: "cnv_sv/sniffles2_call/{sample}_{type}.snf"
+    input: "cnv_sv/sniffles2_call/{sample}_{type}.snf"
+    output: "results/cnv_sv/sniffles2_call/{sample}_{type}.snf"
     when: sv_calling
   - name: structural variant summary
-    input: null
-    output: "reports/sv_summary/{sample}_{type}.tsv"
+    input: "reports/sv_summary/{sample}_{type}.tsv"
+    output: "results/reports/sv_summary/{sample}_{type}.tsv"
     when: sv_calling
   - name: translocation summary
-    input: null
-    output: "reports/sv_summary/{sample}_{type}.translocations.tsv"
+    input: "reports/sv_summary/{sample}_{type}.translocations.tsv"
+    output: "results/reports/sv_summary/{sample}_{type}.translocations.tsv"
     when: sv_calling
   - name: structural variant summary JSON
-    input: null
-    output: "reports/sv_summary/{sample}_{type}.json"
+    input: "reports/sv_summary/{sample}_{type}.json"
+    output: "results/reports/sv_summary/{sample}_{type}.json"
     when: sv_calling
   - name: whole genome CNV summary
-    input: null
-    output: "reports/cnv_summary/{sample}_{type}.cnv.tsv"
+    input: "reports/cnv_summary/{sample}_{type}.cnv.tsv"
+    output: "results/reports/cnv_summary/{sample}_{type}.cnv.tsv"
     when: cnv_calling
   - name: whole genome CNV summary JSON
-    input: null
-    output: "reports/cnv_summary/{sample}_{type}.cnv.json"
+    input: "reports/cnv_summary/{sample}_{type}.cnv.json"
+    output: "results/reports/cnv_summary/{sample}_{type}.cnv.json"
     when: cnv_calling
   - name: Rindels ASCAT segments
-    input: null
-    output: "cnv/rindels/{sample}_{type}.ascat.bed"
+    input: "cnv/rindels/{sample}_{type}.ascat.bed"
+    output: "results/cnv/rindels/{sample}_{type}.ascat.bed"
     when: cnv_calling
   - name: Rindels structural variant summary
-    input: null
-    output: "reports/sv_summary_rindels/{sample}_{type}.tsv"
+    input: "reports/sv_summary_rindels/{sample}_{type}.tsv"
+    output: "results/reports/sv_summary_rindels/{sample}_{type}.tsv"
     when: rindels_sv
   - name: Rindels translocation table
-    input: null
-    output: "reports/sv_summary_rindels/{sample}_{type}.translocations.tsv"
+    input: "reports/sv_summary_rindels/{sample}_{type}.translocations.tsv"
+    output: "results/reports/sv_summary_rindels/{sample}_{type}.translocations.tsv"
     when: rindels_sv
   - name: Rindels variant VCF
-    input: null
-    output: "cnv/rindels/{sample}_{type}.vcf.gz"
+    input: "cnv/rindels/{sample}_{type}.vcf.gz"
+    output: "results/cnv/rindels/{sample}_{type}.vcf.gz"
     when: cnv_calling
   - name: Rindels variant VCF index
-    input: null
-    output: "cnv/rindels/{sample}_{type}.vcf.gz.tbi"
+    input: "cnv/rindels/{sample}_{type}.vcf.gz.tbi"
+    output: "results/cnv/rindels/{sample}_{type}.vcf.gz.tbi"
     when: cnv_calling
   - name: ClairS-TO concatenated VCF
-    input: null
-    output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
+    input: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
+    output: "results/snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
     when: clairs_to_enabled
   - name: ClairS-TO concatenated VCF index
-    input: null
-    output: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz.tbi"
+    input: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz.tbi"
+    output: "results/snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz.tbi"
     when: clairs_to_enabled
   - name: ClairS-TO normalized VCF
-    input: null
-    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
     when: clairs_to_enabled
   - name: ClairS-TO normalized VCF index
-    input: null
-    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
     when: clairs_to_enabled
   - name: ClairS-TO VEP annotation
-    input: null
-    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
     when: clairs_to_vep_enabled
   - name: ClairS-TO VEP annotation index
-    input: null
-    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     when: clairs_to_vep_enabled
   - name: ClairS-TO VEP statistics
-    input: null
-    output: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: clairs_to_vep_enabled
   - name: DeepVariant concatenated VCF
-    input: null
-    output: "snv_indels/deepvariant/{sample}_{type}.vcf.gz"
+    input: "snv_indels/deepvariant/{sample}_{type}.vcf.gz"
+    output: "results/snv_indels/deepvariant/{sample}_{type}.vcf.gz"
     when: deepvariant_enabled
   - name: DeepVariant concatenated VCF index
-    input: null
-    output: "snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi"
+    input: "snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi"
+    output: "results/snv_indels/deepvariant/{sample}_{type}.vcf.gz.tbi"
     when: deepvariant_enabled
   - name: DeepVariant normalized VCF
-    input: null
-    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
     when: deepvariant_enabled
   - name: DeepVariant normalized VCF index
-    input: null
-    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
     when: deepvariant_enabled
   - name: DeepVariant VEP annotation
-    input: null
-    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
     when: deepvariant_vep_enabled
   - name: DeepVariant VEP annotation index
-    input: null
-    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     when: deepvariant_vep_enabled
   - name: DeepVariant VEP statistics
-    input: null
-    output: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: deepvariant_vep_enabled
   - name: Mutect2 merged unfiltered VCF
-    input: null
-    output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
+    input: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
+    output: "results/snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
     when: mutect2_enabled
   - name: Mutect2 merged VCF index
-    input: null
-    output: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz.tbi"
+    input: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz.tbi"
+    output: "results/snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz.tbi"
     when: mutect2_enabled
   - name: Mutect2 filtered VCF
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz"
     when: mutect2_enabled
   - name: Mutect2 filtered VCF index
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz.tbi"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz.tbi"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.vcf.gz.tbi"
     when: mutect2_enabled
   - name: Mutect2 filtering statistics
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filteringStats.tsv"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filteringStats.tsv"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filteringStats.tsv"
     when: mutect2_enabled
   - name: Mutect2 normalized filtered VCF
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
     when: mutect2_enabled
   - name: Mutect2 normalized filtered VCF index
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
     when: mutect2_enabled
   - name: Mutect2 VEP annotation
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
     when: mutect2_vep_enabled
   - name: Mutect2 VEP annotation index
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     when: mutect2_vep_enabled
   - name: Mutect2 VEP statistics
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: mutect2_vep_enabled
   - name: Mutect2 SnpEff annotation
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"
     when: annotate_small_variants
   - name: Mutect2 SnpEff statistics
-    input: null
-    output: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff.csv"
+    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff.csv"
+    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff.csv"
     when: annotate_small_variants
   - name: Sniffles2 SnpEff annotation
-    input: null
-    output: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.vcf.gz"
+    input: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.vcf.gz"
+    output: "results/cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.vcf.gz"
     when: annotate_svs
   - name: Sniffles2 simple SV annotation
-    input: null
-    output: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.ss_annotated.vcf"
+    input: "cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.ss_annotated.vcf"
+    output: "results/cnv_sv/sniffles2_call/{sample}_{type}.snpeff_annotated.ss_annotated.vcf"
     when: annotate_svs
   - name: BCR-ABL1 fusion summary TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.fusion_summary.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.fusion_summary.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.fusion_summary.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 fusion summary JSON
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.fusion_summary.json"
+    input: "reports/bcr_abl/{sample}_{type}.fusion_summary.json"
+    output: "results/reports/bcr_abl/{sample}_{type}.fusion_summary.json"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 all Branford sites TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 detected resistance mutations TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.branford_mutations.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.branford_mutations.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.branford_mutations.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 detected resistance mutations VCF
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.branford_mutations.vcf"
+    input: "reports/bcr_abl/{sample}_{type}.branford_mutations.vcf"
+    output: "results/reports/bcr_abl/{sample}_{type}.branford_mutations.vcf"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 compound mutation phasing TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.phasing.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.phasing.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.phasing.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 compound mutation phasing JSON
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.phasing.json"
+    input: "reports/bcr_abl/{sample}_{type}.phasing.json"
+    output: "results/reports/bcr_abl/{sample}_{type}.phasing.json"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 Arriba fusions TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 exon coverage TSV
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.exon_coverage.tsv"
+    input: "reports/bcr_abl/{sample}_{type}.exon_coverage.tsv"
+    output: "results/reports/bcr_abl/{sample}_{type}.exon_coverage.tsv"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 Arriba fusion plot PDF
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.fusion_plot.pdf"
+    input: "reports/bcr_abl/{sample}_{type}.fusion_plot.pdf"
+    output: "results/reports/bcr_abl/{sample}_{type}.fusion_plot.pdf"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 Arriba fusion plot PNG
-    input: null
-    output: "reports/bcr_abl/{sample}_{type}.fusion_plot.png"
+    input: "reports/bcr_abl/{sample}_{type}.fusion_plot.png"
+    output: "results/reports/bcr_abl/{sample}_{type}.fusion_plot.png"
     when: "assay_module:bcr_abl"
   - name: BCR-ABL1 bcftools mpileup VCF
-    input: null
-    output: "snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz"
+    input: "snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz"
+    output: "results/snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz"
     when: "enable_bcftools_pileup"
   - name: BCR-ABL1 Rindels VCF
-    input: null
-    output: "snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
+    input: "snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
+    output: "results/snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
     when: "enable_rindels"
 
 
   - name: MultiQC Nanopore report
-    input: null
+    input: "qc/multiqc/multiqc_nanopore.html"
 
-    output: "qc/multiqc/multiqc_nanopore.html"
+    output: "results/qc/multiqc/multiqc_nanopore.html"
   - name: Nagini Excel report
-    input: null
-    output: "reports/{sample}_{type}.nagini_report.xlsx"
+    input: "reports/{sample}_{type}.nagini_report.xlsx"
+    output: "results/reports/{sample}_{type}.nagini_report.xlsx"
   - name: Nagini multi-sample summary Excel report
-    input: null
-    output: "reports/nagini_summary_report.xlsx"
+    input: "reports/nagini_summary_report.xlsx"
+    output: "results/reports/nagini_summary_report.xlsx"
 
 

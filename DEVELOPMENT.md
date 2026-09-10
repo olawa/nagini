@@ -124,6 +124,11 @@ Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
 * `alignment/target/`: reads som överlappar `reference.design_bed` ±25 kb, för
   target-restricted assays.
 * `reads/merged/`: en FASTQ per prov med `merged_fastq: true`.
+* `results/`: körningens leveranser, kopierade dit när allt är klart —
+  rapporter, VCF:er med index, QC-summeringar och SV/CNV-tabeller. Läsnivådata
+  (`alignment/`, `reads/`, per-base-täckning) kopieras medvetet inte, eftersom
+  det skulle dubbla körningens diskutrymme; de ligger kvar på sina platser.
+  Vad som kopieras styrs av `input:`-fältet i `config/output_files.yaml`.
 * `qc/cramino/`: läs-/sekvensmängd och read-statistik.
 * `qc/mosdepth/`: whole-genome coverage.
 * `qc/mosdepth_bed/`: coverage mot `reference.design_bed`, inklusive per-base BED.
