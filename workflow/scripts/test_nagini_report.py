@@ -468,7 +468,8 @@ class FullReportTest(unittest.TestCase):
             target_cramino.write_text(
                 "Number of alignments\t412000\n"
                 "Yield [Gb]\t6.24\n"
-                "Mean identity\t97.8\n"
+                "Median identity\t97.8\n"
+                "Mean identity\t94.1\n"
                 "N50\t14200\n"
             )
             output = root / "on_target.xlsx"
@@ -482,8 +483,11 @@ class FullReportTest(unittest.TestCase):
             )
 
         self.assertIn("ON-TARGET READ STATISTICS", text)
-        self.assertIn("On-Target Read Accuracy", text)
+        # Median, not mean: the label has to say which, and the value has to
+        # be the median even when cramino reports both.
+        self.assertIn("On-Target Median identity", text)
         self.assertIn("97.8", text)
+        self.assertNotIn("94.1", text)
         self.assertIn("412000", text)
         self.assertIn("14200", text)
 

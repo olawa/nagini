@@ -393,6 +393,20 @@ def parse_cramino(path):
     return ["Metric", "Value"], rows
 
 
+def _identity_metric(data_dict, keys):
+    """The first identity metric present, and which key it came from.
+
+    The label has to say whether it is a median or a mean, so the caller needs
+    to know which key matched rather than only the value.
+    """
+
+    for key in keys:
+        value = _find_metric(data_dict, key)
+        if value:
+            return value, key
+    return "", ""
+
+
 def _find_metric(data_dict, *keywords):
     """Lookup a metric from Cramino or QC summary dict with priority matching."""
     # 1. Exact match (case-insensitive)
@@ -871,20 +885,26 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         "Quality",
         "Q-score",
     )
-    _identity_keys = ("Mean identity", "Median identity", "Identity")
+    # Median before mean: a read-length and identity distribution this skewed
+    # -- most reads are the few hundred bases adaptive sampling rejected --
+    # has a mean that describes neither population.
+    _identity_keys = ("Median identity", "Mean identity", "Identity")
     mean_q = _find_metric(cramino_dict, *_quality_keys)
     read_accuracy_label = "Mean Base Quality (Q)"
     read_accuracy_hint = "Average basecall Q-score"
     if not mean_q:
-        identity = _find_metric(cramino_dict, *_identity_keys)
+        identity, identity_key = _identity_metric(cramino_dict, _identity_keys)
         if identity:
             mean_q = identity
-            read_accuracy_label = "Mean Read Identity [%]"
+            read_accuracy_label = f"{identity_key} [%]".replace("identity", "Read Identity")
             read_accuracy_hint = "Alignment identity, all reads"
 
-    target_accuracy = _find_metric(target_cramino_dict, *_identity_keys) or _find_metric(
-        target_cramino_dict, *_quality_keys
+    target_accuracy, target_accuracy_key = _identity_metric(
+        target_cramino_dict, _identity_keys
     )
+    if not target_accuracy:
+        target_accuracy = _find_metric(target_cramino_dict, *_quality_keys)
+        target_accuracy_key = "Read accuracy"
     target_accuracy_n50 = _find_metric(
         target_cramino_dict, "Read length N50", "N50", "N50 read length"
     )
@@ -1107,7 +1127,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             overview.extend([
                 [("", 0), ("", 0), ("", 0), ("", 0)],
                 [("ON-TARGET READ STATISTICS", 3), ("Reads overlapping the design +/-25 kb", 3), ("VALUE", 3), ("STATUS", 3)],
-                [("On-Target Read Accuracy", 7), ("Identity or Q of reads in the design", 0), (target_accuracy or "N/A", 0), ("INFO", 0)],
+                [(f"On-Target {target_accuracy_key}" if target_accuracy_key else "On-Target Read Accuracy", 7), ("Identity of reads in the design", 0), (target_accuracy or "N/A", 0), ("INFO", 0)],
                 [("On-Target Reads", 7), ("Reads overlapping the design", 0), (target_accuracy_reads or "N/A", 0), ("INFO", 0)],
                 [("On-Target Read Length N50 [bp]", 7), ("N50 of reads in the design", 0), (target_accuracy_n50 or "N/A", 0), ("INFO", 0)],
             ])

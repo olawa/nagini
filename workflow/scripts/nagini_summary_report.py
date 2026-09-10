@@ -224,7 +224,10 @@ def build_summary_report(
             "Quality",
             "Q-score",
         )
-        identity_keys = ("Mean identity", "Median identity", "Identity")
+        # Median before mean: on an adaptive run most reads are the few
+        # hundred bases the pore rejected, so the mean describes neither
+        # population.
+        identity_keys = ("Median identity", "Mean identity", "Identity")
         mean_q = _find_metric(cramino_dict, *quality_keys) or _find_metric(
             cramino_dict, *identity_keys
         )
