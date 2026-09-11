@@ -90,6 +90,10 @@ files:
     input: "cnv/rindels/{sample}_{type}.ascat.bed"
     output: "results/cnv/rindels/{sample}_{type}.ascat.bed"
     when: cnv_calling
+  - name: Rindels CNV PDF report
+    input: "cnv/rindels/{sample}_{type}_report.pdf"
+    output: "results/cnv/rindels/{sample}_{type}_report.pdf"
+    when: cnv_calling
   - name: Rindels structural variant summary
     input: "reports/sv_summary_rindels/{sample}_{type}.tsv"
     output: "results/reports/sv_summary_rindels/{sample}_{type}.tsv"

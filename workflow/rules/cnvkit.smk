@@ -31,6 +31,7 @@ rule cnvkit_batch:
     params:
         tmpdir="cnv/cnvkit/tmp_{sample}_{type}",
         method=config.get("cnvkit_batch", {}).get("method", "wgs"),
+        target_avg_size=lambda wildcards: f"--target-avg-size {config.get('cnvkit_batch', {}).get('target_avg_size', 50000)}" if config.get("cnvkit_batch", {}).get("target_avg_size", 50000) else "",
         extra=config.get("cnvkit_batch", {}).get("extra", "--count-reads"),
     log:
         "cnv/cnvkit/{sample}_{type}.cnvkit_batch.log",
@@ -54,7 +55,7 @@ rule cnvkit_batch:
         "mkdir -p {params.tmpdir} && "
         "cnvkit.py batch {input.bam} -n -f {input.fasta} "
         "--output-reference {params.tmpdir}/reference.cnn "
-        "-m {params.method} -d {params.tmpdir} -p {threads} {params.extra} "
+        "-m {params.method} {params.target_avg_size} -d {params.tmpdir} -p {threads} {params.extra} "
         "> {log} 2>&1 && "
         "bam_base=$(basename {input.bam} .bam) && "
         "mv {params.tmpdir}/${{bam_base}}.cnr {output.cnr} && "

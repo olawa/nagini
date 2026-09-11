@@ -29,6 +29,7 @@ rule cnv_rindels:
         # rule fail in the first place.
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
         ascat="cnv/rindels/{sample}_{type}.ascat.bed",
+        pdf="cnv/rindels/{sample}_{type}_report.pdf",
         vcf=temp("cnv/rindels/{sample}_{type}.vcf"),
     params:
         binary=lambda wildcards: _find_rindels_binary(),
@@ -71,6 +72,8 @@ rule cnv_rindels:
             --cnv-output {output.bins} \
             --cnv-bin-size {params.bin_size} \
             -o {output.vcf} \
+            --report \
+            --report-path {output.pdf} \
             -t {threads} \
             {params.annotation} \
             {params.extra}
@@ -87,6 +90,11 @@ rule cnv_rindels:
                 "# NOTE: Rindels skipped segmentation for this sample (too few heterozygous sites)" \
                 "# Columns: chrom, start, end, CN_A, CN_B, BAF, logR, n_sites, state, n_het, n_hom, n_total" \
                 > "{output.ascat}"
+        fi
+
+        if [ ! -f "{output.pdf}" ]; then
+            echo "Warning: Rindels unified PDF report was not generated; creating empty placeholder."
+            touch "{output.pdf}"
         fi
         """
 
