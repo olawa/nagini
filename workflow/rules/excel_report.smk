@@ -25,6 +25,11 @@ rule nagini_excel_report:
         bcr_abl_phasing=get_report_bcr_abl_phasing,
         bcr_abl_exon_coverage=get_report_bcr_abl_exon_coverage,
         bcr_abl_plot_png=get_report_bcr_abl_plot_png,
+        amplicon_stats=get_report_amplicon_stats,
+        amplicon_summary=get_report_amplicon_summary,
+        amplicon_itd=get_report_amplicon_itd,
+        amplicon_vcf=get_report_amplicon_vcf,
+        amplicon_pileup=get_report_amplicon_pileup,
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
@@ -78,6 +83,11 @@ _SUMMARY_OPTIONAL_KEYS = (
     "bcr_abl_phasings",
     "bcr_abl_exons",
     "bcr_abl_plots",
+    "amplicon_stats",
+    "amplicon_summaries",
+    "amplicon_itds",
+    "amplicon_vcfs",
+    "amplicon_pileups",
 )
 
 
@@ -98,9 +108,17 @@ def summary_report_files():
             t = str(unit_type).strip()
             snv_vcf = ""
             if sample_needs_dna_variant_calling(s):
+                caller = get_small_variant_caller(s, t)
+                if caller == "deepvariant":
+                    caller_dir = "snv_indels/deepvariant_postprocess"
+                elif caller == "mutect2":
+                    caller_dir = "snv_indels/mutect2_postprocess"
+                else:
+                    caller_dir = "snv_indels/clairs_to_postprocess"
                 suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-                snv_vcf = f"snv_indels/clairs_to_postprocess/{s}_{t}{suffix}"
+                snv_vcf = f"{caller_dir}/{s}_{t}{suffix}"
             bcr = sample_has_assay_module(s, "bcr_abl")
+            amp = sample_has_assay_module(s, "amplicon")
             rows.append(
                 {
                     "reports": f"reports/{s}_{t}.nagini_report.xlsx",
@@ -147,6 +165,11 @@ def summary_report_files():
                     "bcr_abl_phasings": f"reports/bcr_abl/{s}_{t}.phasing.tsv" if bcr else "",
                     "bcr_abl_exons": f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv" if bcr else "",
                     "bcr_abl_plots": f"reports/bcr_abl/{s}_{t}.fusion_plot.png" if bcr else "",
+                    "amplicon_stats": f"reports/amplicon/{s}_{t}.amplicon_stats.tsv" if amp else "",
+                    "amplicon_summaries": f"reports/amplicon/{s}_{t}.amplicon_summary.tsv" if amp else "",
+                    "amplicon_itds": f"reports/amplicon/{s}_{t}.flt3_itd.tsv" if amp else "",
+                    "amplicon_vcfs": f"snv_indels/rindels/{s}_{t}.amplicon.vcf.gz" if amp else "",
+                    "amplicon_pileups": f"reports/amplicon/{s}_{t}.pileup_counts.tsv" if amp else "",
                 }
             )
     return rows
@@ -214,6 +237,11 @@ rule nagini_summary_excel_report:
         bcr_abl_phasing_paths=lambda wildcards: get_summary_report_paths("bcr_abl_phasings"),
         bcr_abl_exon_paths=lambda wildcards: get_summary_report_paths("bcr_abl_exons"),
         bcr_abl_plot_paths=lambda wildcards: get_summary_report_paths("bcr_abl_plots"),
+        amplicon_stats_paths=lambda wildcards: get_summary_report_paths("amplicon_stats"),
+        amplicon_summary_paths=lambda wildcards: get_summary_report_paths("amplicon_summaries"),
+        amplicon_itd_paths=lambda wildcards: get_summary_report_paths("amplicon_itds"),
+        amplicon_vcf_paths=lambda wildcards: get_summary_report_paths("amplicon_vcfs"),
+        amplicon_pileup_paths=lambda wildcards: get_summary_report_paths("amplicon_pileups"),
     log:
         "logs/nagini_summary_excel_report/summary.log",
     threads: 1

@@ -22,6 +22,7 @@ include: "rules/sv_summary.smk"
 include: "rules/cnv.smk"
 include: "rules/snv_postprocess.smk"
 include: "rules/bcr_abl.smk"
+include: "rules/amplicon.smk"
 include: "rules/excel_report.smk"
 include: "rules/copy_results.smk"
 
@@ -261,6 +262,11 @@ use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
         bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
         bed=get_clairs_to_bed,
+    output:
+        snv=temp("snv_indels/clairs_to/{sample}_{type}_snv.vcf.gz"),
+        indel=temp("snv_indels/clairs_to/{sample}_{type}_indel.vcf.gz"),
+        snv_tbi=temp("snv_indels/clairs_to/{sample}_{type}_snv.vcf.gz.tbi"),
+        indel_tbi=temp("snv_indels/clairs_to/{sample}_{type}_indel.vcf.gz.tbi"),
     params:
         extra=config.get("clairs_to_call", {}).get("extra", ""),
         # The error model follows the sample's basecalling model, and the
@@ -270,9 +276,47 @@ use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
         snv_min_af=lambda wildcards: get_clairs_to_snv_min_af(wildcards),
         indel_min_af=lambda wildcards: get_clairs_to_indel_min_af(wildcards),
         outdir=lambda w, output: os.path.dirname(output[0]),
+    log:
+        "logs/clairs_to_call/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/clairs_to_call/{sample}_{type}.tsv",
+            config.get("clairs_to_call", {}).get("benchmark_repeats", 1),
+        )
+    shell:
+        "(run_clairs_to "
+        "--tumor_bam_fn {input.bam} "
+        "--ref_fn {input.ref} "
+        "--threads {resources.threads} "
+        "--platform {params.platform} "
+        "--output_dir {params.outdir} "
+        "-s {wildcards.sample} "
+        "--bed_fn {input.bed} "
+        "--snv_min_af {params.snv_min_af} "
+        "--indel_min_af {params.indel_min_af} "
+        "--disable_verdict "
+        "--remove_intermediate_dir "
+        "--snv_output_prefix {wildcards.sample}_{wildcards.type}_snv "
+        "--indel_output_prefix {wildcards.sample}_{wildcards.type}_indel "
+        "{params.extra} "
+        "&& rm -rf {params.outdir}/tmp_{wildcards.sample}* {params.outdir}/logs_{wildcards.sample}* ) &> {log}"
 
 
-use rule clairs_to_concat from snv_indels as snv_indels_clairs_to_concat
+use rule clairs_to_concat from snv_indels as snv_indels_clairs_to_concat with:
+    input:
+        snv="snv_indels/clairs_to/{sample}_{type}_snv.vcf.gz",
+        indel="snv_indels/clairs_to/{sample}_{type}_indel.vcf.gz",
+        snv_tbi="snv_indels/clairs_to/{sample}_{type}_snv.vcf.gz.tbi",
+        indel_tbi="snv_indels/clairs_to/{sample}_{type}_indel.vcf.gz.tbi",
+    output:
+        vcf="snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz",
+    log:
+        "logs/clairs_to_concat/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/clairs_to_concat/{sample}_{type}.tsv",
+            config.get("clairs_to_concat", {}).get("benchmark_repeats", 1),
+        )
 
 
 use rule tabix from snv_indels as snv_indels_clairs_to_tabix with:
@@ -340,6 +384,25 @@ use rule deepvariant from snv_indels as snv_indels_deepvariant with:
         int_res=lambda wildcards: f"snv_indels/deepvariant/{wildcards.sample}_{wildcards.type}_{wildcards.chr}",
         regions=get_deepvariant_regions,
         extra=config.get("deepvariant", {}).get("extra", ""),
+    log:
+        "logs/deepvariant/{sample}_{type}_{chr}.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepvariant/{sample}_{type}_{chr}.tsv",
+            config.get("deepvariant", {}).get("benchmark_repeats", 1),
+        )
+    shell:
+        "(run_deepvariant "
+        "--model_type {params.model_type} "
+        "--ref {input.ref} "
+        "--reads {input.bam} "
+        "{params.regions} "
+        "{params.extra} "
+        "--output_vcf {output.vcf} "
+        "{params.output_gvcf} "
+        "--intermediate_results_dir {params.int_res} "
+        "--num_shards {threads} "
+        "&& rm -rf {params.int_res} ) &> {log}"
 
 
 use rule bcftools_concat from snv_indels as snv_indels_deepvariant_concat with:

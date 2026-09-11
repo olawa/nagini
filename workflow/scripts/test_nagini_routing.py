@@ -46,6 +46,17 @@ class AssayRegistryTest(unittest.TestCase):
         self.assertEqual(bcr_abl["modules"], ["bcr_abl"])
         self.assertEqual(routing.minimap2_preset(bcr_abl["library_type"]), "splice")
 
+    def test_amplicon_and_flt3_tp53_use_amplicon_module(self):
+        """Amplicon and flt3_tp53 assays route to amplicon module with genomic map-ont alignment."""
+        assays = routing.resolve_assays({})
+        for name in ("amplicon", "flt3_tp53"):
+            defn = assays[name]
+            self.assertEqual(defn["library_type"], "amplicon")
+            self.assertEqual(defn["modules"], ["amplicon"])
+            self.assertTrue(defn["target_restricted"])
+            self.assertEqual(routing.minimap2_preset(defn["library_type"]), "map-ont")
+            self.assertTrue(defn["config_overrides"].get("read_filter", {}).get("enabled"))
+
 
     def test_adaptive_is_wgs_confined_to_the_design(self):
         assays = routing.resolve_assays({})
@@ -493,6 +504,24 @@ class CallerResolutionTest(unittest.TestCase):
             routing.get_sample_caller(units, "S_CUST", assays, "auto", "N"),
             "mutect2",
         )
+
+    def test_caller_postprocess_directory_mapping(self):
+        caller_map = {
+            "deepvariant": "snv_indels/deepvariant_postprocess",
+            "mutect2": "snv_indels/mutect2_postprocess",
+            "clairs_to": "snv_indels/clairs_to_postprocess",
+        }
+        for caller, expected_dir in caller_map.items():
+            dir_name = (
+                "snv_indels/deepvariant_postprocess"
+                if caller == "deepvariant"
+                else (
+                    "snv_indels/mutect2_postprocess"
+                    if caller == "mutect2"
+                    else "snv_indels/clairs_to_postprocess"
+                )
+            )
+            self.assertEqual(dir_name, expected_dir)
 
 
 if __name__ == "__main__":
