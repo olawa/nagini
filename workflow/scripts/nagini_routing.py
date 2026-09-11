@@ -78,8 +78,21 @@ BUILTIN_ASSAYS = {
         "snv_calling": True,
         "sv_calling": False,
         "target_restricted": True,
+        "modules": ["amplicon"],
         "config_overrides": {
             "clairs_to_call": {"snv_min_af": 0.01, "indel_min_af": 0.01},
+            "read_filter": {"enabled": True},
+        },
+    },
+    "flt3_tp53": {
+        "description": "FLT3/TP53 AML targeted amplicon panel",
+        "library_type": "amplicon",
+        "snv_calling": False,
+        "sv_calling": False,
+        "target_restricted": True,
+        "modules": ["amplicon"],
+        "config_overrides": {
+            "read_filter": {"enabled": True},
         },
     },
     "cdna": {

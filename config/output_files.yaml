@@ -270,6 +270,34 @@ files:
     input: "snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
     output: "results/snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
     when: "enable_rindels"
+  - name: Amplicon statistics TSV
+    input: "reports/amplicon/{sample}_{type}.amplicon_stats.tsv"
+    output: "results/reports/amplicon/{sample}_{type}.amplicon_stats.tsv"
+    when: "assay_module:amplicon"
+  - name: Amplicon clinical summary TSV
+    input: "reports/amplicon/{sample}_{type}.amplicon_summary.tsv"
+    output: "results/reports/amplicon/{sample}_{type}.amplicon_summary.tsv"
+    when: "assay_module:amplicon"
+  - name: Amplicon clinical summary JSON
+    input: "reports/amplicon/{sample}_{type}.amplicon_summary.json"
+    output: "results/reports/amplicon/{sample}_{type}.amplicon_summary.json"
+    when: "assay_module:amplicon"
+  - name: FLT3-ITD detection TSV
+    input: "reports/amplicon/{sample}_{type}.flt3_itd.tsv"
+    output: "results/reports/amplicon/{sample}_{type}.flt3_itd.tsv"
+    when: "assay_module:amplicon"
+  - name: Amplicon Rindels variant VCF
+    input: "snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz"
+    output: "results/snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz"
+    when: "assay_module:amplicon"
+  - name: Amplicon Rindels variant VCF index
+    input: "snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz.tbi"
+    output: "results/snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz.tbi"
+    when: "assay_module:amplicon"
+  - name: Amplicon pileup background counts
+    input: "reports/amplicon/{sample}_{type}.pileup_counts.tsv"
+    output: "results/reports/amplicon/{sample}_{type}.pileup_counts.tsv"
+    when: "assay_module:amplicon"
 
 
   - name: MultiQC Nanopore report

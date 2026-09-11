@@ -20,9 +20,14 @@ try:
         TABLE,
         _find_metric,
         _is_pathogenic_clinvar,
+        build_amplicon_sheet,
         build_bcr_abl_sheet,
+        parse_amplicon_stats_tsv,
+        parse_amplicon_summary_tsv,
+        parse_amplicon_vcf,
         parse_bcr_abl_tsv,
         parse_cramino,
+        parse_flt3_itd_tsv,
         parse_small_variant_vcf,
         parse_tsv,
         safe_sheet_name,
@@ -37,9 +42,14 @@ except ImportError:
         TABLE,
         _find_metric,
         _is_pathogenic_clinvar,
+        build_amplicon_sheet,
         build_bcr_abl_sheet,
+        parse_amplicon_stats_tsv,
+        parse_amplicon_summary_tsv,
+        parse_amplicon_vcf,
         parse_bcr_abl_tsv,
         parse_cramino,
+        parse_flt3_itd_tsv,
         parse_small_variant_vcf,
         parse_tsv,
         safe_sheet_name,
@@ -117,6 +127,14 @@ def build_summary_report(
         or record.get("bcr_abl_exon_coverage")
         for record in sample_records
     )
+    run_has_amplicon = any(
+        str(record.get("assay", "")).strip().lower() in ("amplicon", "flt3_tp53")
+        or record.get("amplicon_stats")
+        or record.get("amplicon_summary")
+        or record.get("amplicon_itd")
+        or record.get("amplicon_vcf")
+        for record in sample_records
+    )
 
     # -----------------------------------------------------------------------
     # 1. OVERVIEW SHEET
@@ -177,14 +195,25 @@ def build_summary_report(
             if run_has_bcr_abl
             else []
         )
+        + (
+            [
+                ("Total Amplicon Reads", 1),
+                ("FLT3-ITD Status", 1),
+                ("Target Mutations", 1),
+            ]
+            if run_has_amplicon
+            else []
+        )
         + [
             ("Status", 1),
         ],
     ]
 
     has_any_bcr_abl = False
+    has_any_amplicon = False
     all_pass_variants = []
     bcr_abl_samples_data = []
+    amplicon_samples_data = []
 
     for s in sample_records:
         sample_name = s["sample"]
@@ -200,6 +229,37 @@ def build_summary_report(
         mut_tsv_path = s.get("bcr_abl_mutations", "")
         phase_tsv_path = s.get("bcr_abl_phasing", "")
         exon_cov_path = s.get("bcr_abl_exon_coverage", "")
+
+        amp_stats_path = s.get("amplicon_stats", "")
+        amp_sum_path = s.get("amplicon_summary", "")
+        amp_itd_path = s.get("amplicon_itd", "")
+        amp_vcf_path = s.get("amplicon_vcf", "")
+        amp_pileup_path = s.get("amplicon_pileup", "")
+
+        amp_stats_rows = parse_amplicon_stats_tsv(amp_stats_path)
+        amp_itd_rows = parse_flt3_itd_tsv(amp_itd_path)
+        amp_var_rows = parse_amplicon_vcf(amp_vcf_path)
+        if amp_sum_path and (not amp_itd_rows or not amp_var_rows or not amp_stats_rows):
+            sec = parse_amplicon_summary_tsv(amp_sum_path)
+            if not amp_itd_rows and sec.get("itd"):
+                amp_itd_rows = sec["itd"]
+            if not amp_var_rows and sec.get("variants"):
+                amp_var_rows = sec["variants"]
+            if not amp_stats_rows and sec.get("coverage"):
+                amp_stats_rows = sec["coverage"]
+
+        is_amplicon = bool(amp_stats_rows or amp_itd_rows or amp_var_rows or assay in ("amplicon", "flt3_tp53"))
+        if is_amplicon:
+            has_any_amplicon = True
+            amplicon_samples_data.append({
+                "sample": sample_name,
+                "type": sample_type,
+                "barcode": barcode,
+                "stats_rows": amp_stats_rows,
+                "itd_rows": amp_itd_rows,
+                "variant_rows": amp_var_rows,
+                "pileup_counts_path": amp_pileup_path,
+            })
 
         # Parse cramino metrics
         _, cramino_rows = parse_cramino(cramino_path)
@@ -340,10 +400,68 @@ def build_summary_report(
             except (ValueError, ZeroDivisionError, AttributeError):
                 fold_enrich_str = "-"
 
+        det_itd = [
+            r for r in amp_itd_rows
+            if str(r.get("status", "")).upper() == "DETECTED" or float(r.get("af", 0)) > 0.01
+        ]
+        if det_itd:
+            itd_entry = det_itd[0]
+            try:
+                itd_af = float(itd_entry.get("af", 0.0))
+                if itd_af <= 1.0 and itd_af > 0:
+                    itd_af *= 100.0
+            except (ValueError, TypeError):
+                itd_af = 0.0
+            itd_len = int(float(str(itd_entry.get("dup_len", itd_entry.get("itd_length", itd_entry.get("length", 0)))) or 0))
+            try:
+                alt_u = int(itd_entry.get("alt_unique_reads", 0))
+                ref_u = int(itd_entry.get("ref_unique_reads", 0))
+                if ref_u > 0:
+                    ar_val = alt_u / ref_u
+                elif itd_af > 0 and itd_af < 100.0:
+                    ar_val = itd_af / (100.0 - itd_af)
+                else:
+                    ar_val = 0.0
+            except (ValueError, TypeError):
+                ar_val = 0.0
+            ar_part = f", AR {ar_val:.2f}" if ar_val > 0 else ""
+            itd_display = f"DETECTED ({itd_len} bp, {itd_af:.1f}%{ar_part})"
+            itd_style = 4
+        elif is_amplicon:
+            itd_display = "NEGATIVE"
+            itd_style = 5
+        else:
+            itd_display = "-"
+            itd_style = 0
+
+        det_amp_vars = [v for v in amp_var_rows if str(v.get("filter", "PASS")).upper() in ("PASS", ".")]
+        if det_amp_vars:
+            v_labels = []
+            for v in det_amp_vars[:3]:
+                g = v.get("gene", "")
+                p = v.get("hgvs_p", "") or v.get("hgvs_c", "")
+                try:
+                    vaf = float(v.get("vaf", 0.0))
+                except (ValueError, TypeError):
+                    vaf = 0.0
+                v_labels.append(f"{g} {p} ({vaf:.1f}%)" if p else f"{g} ({vaf:.1f}%)")
+            amp_mut_str = ", ".join(v_labels)
+            if len(det_amp_vars) > 3:
+                amp_mut_str += f" (+{len(det_amp_vars) - 3})"
+            amp_mut_style = 4 if any(float(v.get("vaf", 0)) >= 5.0 for v in det_amp_vars) else 6
+        elif is_amplicon:
+            amp_mut_str = "None detected"
+            amp_mut_style = 5
+        else:
+            amp_mut_str = "-"
+            amp_mut_style = 0
+
+        total_amp_reads_val = sum(int(r.get("read_count", 0)) for r in amp_stats_rows) if amp_stats_rows else ("-" if not is_amplicon else 0)
+
         sample_status, sample_style = ("PASS", 5)
-        if det_muts or cis_pairs:
+        if det_muts or cis_pairs or (det_itd and itd_style == 4) or (det_amp_vars and amp_mut_style == 4):
             sample_status, sample_style = ("ACTION REQUIRED", 4)
-        elif not yield_gb or (raw_reads_num < 100):
+        elif det_amp_vars or not yield_gb or (raw_reads_num < 100):
             sample_status, sample_style = ("REVIEW", 6)
 
         overview_rows.append(
@@ -375,6 +493,15 @@ def build_summary_report(
                 if run_has_bcr_abl
                 else []
             )
+            + (
+                [
+                    (total_amp_reads_val, 0),
+                    (itd_display, itd_style),
+                    (amp_mut_str, amp_mut_style),
+                ]
+                if run_has_amplicon
+                else []
+            )
             + [
                 (sample_status, sample_style),
             ]
@@ -396,8 +523,30 @@ def build_summary_report(
                         "depth": r.get("depth", ""),
                         "alt_reads": r.get("ad_alt", r.get("alt_reads", "")),
                         "consequence": r.get("mutation", ""),
-
                         "clinical_note": r.get("tki_resistance", "Resistance mutation"),
+                        "status": "DETECTED",
+                    })
+
+        if is_amplicon and amp_var_rows:
+            for v in amp_var_rows:
+                if str(v.get("filter", "PASS")).upper() in ("PASS", "."):
+                    try:
+                        vaf_val = float(v.get("vaf", 0.0))
+                    except (ValueError, TypeError):
+                        vaf_val = 0.0
+                    all_pass_variants.append({
+                        "sample": sample_name,
+                        "type": sample_type,
+                        "gene": v.get("gene", ""),
+                        "chrom": v.get("chrom", ""),
+                        "pos": v.get("pos", ""),
+                        "ref": v.get("ref", ""),
+                        "alt": v.get("alt", ""),
+                        "vaf": f"{vaf_val:.2f}%",
+                        "depth": v.get("depth", ""),
+                        "alt_reads": v.get("alt_depth", ""),
+                        "consequence": v.get("consequence", ""),
+                        "clinical_note": v.get("hgvs_p", "") or v.get("hgvs_c", ""),
                         "status": "DETECTED",
                     })
 
@@ -485,6 +634,7 @@ def build_summary_report(
         ("SVs", ("sv_tsv", "rindels_sv_tsv")),
         ("Translocations", ("translocations_tsv", "rindels_translocations_tsv")),
         ("CNVs", ("cnv_tsv",)),
+        ("Amplicon Stats", ("amplicon_stats",)),
     ):
         stacked = stack_sample_tables(sample_records, keys)
         if stacked:
@@ -535,7 +685,7 @@ def build_summary_report(
                 (tot_reads, 0),
             ])
 
-        bcr_summary_rows.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+            bcr_summary_rows.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
         bcr_summary_rows.append([("2. RESISTANCE MUTATIONS & COMPOUND PHASING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
         bcr_summary_rows.append([
             ("Sample ID", 1),
@@ -600,6 +750,21 @@ def build_summary_report(
             )
             sheets.append((sheet_title, sample_bcr_rows, LAYOUT))
 
+    # -------------------------------------------------------------------
+    # 5. PER-SAMPLE AMPLICON DETAIL SHEETS (if amplicon assay data present)
+    # -------------------------------------------------------------------
+    if has_any_amplicon:
+        for ad in amplicon_samples_data:
+            sheet_title = safe_sheet_name(f"Amplicon ({ad['sample']})", used_sheet_names)
+            sample_amp_rows = build_amplicon_sheet(
+                ad["sample"],
+                ad["stats_rows"],
+                ad["variant_rows"],
+                ad["itd_rows"],
+                pileup_counts_path=ad.get("pileup_counts_path", ""),
+            )
+            sheets.append((sheet_title, sample_amp_rows, LAYOUT))
+
     write_xlsx(output_path, sheets)
 
 
@@ -656,6 +821,11 @@ def run_from_snakemake(snakemake):
     bcr_phasings = list(getattr(snakemake.params, "bcr_abl_phasing_paths", []))
     bcr_exons = list(getattr(snakemake.params, "bcr_abl_exon_paths", []))
     bcr_plots = list(getattr(snakemake.params, "bcr_abl_plot_paths", []))
+    amplicon_stats = list(getattr(snakemake.params, "amplicon_stats_paths", []))
+    amplicon_summaries = list(getattr(snakemake.params, "amplicon_summary_paths", []))
+    amplicon_itds = list(getattr(snakemake.params, "amplicon_itd_paths", []))
+    amplicon_vcfs = list(getattr(snakemake.params, "amplicon_vcf_paths", []))
+    amplicon_pileups = list(getattr(snakemake.params, "amplicon_pileup_paths", []))
 
     sample_records = []
     for i, name in enumerate(sample_names):
@@ -684,6 +854,11 @@ def run_from_snakemake(snakemake):
             "bcr_abl_phasing": bcr_phasings[i] if i < len(bcr_phasings) else "",
             "bcr_abl_exon_coverage": bcr_exons[i] if i < len(bcr_exons) else "",
             "bcr_abl_plot_png": bcr_plots[i] if i < len(bcr_plots) else "",
+            "amplicon_stats": amplicon_stats[i] if i < len(amplicon_stats) else "",
+            "amplicon_summary": amplicon_summaries[i] if i < len(amplicon_summaries) else "",
+            "amplicon_itd": amplicon_itds[i] if i < len(amplicon_itds) else "",
+            "amplicon_vcf": amplicon_vcfs[i] if i < len(amplicon_vcfs) else "",
+            "amplicon_pileup": amplicon_pileups[i] if i < len(amplicon_pileups) else "",
         })
 
 

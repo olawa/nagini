@@ -359,6 +359,14 @@ bcr_abl:
   max_depth: 1000000
   min_spanning_reads: 10
 
+amplicon:
+  top_n: 0
+  min_qs: 10
+  len_range: "1000-3500"
+  threads: 8
+  rindels_extra: "--ont --amplicon"
+  flt3_itd_region: "chr13:28032002-28035169"
+
 
 annotate_small_variants: false
 annotate_svs: false
