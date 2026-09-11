@@ -29,7 +29,7 @@ rule cnvkit_batch:
         cnr="cnv/cnvkit/{sample}_{type}.cnr",
         cns="cnv/cnvkit/{sample}_{type}.cns",
     params:
-        outdir=lambda wildcards, output: os.path.dirname(output.cnr),
+        tmpdir="cnv/cnvkit/tmp_{sample}_{type}",
         method=config.get("cnvkit_batch", {}).get("method", "wgs"),
         extra=config.get("cnvkit_batch", {}).get("extra", "--count-reads"),
     log:
@@ -51,12 +51,12 @@ rule cnvkit_batch:
     message:
         "{rule}: CNV calling with CNVkit (WGS, tumor-only) for {wildcards.sample}_{wildcards.type}"
     shell:
+        "mkdir -p {params.tmpdir} && "
         "cnvkit.py batch {input.bam} -n -f {input.fasta} "
-        "--output-reference {params.outdir}/{wildcards.sample}_{wildcards.type}.reference.cnn "
-        "-m {params.method} -d {params.outdir} -p {threads} {params.extra} "
+        "--output-reference {params.tmpdir}/reference.cnn "
+        "-m {params.method} -d {params.tmpdir} -p {threads} {params.extra} "
         "> {log} 2>&1 && "
-        # CNVkit names output files after the input BAM basename.
-        # Ensure outputs match the expected Snakemake paths if they differ.
         "bam_base=$(basename {input.bam} .bam) && "
-        'if [ "{params.outdir}/${{bam_base}}.cnr" != "{output.cnr}" ]; then mv "{params.outdir}/${{bam_base}}.cnr" "{output.cnr}"; fi && '
-        'if [ "{params.outdir}/${{bam_base}}.cns" != "{output.cns}" ]; then mv "{params.outdir}/${{bam_base}}.cns" "{output.cns}"; fi'
+        "mv {params.tmpdir}/${{bam_base}}.cnr {output.cnr} && "
+        "mv {params.tmpdir}/${{bam_base}}.cns {output.cns} && "
+        "rm -rf {params.tmpdir}"
