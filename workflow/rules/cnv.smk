@@ -48,13 +48,13 @@ rule cnv_rindels:
             "benchmarks/cnv_rindels/{sample}_{type}.tsv",
             config.get("cnv_rindels", {}).get("benchmark_repeats", 1),
         )
-    threads: config.get("rindels", {}).get("threads", 4)
+    threads: config.get("cnv_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4))
     resources:
-        mem_mb=config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("rindels", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("rindels", {}).get("threads", 4),
-        time=config.get("rindels", {}).get("time", config["default_resources"]["time"]),
+        mem_mb=config.get("cnv_rindels", {}).get("mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])),
+        mem_per_cpu=config.get("cnv_rindels", {}).get("mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])),
+        partition=config.get("cnv_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
+        threads=config.get("cnv_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
+        time=config.get("cnv_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
     message:
         "{rule}: call whole-genome copy number variations with Rindels for {wildcards.sample}_{wildcards.type}"
     shell:

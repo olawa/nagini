@@ -155,3 +155,18 @@ nagini_excel_report:
   mem_mb: 4096
   mem_per_cpu: 4096
   partition: core
+
+cnv_rindels:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+
+bcr_abl_rindels:
+  threads: 4
+  time: "02:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: core
+

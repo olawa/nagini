@@ -505,13 +505,13 @@ rule bcr_abl_rindels:
         extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --bcr-abl"),
     log:
         "logs/bcr_abl_rindels/{sample}_{type}.log",
-    threads: config.get("rindels", {}).get("threads", 4)
+    threads: config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4))
     resources:
-        mem_mb=config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("rindels", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("rindels", {}).get("threads", 4),
-        time=config.get("rindels", {}).get("time", config["default_resources"]["time"]),
+        mem_mb=config.get("bcr_abl_rindels", {}).get("mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])),
+        mem_per_cpu=config.get("bcr_abl_rindels", {}).get("mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])),
+        partition=config.get("bcr_abl_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
+        threads=config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
+        time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
     shell:
         """
         exec > {log} 2>&1

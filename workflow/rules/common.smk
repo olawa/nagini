@@ -221,6 +221,11 @@ def _scale_workstation_resources(cfg):
             cores = int(workflow.cores)
         except (ValueError, TypeError):
             pass
+    if not cores and hasattr(workflow, "resource_settings") and getattr(workflow.resource_settings, "cores", None):
+        try:
+            cores = int(workflow.resource_settings.cores)
+        except (ValueError, TypeError):
+            pass
 
     if not cores or cores <= 1:
         return cfg
@@ -232,9 +237,10 @@ def _scale_workstation_resources(cfg):
         "dorado_alignment",
         "clairs_to_call",
         "sniffles2_call",
-        # Both rindels rules read this one section, and both are a single
+        # Both rindels rules read this section, and both are a single
         # compute-heavy job per sample.
         "rindels",
+        "cnv_rindels",
         "vep",
     )
     for rule_name in full_core_rules:

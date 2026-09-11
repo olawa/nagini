@@ -38,6 +38,10 @@ properties:
     $ref: "#/definitions/resources"
   nagini_excel_report:
     $ref: "#/definitions/resources"
+  cnv_rindels:
+    $ref: "#/definitions/resources"
+  bcr_abl_rindels:
+    $ref: "#/definitions/resources"
 additionalProperties: true
 
 required: [default_resources]

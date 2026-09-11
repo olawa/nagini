@@ -215,3 +215,18 @@ compile_cnv_html_report:
   mem_mb: 4096
   mem_per_cpu: 4096
   partition: core
+
+cnv_rindels:
+  threads: 48
+  time: "04:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 2048
+  partition: core
+
+bcr_abl_rindels:
+  threads: 16
+  time: "02:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 2048
+  partition: core
+
