@@ -52,7 +52,7 @@ def _cnvkit_cytoband(wildcards):
 
 
 rule decompress_cytoband:
-    """Decompress and normalize cytobands if compressed, ensuring a clean 5-column format."""
+    """Decompress cytobands if compressed, because merge_cnv_json expects plain text."""
     input:
         gz=lambda wildcards: config["references"][wildcards.build]["cytoband"],
     output:
@@ -71,7 +71,7 @@ rule decompress_cytoband:
     message:
         "{rule}: Decompressing cytoband reference for {wildcards.build}"
     shell:
-        "gzip -dc {input.gz} | awk 'BEGIN {{FS=\"[ \\t]+\"; OFS=\"\\t\"}} !/^#/ && !/^track/ && !/^browser/ && NF>=4 {{ if (NF>=5 && $$5 != \"\") print $$1,$$2,$$3,$$4,$$5; else print $$1,$$2,$$3,$$4,\"gneg\"; }}' > {output.txt} 2> {log}"
+        "gzip -dc {input.gz} > {output.txt} 2> {log}"
 
 
 rule cnvkit_json:
