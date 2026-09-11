@@ -184,9 +184,9 @@ rule compile_cnv_html_report:
     params:
         include_table=config.get("cnv_html_report", {}).get("show_table", False),
         extra_tables=config.get("cnv_html_report", {}).get("extra_tables", []),
-        # Tumor-only: no purity estimate from a matched normal; pass empty values.
-        tc="",
-        tc_method="",
+        # Tumor-only: default tumor cell content is 1.0 (unadjusted baseline).
+        tc=1.0,
+        tc_method="tumor-only",
         wide_plot_width=config.get("cnv_html_report", {}).get("wide_plot_width", False),
     log:
         "reports/cnv_html_report/{sample}_{type}.cnv_report.html.log",
@@ -207,4 +207,4 @@ rule compile_cnv_html_report:
     message:
         "{rule}: Compiling CNV HTML report for {wildcards.sample}_{wildcards.type}"
     script:
-        f"{_REPORTS_SCRIPTS}/cnv_html_report.py"
+        "../scripts/cnv_html_report.py"

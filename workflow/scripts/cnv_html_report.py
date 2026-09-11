@@ -1,0 +1,117 @@
+import csv
+from jinja2 import Template
+from pathlib import Path
+import sys
+import time
+
+
+def get_sample_name(wildcards):
+    return wildcards.sample
+
+
+def parse_table(table_def):
+    tsv_path = table_def["path"].format(**snakemake.wildcards)
+    with open(tsv_path) as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        header = reader.fieldnames
+        table_data = list(reader)
+
+    if len(table_data) == 0 and not header:
+        raise ValueError(f"empty table in {tsv_path}")
+
+    return {
+        "name": table_def.get("name", ""),
+        "description": table_def.get("description", ""),
+        "header": header,
+        "data": table_data,
+    }
+
+
+def create_report(template_filename, json_filename, css_files, js_files,
+                  show_table, extra_tables, tc, tc_method, wildcards, wide_plot_width):
+    with open(template_filename) as f:
+        template = Template(source=f.read())
+
+    with open(json_filename) as f:
+        json_string = f.read()
+
+    css_string = ""
+    for css_filename in css_files:
+        with open(css_filename) as f:
+            css_string += f.read()
+
+    js_string = ""
+    for js_filename in js_files:
+        with open(js_filename) as f:
+            js_string += f.read()
+
+    return template.render(
+        dict(
+            json=json_string,
+            css=css_string,
+            js=js_string,
+            extra_tables=extra_tables,
+            metadata=dict(
+                date=time.strftime("%Y-%m-%d %H:%M", time.localtime()),
+                sample=get_sample_name(wildcards),
+                show_table=show_table,
+                tc=tc,
+                tc_method=tc_method,
+                wide_plot_width=wide_plot_width,
+            ),
+        ))
+
+
+def main():
+    log = Path(snakemake.log[0])
+
+    logfile = open(log, "w")
+    sys.stdout = sys.stderr = logfile
+
+    json_filename = snakemake.input.json
+    html_template = Path(snakemake.input.html_template)
+    html_filename = snakemake.output.html
+    extra_tables_def = snakemake.params.extra_tables
+
+    js_files = []
+    if "js_files" in snakemake.input.keys():
+        js_files = snakemake.input.js_files
+
+    css_files = []
+    if "css_files" in snakemake.input.keys():
+        css_files = snakemake.input.css_files
+
+    extra_tables = [parse_table(t) for t in extra_tables_def]
+
+    tc = snakemake.params.tc
+    if tc == "" or tc is None:
+        tc = 1.0
+    else:
+        try:
+            tc = float(tc)
+        except (ValueError, TypeError):
+            tc = 1.0
+
+    tc_method = snakemake.params.tc_method
+    if not tc_method:
+        tc_method = "tumor-only"
+
+    report = create_report(
+        html_template,
+        json_filename,
+        css_files,
+        js_files,
+        snakemake.params.include_table,
+        extra_tables,
+        tc,
+        tc_method,
+        snakemake.wildcards,
+        snakemake.params.wide_plot_width,
+    )
+
+    with open(html_filename, "w") as f:
+        f.write(report)
+
+
+if __name__ == "__main__":
+    main()
