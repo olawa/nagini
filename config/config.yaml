@@ -356,11 +356,11 @@ cnv_engine: "both"  # options: both | rindels_only
 cnvkit_batch:
   container: "docker://hydragenetics/cnvkit:0.9.11"
   method: "wgs"
-  # --no-gc  : skip GC-bias correction (ONT is PCR-free — correction adds noise)
-  # --count-reads : count read midpoints instead of per-base depth — critical for
-  #                 performance with long-read data (complex CIGAR strings make
-  #                 the default pysam depth calculation extremely slow).
-  extra: "--no-gc --count-reads"
+  # -m wgs automatically selects whole-genome bin sizing and handles WGS biases.
+  # --count-reads: count read midpoints instead of per-base depth — critical for
+  #                performance with long-read data (complex CIGAR strings make
+  #                the default pysam depth calculation extremely slow).
+  extra: "--count-reads"
   threads: 8
   mem_mb: 16384
 
