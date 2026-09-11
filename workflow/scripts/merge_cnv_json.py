@@ -486,6 +486,7 @@ def merge_cnv_dicts(
             label=chrom,
             length=chrom_length,
             baf=[],
+            cytobands=[],
             annotations=[],
             callers={c: dict(name=c, label=caller_labels.get(c, c), ratios=[], segments=[], cnvs=[]) for c in callers},
         )
