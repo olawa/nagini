@@ -106,6 +106,18 @@ files:
     input: "cnv/rindels/{sample}_{type}.vcf.gz.tbi"
     output: "results/cnv/rindels/{sample}_{type}.vcf.gz.tbi"
     when: cnv_calling
+  - name: CNVkit copy ratio bins
+    input: "cnv/cnvkit/{sample}_{type}.cnr"
+    output: "results/cnv/cnvkit/{sample}_{type}.cnr"
+    when: cnvkit_enabled
+  - name: CNVkit segments
+    input: "cnv/cnvkit/{sample}_{type}.cns"
+    output: "results/cnv/cnvkit/{sample}_{type}.cns"
+    when: cnvkit_enabled
+  - name: CNV interactive HTML report
+    input: "reports/cnv_html_report/{sample}_{type}.cnv_report.html"
+    output: "results/reports/cnv_html_report/{sample}_{type}.cnv_report.html"
+    when: cnvkit_enabled
   - name: ClairS-TO concatenated VCF
     input: "snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"
     output: "results/snv_indels/clairs_to/{sample}_{type}.snv-indels.vcf.gz"

@@ -18,6 +18,7 @@ for module_tag in \
   "annotation:v1.4.1" \
   "cnv_sv:v3.2.1" \
   "qc:v0.8.0" \
+  "reports:v1.1.1" \
   "snv_indels:v2.1.0"; do
   module="${module_tag%%:*}"
   tag="${module_tag##*:}"

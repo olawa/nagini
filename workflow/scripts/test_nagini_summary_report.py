@@ -181,6 +181,7 @@ class SummaryReportTest(unittest.TestCase):
             self.assertIn("TP53 p.R273H (12.5%)", text)
 
 
+@unittest.skipIf(xlsxwriter is None, "xlsxwriter not available")
 class StackedTablesTest(unittest.TestCase):
     def test_the_sample_column_leads_and_columns_are_unioned(self):
         """Five samples' calls should be readable in one place.

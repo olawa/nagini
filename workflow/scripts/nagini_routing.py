@@ -433,6 +433,7 @@ PIPELINE_CONDITION_NAMES = {
     "target_metrics",
     "merged_fastq",
     "cnv_calling",
+    "cnvkit_enabled",
     "rindels_sv",
 }
 
@@ -457,6 +458,7 @@ SAMPLE_CONDITION_NAMES = {
     "merged_fastq",
     "cnv_calling",
     "sample_needs_cnv_calling",
+    "cnvkit_enabled",
     "rindels_sv",
 }
 

@@ -187,3 +187,31 @@ sv_summary:
   mem_mb: 4096
   mem_per_cpu: 4096
   partition: core
+
+cnvkit_batch:
+  threads: 8
+  time: "12:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 2048
+  partition: core
+
+cnvkit_json:
+  threads: 1
+  time: "01:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: core
+
+merge_cnvkit_json:
+  threads: 1
+  time: "01:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: core
+
+compile_cnv_html_report:
+  threads: 1
+  time: "00:30:00"
+  mem_mb: 4096
+  mem_per_cpu: 4096
+  partition: core

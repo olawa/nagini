@@ -1,0 +1,180 @@
+__author__ = "Ola Wallerman"
+__copyright__ = "Copyright 2026, Ola Wallerman"
+__email__ = "ola.wallerman@scilifelab.uu.se"
+__license__ = "GPL-3"
+
+# Standalone CNV HTML report rules for Nagini.
+#
+# These rules call the vendored hydra-genetics/reports Python scripts
+# directly — without importing the reports Snakemake module — so that
+# Nagini's own config/sample/unit validation logic is unaffected by the
+# module's common.smk (which unconditionally requires config["general_report"]
+# and several other keys not present in Nagini).
+#
+# Pipeline:
+#   cnvkit_batch  ->  cnvkit_json  ->  merge_cnvkit_json  ->  cnv_html_report
+#
+# The {caller} wildcard in cnvkit_json is always "cnvkit" for Nagini.
+
+import os
+
+_REPORTS_SCRIPTS = os.path.join(
+    workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
+    "workflow", "scripts"
+)
+_REPORTS_TEMPLATES = os.path.join(
+    workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
+    "workflow", "templates"
+)
+
+
+def _get_ref(key, config):
+    """Return a reference file path resolved via reference_build."""
+    build = config.get("reference_build", "hg38")
+    return config["references"][build][key]
+
+
+def _cnvkit_cytoband(wildcards):
+    """Return cytoband file if cytobands are enabled and file exists, else empty list."""
+    if config.get("cnv_html_report", {}).get("cytobands", False):
+        build = config.get("reference_build", "hg38")
+        cytoband = config["references"][build].get("cytoband", "")
+        if cytoband:
+            return cytoband
+    return []
+
+
+rule cnvkit_json:
+    """Convert CNVkit .cnr / .cns output to the intermediate JSON format
+    expected by merge_cnvkit_json.
+
+    Uses the vendored hydra-genetics/reports cnv_json.py script. The
+    {caller} wildcard must be 'cnvkit' so the correct parser is selected.
+    """
+    input:
+        ratios="cnv/cnvkit/{sample}_{type}.cnr",
+        segments="cnv/cnvkit/{sample}_{type}.cns",
+        annotations=config.get("merge_cnv_json", {}).get("annotations", []),
+    output:
+        json=temp("reports/cnv_html_report/{sample}_{type}.{caller}.json"),
+    wildcard_constraints:
+        caller="cnvkit",
+    params:
+        skip_chromosomes=config["references"][config.get("reference_build", "hg38")].get("skip_chrs"),
+        csv_field_size_limit=config.get("cnv_json", {}).get("csv_field_size_limit", 100000000),
+    log:
+        "reports/cnv_html_report/{sample}_{type}.{caller}.json.log",
+    benchmark:
+        repeat(
+            "reports/cnv_html_report/{sample}_{type}.{caller}.json.benchmark.tsv",
+            config.get("cnv_json", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("cnv_json", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("cnv_json", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("cnv_json", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("cnv_json", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("cnv_json", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("cnv_json", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("cnv_json", {}).get("container", config["default_container"])
+    message:
+        "{rule}: Building CNVkit JSON for {wildcards.sample}_{wildcards.type}"
+    script:
+        f"{_REPORTS_SCRIPTS}/cnv_json.py"
+
+
+rule merge_cnvkit_json:
+    """Merge per-caller CNV JSON(s) with genome context (cytobands, FAI).
+
+    Nagini is a tumor-only pipeline so germline_vcf and CNV VCF lists are
+    empty. merge_cnv_json.py gracefully handles empty germline_vcf (line 594:
+    'if len(germline_vcf) == 0: germline_vcf = None') and empty VCF lists.
+    """
+    input:
+        json=["reports/cnv_html_report/{sample}_{type}.cnvkit.json"],
+        fai=lambda wildcards: _get_ref("fai", config),
+        cytobands=_cnvkit_cytoband,
+        annotation_bed=config.get("merge_cnv_json", {}).get("annotations", []),
+        germline_vcf=[],
+        filtered_cnv_vcfs=[],
+        cnv_vcfs=[],
+        ref_genes=config.get("merge_cnv_json", {}).get("ref_genes", []),
+        cancer_genes=config.get("merge_cnv_json", {}).get("cancer_genes", []),
+    output:
+        json=temp("reports/cnv_html_report/{sample}_{type}.merged.json"),
+    params:
+        skip_chromosomes=config["references"][config.get("reference_build", "hg38")].get("skip_chrs", []),
+        cytobands=config.get("cnv_html_report", {}).get("cytobands", False),
+    log:
+        "reports/cnv_html_report/{sample}_{type}.merged.json.log",
+    benchmark:
+        repeat(
+            "reports/cnv_html_report/{sample}_{type}.merged.json.benchmark.tsv",
+            config.get("merge_cnv_json", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("merge_cnv_json", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("merge_cnv_json", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("merge_cnv_json", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("merge_cnv_json", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("merge_cnv_json", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("merge_cnv_json", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("merge_cnv_json", {}).get("container", config["default_container"])
+    message:
+        "{rule}: Merging CNV JSON data for {wildcards.sample}_{wildcards.type}"
+    script:
+        f"{_REPORTS_SCRIPTS}/merge_cnv_json.py"
+
+
+rule compile_cnv_html_report:
+    """Render the final interactive D3.js HTML report from the merged JSON.
+
+    The report is a single self-contained HTML file with all JS/CSS inlined.
+    It mirrors the Illumina pipeline HTML reports produced by the same script.
+    """
+    input:
+        json="reports/cnv_html_report/{sample}_{type}.merged.json",
+        html_template=f"{_REPORTS_TEMPLATES}/cnv_html_report/index.html",
+        js_files=[
+            f"{_REPORTS_TEMPLATES}/assets/js/d3.v7.min.js",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/01-chromosome-plot.js",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/02-genome-plot.js",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/03-results-table.js",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/04-window-summary.js",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/05-main.js",
+        ],
+        css_files=[
+            f"{_REPORTS_TEMPLATES}/assets/css/icons.css",
+            f"{_REPORTS_TEMPLATES}/cnv_html_report/style.css",
+        ],
+    output:
+        html="reports/cnv_html_report/{sample}_{type}.cnv_report.html",
+    params:
+        include_table=config.get("cnv_html_report", {}).get("show_table", False),
+        extra_tables=config.get("cnv_html_report", {}).get("extra_tables", []),
+        # Tumor-only: no purity estimate from a matched normal; pass empty values.
+        tc="",
+        tc_method="",
+        wide_plot_width=config.get("cnv_html_report", {}).get("wide_plot_width", False),
+    log:
+        "reports/cnv_html_report/{sample}_{type}.cnv_report.html.log",
+    benchmark:
+        repeat(
+            "reports/cnv_html_report/{sample}_{type}.cnv_report.html.benchmark.tsv",
+            config.get("cnv_html_report", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("cnv_html_report", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("cnv_html_report", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("cnv_html_report", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("cnv_html_report", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("cnv_html_report", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("cnv_html_report", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("cnv_html_report", {}).get("container", config["default_container"])
+    message:
+        "{rule}: Compiling CNV HTML report for {wildcards.sample}_{wildcards.type}"
+    script:
+        f"{_REPORTS_SCRIPTS}/cnv_html_report.py"

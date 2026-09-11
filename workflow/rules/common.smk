@@ -732,6 +732,17 @@ def sample_needs_cnv_calling(sample):
     return _routing_call(nagini_routing.sample_needs_cnv_calling, units, sample, assays)
 
 
+def cnvkit_enabled(sample):
+    """Whether CNVkit runs for this sample.
+
+    CNVkit runs whenever CNV calling is enabled and cnv_engine is not set to
+    'rindels_only'. Both Rindels and CNVkit can run in parallel.
+    """
+    if not sample_needs_cnv_calling(sample):
+        return False
+    return config.get("cnv_engine", "both") != "rindels_only"
+
+
 def _find_rindels_binary():
     """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
     override = config.get("rindels", {}).get("binary", "") or config.get("bcr_abl", {}).get("rindels_binary", "")
@@ -1250,6 +1261,7 @@ _PIPELINE_CONDITIONS = {
         sample_has_rindels_sv(s) for s in get_samples(samples)
     ),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
+    "cnvkit_enabled": lambda: any(cnvkit_enabled(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }
@@ -1271,6 +1283,7 @@ _SAMPLE_CONDITIONS = {
     "sample_needs_sv_calling": sample_needs_sv_calling,
     "cnv_calling": sample_needs_cnv_calling,
     "sample_needs_cnv_calling": sample_needs_cnv_calling,
+    "cnvkit_enabled": cnvkit_enabled,
     "sample_needs_rna_analysis": sample_needs_rna_analysis,
     "target_restricted": sample_is_target_restricted,
     "target_metrics": sample_has_target_metrics,

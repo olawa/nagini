@@ -350,6 +350,34 @@ rindels:
   extra_cnv: "--ont --sv-lite"
   threads: 4
 
+# CNVkit: whole-genome copy-number calling from ONT BAMs.
+# Runs in parallel with Rindels. Set cnv_engine: rindels_only to skip.
+cnv_engine: "both"  # options: both | rindels_only
+cnvkit_batch:
+  container: "docker://hydragenetics/cnvkit:0.9.11"
+  method: "wgs"
+  # --no-gc  : skip GC-bias correction (ONT is PCR-free — correction adds noise)
+  # --count-reads : count read midpoints instead of per-base depth — critical for
+  #                 performance with long-read data (complex CIGAR strings make
+  #                 the default pysam depth calculation extremely slow).
+  extra: "--no-gc --count-reads"
+  threads: 8
+  mem_mb: 16384
+
+# Interactive HTML CNV report (D3.js, mirrors Illumina pipeline reports).
+cnv_html_report:
+  container: "docker://hydragenetics/reports:1.1.1"
+  show_table: false   # No filtered CNV VCFs in tumor-only mode
+  cytobands: true     # Visualise cytobands in the chromosome plot
+  wide_plot_width: 2000
+
+merge_cnv_json:
+  container: "docker://hydragenetics/reports:1.1.1"
+  # cytobands: path to UCSC-format cytoband file; resolved from references.<build>.cytoband
+
+cnv_json:
+  container: "docker://hydragenetics/reports:1.1.1"
+
 bcr_abl:
   tolerance: 150
   min_mapq: 1

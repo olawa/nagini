@@ -506,6 +506,7 @@ esac
 [[ -f "$pipeline_path/workflow/Snakefile" ]] || die "Snakefile not found below $pipeline_path"
 [[ -d "$profile" ]] || die "Snakemake profile does not exist: $profile"
 [[ -d "$pipeline_path/vendor/hydra-genetics" ]] || die "Hydra modules are missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
+[[ -d "$pipeline_path/vendor/hydra-genetics/reports" ]] || die "Hydra reports module is missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
 [[ -d "$pipeline_path/vendor/snakemake-wrappers" ]] || die "Snakemake wrappers are missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
 
 require_command python3
