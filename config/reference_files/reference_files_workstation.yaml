@@ -94,6 +94,14 @@ reference_builds:
       type: file
       url: file:/data/references/chm13v2.0_cytobands_allchrs.bed
       checksum: ''
+    # UCSC's NCBI RefSeq track for hs1. Note this is a different annotation set
+    # from hg38's GENCODE, so gene names and transcript models are not
+    # one-to-one between a T2T and an hg38 run of the same sample.
+    gene_annotation:
+      path: hs1.ncbiRefSeq.gtf
+      type: file
+      url: https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/genes/hs1.ncbiRefSeq.gtf.gz
+      checksum: ''
   hg19:
     fasta:
       path: hg19/hg19.fa
