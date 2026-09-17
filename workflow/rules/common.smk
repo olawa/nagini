@@ -551,6 +551,16 @@ def get_cytoband_file(wildcards=None):
     return _optional_reference_path("cytoband")
 
 
+def get_gaps_bed(wildcards=None):
+    """Assembly gaps for the ideogram, when the build registers a track.
+
+    chm13 is gapless, so leaving this unset is the correct answer for T2T:
+    Rindels then draws none rather than GRCh38's unresolved arms.
+    """
+
+    return _optional_reference_path("gaps_bed")
+
+
 def get_tandem_repeats(wildcards=None):
     return _optional_reference_path("tandem_repeats")
 

@@ -192,6 +192,7 @@ rule cnv_rindels_ideogram:
         centromeres=lambda wildcards: "references/centromeres_{}.bed".format(
             config.get("reference_build", "hg38")
         ),
+        gaps=lambda wildcards: get_gaps_bed() or [],
     output:
         png="reports/cnv_ideogram/{sample}_{type}.ideogram.png",
     params:
@@ -249,13 +250,22 @@ rule cnv_rindels_ideogram:
         if [ -s "{input.centromeres}" ]; then
             CENTROMERE_ARG="--centromeres {input.centromeres}"
         else
-            echo "No centromere BED; Rindels will fall back to its built-in hg38 set."
+            echo "No centromere BED; Rindels decides from the data's own lengths."
+        fi
+
+        # Gaps are registered per build and usually absent: a gapless assembly
+        # such as chm13 has none to draw, and Rindels no longer substitutes
+        # GRCh38's when the lengths say the assembly is something else.
+        GAPS_ARG=""
+        if [ -n "{input.gaps}" ] && [ -s "{input.gaps}" ]; then
+            GAPS_ARG="--gaps {input.gaps}"
         fi
 
         "$RINDELS_BIN" ideogram \
             $CNV_ARG \
             $BAF_ARG \
             $CENTROMERE_ARG \
+            $GAPS_ARG \
             --bin-size {params.bin_size} \
             --res $(( {params.bin_size} / 1000 )) \
             --width {params.width} \

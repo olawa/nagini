@@ -931,6 +931,7 @@ REGISTRY_BUILD_VARIABLES = {
     "clinvar": "CLINVAR",
     "clinvar_index": "CLINVAR_INDEX",
     "cytoband": "CYTOBAND",
+    "gaps_bed": "GAPS_BED",
     "gene_annotation": "GTF",
     "annotations": "ANNOTATIONS",
 }
