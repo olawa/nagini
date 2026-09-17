@@ -115,7 +115,9 @@ Options:
   --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed FASTQ/BAM.
                                 sample_sheet*.csv/tsv is auto-detected for existing FASTQ when omitted.
   --init-sample-sheet [FILE]    Generate a sample sheet CSV template in the input directory and exit.
-  --barcode-kit KIT             Dorado barcode kit used for demultiplexing minknow input.
+  --barcode-kit KIT             Barcode kit. Demultiplexes minknow input, and for every
+                                input type checks that the barcodes in the map could have
+                                come from that kit.
   --default-barcode BARCODE     Barcode for FASTQ and BAM rows (default: NB).
   --run-id ID                   Run ID for generated FASTQ rows.
   --basecalling-model MODEL     Basecalling model (also used by Dorado for minknow input).
@@ -640,7 +642,13 @@ prepare_cmd=(
 [[ -n "$reference_build" ]] && prepare_cmd+=(--reference-build "$reference_build")
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")
 [[ -n "$barcode_map" ]] && prepare_cmd+=(--barcode-map "$barcode_map")
-[[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model" --dorado-kit "$barcode_kit")
+[[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-input "$input_dir" --dorado-model "$basecalling_model")
+# The kit is forwarded for every input type, not only minknow. Demultiplexing
+# is driven by --dorado-input, which only minknow sets, so this enables no
+# basecalling; it is what lets the barcodes in the map be checked against the
+# kit that produced them, and what names the expected barcodes when no map is
+# given at all.
+[[ -n "$barcode_kit" ]] && prepare_cmd+=(--dorado-kit "$barcode_kit")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-demux-output-format "$dorado_demux_output_format" --dorado-aligner "$dorado_aligner")
 [[ "$dorado_demux_both_ends" == "true" ]] && prepare_cmd+=(--dorado-demux-both-ends)
 [[ -n "$dorado_demux_extra" ]] && prepare_cmd+=(--dorado-demux-extra "$dorado_demux_extra")
