@@ -356,8 +356,11 @@ cnv_engine: "both"  # options: both | rindels_only
 cnvkit_batch:
   container: "docker://hydragenetics/cnvkit:0.9.11"
   method: "wgs"
-  # Target average bin size in base pairs (default 5000 is too small for ONT long reads,
-  # causing extreme midpoint sparsity with --count-reads; 50000 or 100000 is recommended).
+  # Bin size in base pairs. Used by the cnvkit_targets rule, which tiles the
+  # accessible genome once per reference build; batch is then handed those bins
+  # with --targets rather than deriving its own. CNVkit's default of 5000 is too
+  # small for ONT long reads, causing extreme midpoint sparsity with
+  # --count-reads; 50000 or 100000 is recommended.
   target_avg_size: 50000
   # --count-reads: count read midpoints instead of per-base depth — critical for
   #                performance with long-read data (complex CIGAR strings make

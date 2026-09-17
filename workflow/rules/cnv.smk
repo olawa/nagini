@@ -141,11 +141,11 @@ rule cytoband_centromeres:
     T2T puts the centromeres in the wrong places.
     """
     output:
-        bed="references/centromeres.bed",
+        bed="references/centromeres_{build}.bed",
     params:
         cytoband=lambda wildcards: get_cytoband_file() or "",
     log:
-        "logs/cytoband_centromeres/centromeres.log",
+        "logs/cytoband_centromeres/centromeres_{build}.log",
     threads: 1
     resources:
         mem_mb=config["default_resources"]["mem_mb"],
@@ -157,6 +157,8 @@ rule cytoband_centromeres:
         config["default_container"]
     conda:
         "../../envs/nagini.yaml"
+    wildcard_constraints:
+        build=r"[A-Za-z0-9._-]+",
     message:
         "{rule}: derive centromere intervals from the cytoband table"
     script:
@@ -172,7 +174,9 @@ rule cnv_rindels_ideogram:
     """
     input:
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
-        centromeres="references/centromeres.bed",
+        centromeres=lambda wildcards: "references/centromeres_{}.bed".format(
+            config.get("reference_build", "hg38")
+        ),
     output:
         png="reports/cnv_ideogram/{sample}_{type}.ideogram.png",
     params:
