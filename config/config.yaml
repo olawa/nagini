@@ -348,6 +348,12 @@ rindels:
   # without assembly, which is what a dic(9;20) or iAMP21 design is looking
   # for. Use --ascat-markers with a common-SNP panel to keep --only-cnv fast.
   extra_cnv: "--ont --sv-lite"
+  # Rindels' unified PDF report. It has no assembly option: the ideogram gaps
+  # are hg38 whatever reference the run was given, so on a non-hg38 build the
+  # picture is drawn on the wrong coordinates. Set to false for T2T runs and
+  # use the Ideogram sheet in the Excel report, which takes the build's own
+  # centromeres.
+  report: true
   threads: 4
 
 # CNVkit: whole-genome copy-number calling from ONT BAMs.

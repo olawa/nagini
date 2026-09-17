@@ -41,6 +41,16 @@ rule cnv_rindels:
         # Gene annotation when the reference build has a GTF installed, so the
         # call set carries genes and consequences rather than coordinates only.
         annotation=lambda wildcards: get_rindels_annotation_args(),
+        # Rindels has no assembly option: the unified PDF's ideogram gaps are
+        # hg38 whatever reference it was given, and `rindels plot --ref-genome`
+        # says as much ("hg38 only supported for ideogram gaps currently").
+        # The report is therefore switchable, so a T2T run can drop a figure
+        # drawn on the wrong coordinates instead of publishing it.
+        report=lambda wildcards, output: (
+            f"--report --report-path {output.pdf}"
+            if config.get("rindels", {}).get("report", True)
+            else ""
+        ),
     log:
         "logs/cnv_rindels/{sample}_{type}.log",
     benchmark:
@@ -72,8 +82,7 @@ rule cnv_rindels:
             --cnv-output {output.bins} \
             --cnv-bin-size {params.bin_size} \
             -o {output.vcf} \
-            --report \
-            --report-path {output.pdf} \
+            {params.report} \
             -t {threads} \
             {params.annotation} \
             {params.extra}
@@ -93,7 +102,7 @@ rule cnv_rindels:
         fi
 
         if [ ! -f "{output.pdf}" ]; then
-            echo "Warning: Rindels unified PDF report was not generated; creating empty placeholder."
+            echo "Rindels unified PDF report not produced or switched off; leaving a placeholder."
             touch "{output.pdf}"
         fi
         """
