@@ -11,8 +11,9 @@ arm. They are merged per chromosome so each chromosome yields a single
 interval, which is what an ideogram wants to draw.
 """
 
-from __future__ import annotations
-
+# No `from __future__ import annotations`: Snakemake's script: directive
+# prepends a preamble that injects the snakemake object, so a __future__ import
+# is no longer the first statement in the file and the script fails to parse.
 import argparse
 import gzip
 import sys
@@ -28,11 +29,11 @@ def open_text(path):
     return open(path, "r")
 
 
-def centromeres(handle) -> list[tuple[str, int, int]]:
+def centromeres(handle):
     """One merged interval per chromosome, in first-seen order."""
 
-    spans: dict[str, list[int]] = {}
-    order: list[str] = []
+    spans = {}
+    order = []
     for line in handle:
         if not line.strip() or line.startswith(("#", "track", "browser")):
             continue
@@ -58,13 +59,13 @@ def centromeres(handle) -> list[tuple[str, int, int]]:
     return [(chrom, spans[chrom][0], spans[chrom][1]) for chrom in order]
 
 
-def write_bed(rows, destination: Path) -> None:
+def write_bed(rows, destination):
     with destination.open("w") as handle:
         for chrom, start, end in rows:
             handle.write(f"{chrom}\t{start}\t{end}\tcentromere\n")
 
 
-def main(argv=None) -> int:
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cytoband", required=True)
     parser.add_argument("--output", required=True)

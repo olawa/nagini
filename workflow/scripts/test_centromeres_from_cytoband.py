@@ -33,5 +33,37 @@ class CentromeresFromCytobandTest(unittest.TestCase):
             out = Path(d) / "c.bed"
             CENT.main(["--cytoband", str(src), "--output", str(out)])
             self.assertIn("chr9\t43000000\t47000000\tcentromere", out.read_text())
+class ScriptDirectiveCompatibilityTest(unittest.TestCase):
+    def test_no_script_directive_file_has_a_future_import(self):
+        """Snakemake prepends a preamble to a `script:` file.
+
+        A `from __future__` import is then no longer the first statement and
+        the script fails to parse -- which only shows up when the rule runs,
+        after everything it depends on has already been computed.
+        """
+
+        import re
+
+        rules = Path(__file__).resolve().parents[1] / "rules"
+        scripts = set()
+        for rule_file in rules.glob("*.smk"):
+            scripts.update(re.findall(r'"\.\./scripts/([a-z_0-9]+\.py)"', rule_file.read_text()))
+        self.assertTrue(scripts, "no script: directives found; the pattern may be stale")
+
+        # Parsed, not grepped: a comment explaining the rule is not a violation
+        # of it, and this file's own explanation would otherwise trip the test.
+        import ast
+
+        offenders = []
+        for name in sorted(scripts):
+            tree = ast.parse((Path(__file__).with_name(name)).read_text())
+            if any(
+                isinstance(node, ast.ImportFrom) and node.module == "__future__"
+                for node in ast.walk(tree)
+            ):
+                offenders.append(name)
+        self.assertEqual(offenders, [])
+
+
 if __name__ == "__main__":
     unittest.main()
