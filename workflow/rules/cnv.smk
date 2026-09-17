@@ -168,9 +168,15 @@ rule cytoband_centromeres:
 rule cnv_rindels_ideogram:
     """Whole-genome ideogram from the Rindels bins and BAF track.
 
-    --baf-bed is a sidecar of cnv_rindels rather than a declared output, so it
-    is passed only when it exists: which sidecars appear depends on the mode
-    and the data.
+    The CNV data comes from the same Parquet table the unified PDF report
+    renders from, not from cnv_bins.bed, and it is aggregated at the run's own
+    bin size rather than the subcommand's 1 Mb default. Drawing the BED at 1 Mb
+    while the PDF drew the Parquet at 50 kb is what made the two pictures of
+    one sample disagree.
+
+    Both the Parquet and the BAF track are sidecars of cnv_rindels rather than
+    declared outputs, so each is used only when it exists and cnv_bins.bed,
+    which is declared, remains the dependency.
     """
     input:
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
@@ -182,6 +188,9 @@ rule cnv_rindels_ideogram:
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         baf=lambda wildcards: f"cnv/rindels/{wildcards.sample}_{wildcards.type}.baf.bed",
+        # `-o X.vcf` makes Rindels write its CNV bin table to X.vcf.parquet.
+        parquet=lambda wildcards: f"cnv/rindels/{wildcards.sample}_{wildcards.type}.vcf.parquet",
+        bin_size=config.get("rindels", {}).get("cnv_bin_size", 50000),
         width=config.get("rindels_ideogram", {}).get("width", 2000),
         height=config.get("rindels_ideogram", {}).get("height", 2400),
         extra=config.get("rindels_ideogram", {}).get("extra", ""),
@@ -212,6 +221,14 @@ rule cnv_rindels_ideogram:
 
         mkdir -p "$(dirname {output.png})"
 
+        # Prefer the table the PDF report renders from; fall back to the BED.
+        if [ -s "{params.parquet}" ]; then
+            CNV_ARG="--cnv {params.parquet}"
+        else
+            echo "No CNV Parquet at {params.parquet}; falling back to the binned BED."
+            CNV_ARG="--bed {input.bins}"
+        fi
+
         BAF_ARG=""
         if [ -s "{params.baf}" ]; then
             BAF_ARG="--baf-bed {params.baf}"
@@ -227,9 +244,11 @@ rule cnv_rindels_ideogram:
         fi
 
         "$RINDELS_BIN" ideogram \
-            --bed {input.bins} \
+            $CNV_ARG \
             $BAF_ARG \
             $CENTROMERE_ARG \
+            --bin-size {params.bin_size} \
+            --res $(( {params.bin_size} / 1000 )) \
             --width {params.width} \
             --height {params.height} \
             {params.extra} \
