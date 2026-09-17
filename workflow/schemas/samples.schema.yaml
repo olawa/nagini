@@ -7,5 +7,10 @@ properties:
   tumor_content:
     type: string
     description: tumor cell content in sample
+  dna_number:
+    type: string
+    description: >
+      Lab identifier for the sample, shown in the reports. Kept apart from
+      `sample`, which names files and so has to stay filename-safe and stable.
 required:
   - sample

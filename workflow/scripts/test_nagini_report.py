@@ -505,6 +505,36 @@ class FullReportTest(unittest.TestCase):
             )
         self.assertNotIn("ON-TARGET READ STATISTICS", text)
 
+    def test_the_dna_number_is_shown_beside_the_pipeline_sample_id(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            output = root / "labelled.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+                dna_number="DNA2025-1001",
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+        self.assertIn("DNA Number\tDNA2025-1001", text)
+        self.assertIn("Sample ID (pipeline)\tgustaf1", text)
+
+    def test_the_dna_number_row_says_so_when_there_is_none(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            output = root / "unlabelled.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+            )
+            text = "\n".join(
+                "\t".join(row) for row in read_workbook(output)["Overview"]
+            )
+        self.assertIn("DNA Number\tN/A", text)
+
     def test_chromosomes_outside_the_design_are_not_low_coverage_targets(self):
         """A real mosdepth --by summary, from the T2T run.
 

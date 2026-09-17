@@ -148,6 +148,55 @@ class PrepareNaginiInputsTest(unittest.TestCase):
                     start, end = int(fields[1]), int(fields[2])
                     self.assertGreater(end, start)
 
+    def test_a_lab_identifier_in_the_barcode_map_reaches_samples_tsv(self):
+        """The DNA number is reported; the sample id still names the files.
+
+        Keeping them apart is what lets a run be delivered under a real lab
+        identifier without renaming a single file, read group or VCF column.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "inbox" / "20260625_1307_P2S_PBE84335_b84b698e"
+            for barcode in ("barcode01", "barcode02"):
+                directory = root / "bam_pass" / barcode
+                directory.mkdir(parents=True)
+                (directory / "reads_0.bam").touch()
+            mapping = Path(tmpdir) / "barcode_map.csv"
+            mapping.write_text(
+                "barcode,sample,type,assay,dna_number\n"
+                "barcode01,gustaf1,T,adaptive_cnv_sv,DNA2025-1001\n"
+                # The column is optional per row.
+                "barcode02,gustaf2,T,adaptive_cnv_sv,\n"
+            )
+
+            args = type("Args", (), {})()
+            args.input_dir = Path(tmpdir) / "inbox"
+            args.barcode_map = mapping
+            args.sample_type = "T"
+            args.input_type = "unmapped_bam"
+            args.sequence_id = "inbox"
+            args.run_id = ""
+            args.methylation = "Yes"
+            args.basecalling_model = "sup"
+
+            samples, _units = PREPARE.make_bam_tables_from_barcode_map(args)
+
+        by_name = {row["sample"]: row for row in samples}
+        self.assertEqual(by_name["gustaf1"]["dna_number"], "DNA2025-1001")
+        self.assertNotIn("dna_number", by_name["gustaf2"])
+
+    def test_an_optional_sample_column_is_not_dropped_by_the_first_row(self):
+        """sample_columns took the first row's keys, so a column present only
+        on a later sample vanished for everyone."""
+
+        samples = [{"sample": "a"}, {"sample": "b", "dna_number": "DNA2"}]
+        columns = ["sample"]
+        for row in samples:
+            for column in row:
+                if column not in columns:
+                    columns.append(column)
+        self.assertEqual(columns, ["sample", "dna_number"])
+
     def test_multi_flowcell_units_are_named_after_the_flowcell(self):
         """A merged sample has to say which flowcell each unit came from.
 

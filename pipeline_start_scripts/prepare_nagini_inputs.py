@@ -396,6 +396,16 @@ def make_barcode_sample_name(base_sample: str, barcode: str) -> str:
     return f"{base}_{short_bc}"
 
 
+def sample_row(sample_name: str, assignment: dict) -> dict[str, str]:
+    """A samples.tsv row, carrying the lab identifier when the map gave one."""
+
+    row = {"sample": sample_name}
+    dna_number = str(assignment.get("dna_number", "") or "").strip()
+    if dna_number:
+        row["dna_number"] = dna_number
+    return row
+
+
 def read_barcode_map(
     path: Path,
     default_type: str,
@@ -437,6 +447,17 @@ def read_barcode_map(
         )
         sample_type = fields.get("type", fields.get("sampletype", "")) or default_type
         sample_type = sample_type.upper()
+        # The lab identifier the report should show. Kept apart from `sample`,
+        # which names files and so has to stay filename-safe and stable: a run
+        # can be delivered under a real DNA number without renaming anything.
+        dna_number = next(
+            (
+                fields.get(key, "")
+                for key in ("dnanumber", "dna", "dnanr", "labid", "label")
+                if fields.get(key, "")
+            ),
+            "",
+        )
         raw_lib = fields.get("librarytype", fields.get("library_type", ""))
         assay = str(fields.get("assay", "") or default_assay).strip().lower()
         library_type = resolve_library_type_for_assay(
@@ -466,6 +487,7 @@ def read_barcode_map(
                 "type": sample_type,
                 "library_type": library_type,
                 "assay": assay,
+                "dna_number": dna_number,
             }
         )
 
@@ -852,7 +874,7 @@ def make_bam_tables_from_barcode_map(
         assignment = mapping[barcode]
 
         sample_name = assignment["sample"]
-        samples_by_name.setdefault(sample_name, {"sample": sample_name})
+        samples_by_name.setdefault(sample_name, sample_row(sample_name, assignment))
         for bam_path, unit_name in name_processing_units(
             sorted(bams_by_barcode[barcode]), barcode
         ):
@@ -1265,7 +1287,7 @@ def make_barcode_fastq_tables(
         assignment = mapping[barcode]
 
         sample_name = assignment["sample"]
-        samples_by_name.setdefault(sample_name, {"sample": sample_name})
+        samples_by_name.setdefault(sample_name, sample_row(sample_name, assignment))
         source_files = sorted(fastqs_by_barcode[barcode])
         short_bc = format_short_barcode(barcode)
         if short_bc in sample_name.lower() or barcode.lower() in sample_name.lower():
@@ -1441,7 +1463,7 @@ def make_minknow_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]],
     for barcode in sorted(mapping):
         assignment = mapping[barcode]
         sample_name = assignment["sample"]
-        samples_by_name.setdefault(sample_name, {"sample": sample_name})
+        samples_by_name.setdefault(sample_name, sample_row(sample_name, assignment))
         units.append(
             {
                 "sample": sample_name,
@@ -1997,7 +2019,14 @@ def main() -> None:
     validate_barcode_kit(args, units)
     warn_about_model_download(args)
 
-    sample_columns = list(samples[0]) if samples else ["sample"]
+    # The union, not the first row's keys: an optional column such as
+    # dna_number may be absent from the first sample and present on a later
+    # one, and taking only the first row's keys would drop it for everyone.
+    sample_columns = ["sample"]
+    for row in samples:
+        for column in row:
+            if column not in sample_columns:
+                sample_columns.append(column)
     unit_columns = list(BASE_UNIT_COLUMNS)
     for row in units:
         for column in row:

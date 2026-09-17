@@ -322,6 +322,24 @@ barcode01,SAMPLE_A,N
 barcode02,SAMPLE_B,N
 ```
 
+Två valfria kolumner till: `assay` styr vilken analys som körs för just den
+barcoden och slår `--assay`, och `dna_number` är laboratoriets identitet för
+provet:
+
+```text
+barcode,sample,type,assay,dna_number
+barcode01,gustaf1,T,adaptive_cnv_sv,DNA2025-1001
+barcode02,gustaf2,T,adaptive_cnv_sv,DNA2025-1002
+```
+
+`dna_number` hamnar i `samples.tsv` och visas i båda arbetsböckerna — överst i
+per-provrapportens metadata och som första kolumn i summaryns översikt, i
+PASS Variants och i de staplade SV/CNV-tabellerna. Den namnger däremot
+*ingenting* på disk. Det är avsikten: `sample` bygger filnamn, read groups och
+VCF-kolumner, så en körning kan levereras under ett riktigt DNA-nummer utan
+att en enda fil, header eller index skrivs om. Utan kolumnen står det `N/A`
+respektive `-` i rapporterna och ingenting annat ändras.
+
 Starta med:
 
 ```bash

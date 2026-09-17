@@ -222,6 +222,53 @@ class StackedTablesTest(unittest.TestCase):
         self.assertEqual(SUMMARY_MODULE.stack_sample_tables([{"sample": "x"}], ("cnv_tsv",)), [])
 
 
+class DnaNumberTest(unittest.TestCase):
+    def test_the_lab_identifier_leads_the_overview_and_the_stacked_tables(self):
+        """A workbook that shows only barcode-derived ids cannot be filed."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            cramino = tmp / "s.cramino.txt"
+            cramino.write_text("Yield [Gb]\t15.53\nNumber of alignments\t17048931\n")
+            sv = tmp / "sv.tsv"
+            sv.write_text(
+                "sample\ttype\tcaller\tsvtype\ngustaf1\tT\tSniffles2\tBND\n"
+            )
+            record = {
+                "sample": "gustaf1", "type": "T", "barcode": "barcode01",
+                "assay": "adaptive_cnv_sv", "cramino": str(cramino),
+                "dna_number": "DNA2025-1001", "sv_tsv": str(sv),
+                "wgs_coverage": "", "snv_vcf": "", "bcr_abl_fusion": "",
+                "bcr_abl_mutations": "", "bcr_abl_phasing": "",
+                "bcr_abl_exon_coverage": "",
+            }
+            out = str(tmp / "summary.xlsx")
+            build_summary_report(
+                output_path=out, sequence_id="T2T", reference_build="hs1",
+                sample_records=[record],
+            )
+            text = _shared_strings(out)
+
+            stacked = SUMMARY_MODULE.stack_sample_tables([record], ("sv_tsv",))
+
+        self.assertIn("DNA Number", text)
+        self.assertIn("DNA2025-1001", text)
+        # The pipeline id stays: it is what every file on disk is named after.
+        self.assertIn("gustaf1", text)
+        header = [cell[0] for cell in stacked[0]]
+        self.assertEqual(header[0], "dna_number")
+        self.assertEqual(stacked[1][0][0], "DNA2025-1001")
+
+    def test_no_dna_column_when_no_sample_has_one(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            sv = tmp / "sv.tsv"
+            sv.write_text("sample\ttype\tsvtype\ngustaf1\tT\tBND\n")
+            record = {"sample": "gustaf1", "type": "T", "sv_tsv": str(sv)}
+            stacked = SUMMARY_MODULE.stack_sample_tables([record], ("sv_tsv",))
+        self.assertEqual([cell[0] for cell in stacked[0]][0], "sample")
+
+
 def _shared_strings(xlsx_path):
     """Every string in the workbook, which is where cell text lives."""
 

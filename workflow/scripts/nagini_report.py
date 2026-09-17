@@ -1242,7 +1242,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     rindels_sv_tsv="", rindels_translocations_tsv="",
                     target_cramino="",
                     amplicon_stats="", amplicon_summary="", amplicon_itd="",
-                    amplicon_vcf="", amplicon_pileup=""):
+                    amplicon_vcf="", amplicon_pileup="", dna_number=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
@@ -1594,12 +1594,16 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         [("NAGINI NANOPORE ANALYSIS REPORT", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0)],
         [("SAMPLE & PIPELINE METADATA", 3), ("", 3), ("", 3), ("", 3)],
-        [("Sample ID", 7), (sample, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
+        # The lab identifier leads where there is one: the pipeline's sample id
+        # is derived from the barcode and is not what a result is reported
+        # under, so a workbook that shows only it cannot be filed.
+        [("DNA Number", 7), (dna_number or "N/A", 0), ("Sample ID (pipeline)", 7), (sample, 0)],
         [("Sample Type", 7), (f"Tumor ({sample_type})" if sample_type == "T" else f"Normal ({sample_type})", 0), ("Reference Genome", 7), (reference_build, 0)],
-        [("Barcode / Demux ID", 7), (barcode_display, 0), ("Demux Pool Fraction", 7), (demux_yield_display, 0)],
+        [("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0), ("Barcode / Demux ID", 7), (barcode_display, 0)],
+        [("Demux Pool Fraction", 7), (demux_yield_display, 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
         [("Small Variant Caller", 7), (caller_display, 0), ("Structural Variant Caller", 7), ("Sniffles2", 0)],
         [("Variant Annotation", 7), (annotation, 0), ("Target Region / Panel", 7), (target_display, 0)],
-        [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
+        [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("", 0), ("", 0)],
         [("", 0), ("", 0), ("", 0), ("", 0)],
     ]
 
@@ -1927,6 +1931,7 @@ def run_from_snakemake(snakemake):
         sv_tsv=_first_or_str(getattr(snakemake.input, "sv", "")),
         translocations_tsv=_first_or_str(getattr(snakemake.input, "translocations", "")),
         target_cramino=_first_or_str(getattr(snakemake.input, "target_cramino", "")),
+        dna_number=str(getattr(snakemake.params, "dna_number", "") or ""),
         rindels_sv_tsv=_first_or_str(getattr(snakemake.input, "rindels_sv", "")),
         rindels_translocations_tsv=_first_or_str(
             getattr(snakemake.input, "rindels_translocations", "")

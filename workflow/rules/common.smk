@@ -1145,6 +1145,25 @@ def get_report_demux_summary(wildcards):
     return []
 
 
+def get_sample_dna_number(sample):
+    """The lab identifier for a sample, empty when samples.tsv has none.
+
+    Reporting it alongside the pipeline's own sample id lets a run keep the
+    barcode-derived names that every file is built from while the workbook
+    still says which DNA the result belongs to.
+    """
+
+    if "dna_number" not in samples.columns:
+        return ""
+    key = str(sample).strip()
+    if key not in samples.index:
+        return ""
+    value = samples.loc[key, "dna_number"]
+    if hasattr(value, "iloc"):
+        value = value.iloc[0]
+    return str(value or "").strip()
+
+
 def get_sample_barcode_name(wildcards):
     return get_sample_barcode_name_str(wildcards.sample, wildcards.type)
 

@@ -42,6 +42,7 @@ rule nagini_excel_report:
         design_bed=lambda wildcards: get_sample_design_bed(wildcards.sample),
         clairs_to_platform=lambda wildcards: config.get("clairs_to_call", {}).get("platform", ""),
         barcode=get_sample_barcode_name,
+        dna_number=lambda wildcards: get_sample_dna_number(wildcards.sample),
     log:
         "logs/nagini_excel_report/{sample}_{type}.log",
     benchmark:
@@ -207,6 +208,11 @@ rule nagini_summary_excel_report:
             str(t).strip()
             for s in get_samples(samples)
             for t in get_unit_types_for_sample(s)
+        ],
+        dna_numbers=lambda wildcards: [
+            get_sample_dna_number(str(s).strip())
+            for s in get_samples(samples)
+            for _ in get_unit_types_for_sample(s)
         ],
         barcodes=lambda wildcards: [
             get_sample_barcode_name_str(str(s).strip(), str(t).strip())

@@ -88,12 +88,20 @@ def stack_sample_tables(sample_records, keys):
         if leading in ordered:
             ordered.insert(0, ordered.pop(ordered.index(leading)))
 
+    # The lab identifier belongs in front of the pipeline's sample id here
+    # too: it is what a reader files a finding under.
+    has_dna = any(str(record.get("dna_number", "") or "").strip() for _c, _r, record in tables)
+    if has_dna:
+        ordered.insert(0, "dna_number")
+
     out = [[(column, 1) for column in ordered]]
     for _columns, rows, record in tables:
         for row in rows:
             values = dict(row)
             values.setdefault("sample", record.get("sample", ""))
             values.setdefault("type", record.get("type", ""))
+            if has_dna:
+                values["dna_number"] = str(record.get("dna_number", "") or "").strip() or "-"
             out.append([(values.get(column, ""), 0) for column in ordered])
     return out
 
@@ -168,6 +176,7 @@ def build_summary_report(
         [("", 0), ("", 0), ("", 0), ("", 0)],
         [("SAMPLE QUALITY CONTROL & SEQUENCING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
         [
+            ("DNA Number", 1),
             ("Sample ID", 1),
             ("Type", 1),
             ("Barcode", 1),
@@ -224,6 +233,7 @@ def build_summary_report(
         wgs_cov_path = s.get("wgs_coverage", "")
         target_cov_path = s.get("target_coverage", "")
         target_cramino_path = s.get("target_cramino", "")
+        dna_number = str(s.get("dna_number", "") or "").strip()
         snv_vcf_path = s.get("snv_vcf", "")
         fusion_tsv_path = s.get("bcr_abl_fusion", "")
         mut_tsv_path = s.get("bcr_abl_mutations", "")
@@ -466,7 +476,8 @@ def build_summary_report(
 
         overview_rows.append(
             [
-                (sample_name, 10),
+                (dna_number or "-", 10),
+                (sample_name, 0),
                 (sample_type, 0),
                 (barcode or "-", 0),
                 (assay, 0),
@@ -513,6 +524,7 @@ def build_summary_report(
                 if str(r.get("status", "")).upper() == "DETECTED":
                     all_pass_variants.append({
                         "sample": sample_name,
+                        "dna_number": dna_number,
                         "type": sample_type,
                         "gene": "ABL1",
                         "chrom": r.get("chrom", "chr9"),
@@ -536,6 +548,7 @@ def build_summary_report(
                         vaf_val = 0.0
                     all_pass_variants.append({
                         "sample": sample_name,
+                        "dna_number": dna_number,
                         "type": sample_type,
                         "gene": v.get("gene", ""),
                         "chrom": v.get("chrom", ""),
@@ -556,6 +569,7 @@ def build_summary_report(
                 if v.get("Filter") in {"PASS", "."}:
                     all_pass_variants.append({
                         "sample": sample_name,
+                        "dna_number": dna_number,
                         "type": sample_type,
                         "gene": v.get("Gene", ""),
                         "chrom": v.get("Chromosome", ""),
@@ -577,6 +591,7 @@ def build_summary_report(
     # -----------------------------------------------------------------------
     pass_var_rows = [
         [
+            ("DNA Number", 1),
             ("Sample ID", 1),
             ("Type", 1),
             ("Gene", 1),
@@ -594,7 +609,8 @@ def build_summary_report(
     ]
     for pv in all_pass_variants:
         pass_var_rows.append([
-            (pv["sample"], 10),
+            (pv.get("dna_number", "") or "-", 10),
+            (pv["sample"], 0),
             (pv["type"], 0),
             (pv["gene"], 0),
             (pv["chrom"], 0),
@@ -810,6 +826,7 @@ def run_from_snakemake(snakemake):
     # sample with "" where the file does not exist.
     target_covs = list(getattr(snakemake.params, "target_coverage_paths", []))
     target_craminos = list(getattr(snakemake.params, "target_cramino_paths", []))
+    dna_numbers = list(getattr(snakemake.params, "dna_numbers", []))
     sv_tsvs = list(getattr(snakemake.params, "sv_tsv_paths", []))
     trans_tsvs = list(getattr(snakemake.params, "translocation_tsv_paths", []))
     rindels_sv_tsvs = list(getattr(snakemake.params, "rindels_sv_tsv_paths", []))
@@ -841,6 +858,7 @@ def run_from_snakemake(snakemake):
             "wgs_coverage": wgs_covs[i] if i < len(wgs_covs) else "",
             "target_coverage": target_covs[i] if i < len(target_covs) else "",
             "target_cramino": target_craminos[i] if i < len(target_craminos) else "",
+            "dna_number": dna_numbers[i] if i < len(dna_numbers) else "",
             "sv_tsv": sv_tsvs[i] if i < len(sv_tsvs) else "",
             "translocations_tsv": trans_tsvs[i] if i < len(trans_tsvs) else "",
             "rindels_sv_tsv": rindels_sv_tsvs[i] if i < len(rindels_sv_tsvs) else "",
