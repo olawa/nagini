@@ -1242,7 +1242,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     rindels_sv_tsv="", rindels_translocations_tsv="",
                     target_cramino="",
                     amplicon_stats="", amplicon_summary="", amplicon_itd="",
-                    amplicon_vcf="", amplicon_pileup="", dna_number=""):
+                    amplicon_vcf="", amplicon_pileup="", dna_number="",
+                    cnv_ideogram=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
     sv_columns, svs = parse_tsv(sv_tsv)
@@ -1902,6 +1903,32 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         )
         sheets.append(("Amplicon Panel", amp_layout, LAYOUT))
 
+    # The ideogram goes on its own sheet rather than onto the CNVs table: the
+    # image would sit under a sheet whose row count varies with the sample, and
+    # a whole-genome picture is what a reader opens first.
+    if cnv_ideogram and os.path.isfile(cnv_ideogram) and os.path.getsize(cnv_ideogram) > 0:
+        ideogram_rows = [
+            [("WHOLE-GENOME IDEOGRAM", 2), ("", 2), ("", 2), ("", 2)],
+            [("Sample", 7), (sample, 0), ("Reference Genome", 7), (reference_build, 0)],
+            [("Source", 7), ("Rindels read-count density and BAF", 0), ("", 0), ("", 0)],
+            [("", 0), ("", 0), ("", 0), ("", 0)],
+        ]
+        sheets.append(
+            (
+                "Ideogram",
+                ReportLayout(
+                    ideogram_rows,
+                    image_info={
+                        "path": cnv_ideogram,
+                        "cell": "A6",
+                        "x_scale": 0.45,
+                        "y_scale": 0.45,
+                    },
+                ),
+                LAYOUT,
+            )
+        )
+
     sheets.extend([
         ("SNVs and indels", table(snv_columns, snvs)),
         ("CNVs", table(cnv_columns, cnvs)),
@@ -1932,6 +1959,7 @@ def run_from_snakemake(snakemake):
         translocations_tsv=_first_or_str(getattr(snakemake.input, "translocations", "")),
         target_cramino=_first_or_str(getattr(snakemake.input, "target_cramino", "")),
         dna_number=str(getattr(snakemake.params, "dna_number", "") or ""),
+        cnv_ideogram=_first_or_str(getattr(snakemake.input, "cnv_ideogram", "")),
         rindels_sv_tsv=_first_or_str(getattr(snakemake.input, "rindels_sv", "")),
         rindels_translocations_tsv=_first_or_str(
             getattr(snakemake.input, "rindels_translocations", "")

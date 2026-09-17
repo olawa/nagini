@@ -1093,6 +1093,14 @@ def get_report_target_cramino(wildcards):
     return []
 
 
+def get_report_cnv_ideogram(wildcards):
+    """The ideogram PNG for a sample, when Rindels produced the bins."""
+
+    if sample_needs_cnv_calling(wildcards.sample):
+        return get_sample_type_path(wildcards, "reports/cnv_ideogram", ".ideogram.png")
+    return []
+
+
 def get_report_rindels_sv_tsv(wildcards):
     if sample_has_rindels_sv(wildcards.sample):
         return get_sample_type_path(wildcards, "reports/sv_summary_rindels", ".tsv")

@@ -1,4 +1,5 @@
 import gzip
+import base64
 import importlib.util
 import tempfile
 import unittest
@@ -504,6 +505,40 @@ class FullReportTest(unittest.TestCase):
                 "\t".join(row) for row in read_workbook(output)["Overview"]
             )
         self.assertNotIn("ON-TARGET READ STATISTICS", text)
+
+    # A 1x1 PNG: xlsxwriter refuses anything that is not a real image.
+    ONE_PIXEL_PNG = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+
+    def test_the_ideogram_gets_its_own_sheet(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            png = root / "ideogram.png"
+            png.write_bytes(self.ONE_PIXEL_PNG)
+            output = root / "with_ideogram.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+                cnv_ideogram=str(png),
+            )
+            sheets = read_workbook(output)
+        self.assertIn("Ideogram", sheets)
+        flat = "\n".join("\t".join(row) for row in sheets["Ideogram"])
+        self.assertIn("WHOLE-GENOME IDEOGRAM", flat)
+        self.assertIn("Rindels read-count density and BAF", flat)
+
+    def test_no_ideogram_sheet_without_a_png(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            output = root / "no_ideogram.xlsx"
+            REPORT.generate_report(
+                str(output), "gustaf1", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), "", "", str(cramino), str(cytoband),
+            )
+            self.assertNotIn("Ideogram", read_workbook(output))
 
     def test_the_dna_number_is_shown_beside_the_pipeline_sample_id(self):
         with tempfile.TemporaryDirectory() as tmpdir:

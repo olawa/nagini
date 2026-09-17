@@ -86,6 +86,10 @@ files:
     input: "reports/cnv_summary/{sample}_{type}.cnv.json"
     output: "results/reports/cnv_summary/{sample}_{type}.cnv.json"
     when: cnv_calling
+  - name: CNV ideogram
+    input: "reports/cnv_ideogram/{sample}_{type}.ideogram.png"
+    output: "results/reports/cnv_ideogram/{sample}_{type}.ideogram.png"
+    when: cnv_calling
   - name: Rindels ASCAT segments
     input: "cnv/rindels/{sample}_{type}.ascat.bed"
     output: "results/cnv/rindels/{sample}_{type}.ascat.bed"

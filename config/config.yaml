@@ -366,6 +366,15 @@ cnvkit_batch:
   threads: 8
   mem_mb: 16384
 
+# Whole-genome ideogram drawn by `rindels ideogram` from the binned read
+# counts and the BAF track, embedded on its own sheet in the Excel report.
+# Centromeres are derived from the reference build's own cytoband table, since
+# Rindels otherwise falls back to a built-in hg38 set that is wrong on T2T.
+rindels_ideogram:
+  width: 2000
+  height: 2400
+  extra: ""
+
 # Interactive HTML CNV report (D3.js, mirrors Illumina pipeline reports).
 cnv_html_report:
   container: "docker://hydragenetics/common:3.1.1"

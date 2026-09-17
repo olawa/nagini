@@ -132,3 +132,102 @@ rule cnv_summary:
         "{rule}: summarise copy number alterations for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/cnv_summary.py"
+
+
+rule cytoband_centromeres:
+    """Centromere intervals for the ideogram, from the build's own cytobands.
+
+    Rindels falls back to a built-in hg38 set when it is given none, which on
+    T2T puts the centromeres in the wrong places.
+    """
+    output:
+        bed="references/centromeres.bed",
+    params:
+        cytoband=lambda wildcards: get_cytoband_file() or "",
+    log:
+        "logs/cytoband_centromeres/centromeres.log",
+    threads: 1
+    resources:
+        mem_mb=config["default_resources"]["mem_mb"],
+        mem_per_cpu=config["default_resources"]["mem_per_cpu"],
+        partition=config["default_resources"]["partition"],
+        threads=1,
+        time=config["default_resources"]["time"],
+    container:
+        config["default_container"]
+    conda:
+        "../../envs/nagini.yaml"
+    message:
+        "{rule}: derive centromere intervals from the cytoband table"
+    script:
+        "../scripts/centromeres_from_cytoband.py"
+
+
+rule cnv_rindels_ideogram:
+    """Whole-genome ideogram from the Rindels bins and BAF track.
+
+    --baf-bed is a sidecar of cnv_rindels rather than a declared output, so it
+    is passed only when it exists: which sidecars appear depends on the mode
+    and the data.
+    """
+    input:
+        bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
+        centromeres="references/centromeres.bed",
+    output:
+        png="reports/cnv_ideogram/{sample}_{type}.ideogram.png",
+    params:
+        binary=lambda wildcards: _find_rindels_binary(),
+        baf=lambda wildcards: f"cnv/rindels/{wildcards.sample}_{wildcards.type}.baf.bed",
+        width=config.get("rindels_ideogram", {}).get("width", 2000),
+        height=config.get("rindels_ideogram", {}).get("height", 2400),
+        extra=config.get("rindels_ideogram", {}).get("extra", ""),
+    log:
+        "logs/cnv_rindels_ideogram/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/cnv_rindels_ideogram/{sample}_{type}.tsv",
+            config.get("rindels_ideogram", {}).get("benchmark_repeats", 1),
+        )
+    threads: 1
+    resources:
+        mem_mb=config.get("rindels_ideogram", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("rindels_ideogram", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("rindels_ideogram", {}).get("partition", config["default_resources"]["partition"]),
+        threads=1,
+        time=config.get("rindels_ideogram", {}).get("time", config["default_resources"]["time"]),
+    message:
+        "{rule}: draw the whole-genome ideogram for {wildcards.sample}_{wildcards.type}"
+    shell:
+        """
+        exec > {log} 2>&1
+        RINDELS_BIN="{params.binary}"
+        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
+            echo "Error: Rindels binary not found at $RINDELS_BIN"
+            exit 1
+        fi
+
+        mkdir -p "$(dirname {output.png})"
+
+        BAF_ARG=""
+        if [ -s "{params.baf}" ]; then
+            BAF_ARG="--baf-bed {params.baf}"
+        else
+            echo "No BAF track at {params.baf}; drawing density only."
+        fi
+
+        CENTROMERE_ARG=""
+        if [ -s "{input.centromeres}" ]; then
+            CENTROMERE_ARG="--centromeres {input.centromeres}"
+        else
+            echo "No centromere BED; Rindels will fall back to its built-in hg38 set."
+        fi
+
+        "$RINDELS_BIN" ideogram \
+            --bed {input.bins} \
+            $BAF_ARG \
+            $CENTROMERE_ARG \
+            --width {params.width} \
+            --height {params.height} \
+            {params.extra} \
+            -o {output.png}
+        """
