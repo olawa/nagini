@@ -88,8 +88,12 @@ rule cnvkit_batch:
     params:
         tmpdir="cnv/cnvkit/tmp_{sample}_{type}",
         method=config.get("cnvkit_batch", {}).get("method", "wgs"),
-        # No --target-avg-size: the bins arrive through --targets, and passing
-        # both would ask batch to re-derive what it was just handed.
+        # Both flags are needed. --targets keeps batch off the tiling path that
+        # fails on a gapless assembly, but batch re-splits whatever it is given,
+        # and without --target-avg-size it re-splits at its own default of 5000:
+        # a first run produced 614933 bins from the 62344 we handed it, which is
+        # the 5 kb sparsity --count-reads cannot afford on long reads.
+        target_avg_size=config.get("cnvkit_batch", {}).get("target_avg_size", 50000),
         extra=config.get("cnvkit_batch", {}).get("extra", "--count-reads"),
     log:
         "cnv/cnvkit/{sample}_{type}.cnvkit_batch.log",
@@ -113,7 +117,7 @@ rule cnvkit_batch:
         "mkdir -p {params.tmpdir} && "
         "cnvkit.py batch {input.bam} -n -f {input.fasta} "
         "--output-reference {params.tmpdir}/reference.cnn "
-        "--targets {input.targets} "
+        "--targets {input.targets} --target-avg-size {params.target_avg_size} "
         "-m {params.method} -d {params.tmpdir} -p {threads} {params.extra} "
         "> {log} 2>&1 && "
         "bam_base=$(basename {input.bam} .bam) && "
