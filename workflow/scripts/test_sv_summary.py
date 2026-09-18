@@ -75,6 +75,45 @@ class SvSummaryMainTest(unittest.TestCase):
 
         self.assertEqual([row[columns.index("svtype")] for row in rows], ["DEL", "BND"])
 
+    def test_a_breakend_carries_the_partner_position(self):
+        """Naming chr20 without saying where on it is not a breakpoint.
+
+        `end` equals `pos` for a breakend, so it could not stand in for the
+        partner coordinate; the value was already being computed for the
+        cytoband lookup and the ISCN notation.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            columns, rows = self._run(self.VCF, Path(tmpdir))
+
+        by_type = {row[columns.index("svtype")]: row for row in rows}
+        bnd = by_type["BND"]
+        self.assertEqual(bnd[columns.index("chrom")], "chr9")
+        self.assertEqual(bnd[columns.index("pos")], "400")
+        self.assertEqual(bnd[columns.index("chrom2")], "chr21")
+        self.assertEqual(bnd[columns.index("pos2")], "500")
+
+    def test_an_intrachromosomal_sv_has_no_partner_position(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            columns, rows = self._run(self.VCF, Path(tmpdir))
+        by_type = {row[columns.index("svtype")]: row for row in rows}
+        # A DEL's second coordinate is `end` on the same chromosome.
+        self.assertEqual(by_type["DEL"][columns.index("pos2")], "0")
+        self.assertEqual(by_type["DEL"][columns.index("end")], "900")
+
+    def test_a_symbolic_translocation_falls_back_to_info_end(self):
+        """A TRA written with CHR2/END has no bracket notation to parse."""
+
+        vcf = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "chr9\t1000\t.\tN\t<TRA>\t60\tPASS\tSVTYPE=TRA;CHR2=chr20;END=2000\n"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            columns, rows = self._run(vcf, Path(tmpdir))
+        self.assertEqual(rows[0][columns.index("chrom2")], "chr20")
+        self.assertEqual(rows[0][columns.index("pos2")], "2000")
+
     def test_the_caller_column_tags_each_row(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             columns, rows = self._run(self.VCF, Path(tmpdir), caller="Rindels")

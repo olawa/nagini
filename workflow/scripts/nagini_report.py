@@ -1840,7 +1840,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     if translocations:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("TRANSLOCATIONS & REARRANGEMENTS", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
-        overview.append([("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Notation", 1), ("Genes", 1)])
+        overview.append([("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Pos2", 1), ("Notation", 1), ("Genes", 1)])
         trans_preview, trans_omitted = preview_rows(
             translocations,
             15,
@@ -1854,13 +1854,14 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                 (t.get("chrom", ""), 0),
                 (t.get("pos", 0), 0),
                 (t.get("chrom2", ""), 0),
+                (t.get("pos2", ""), 0),
                 (t.get("Cytogenetic_Notation", "") or t.get("svtype", ""), 8),
                 (t.get("genes", ""), 0),
             ])
         if trans_omitted:
             overview.append([
                 (f"... {trans_omitted} further breakend(s) on the Translocations sheet", 0),
-                ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0),
+                ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0),
             ])
 
     if low_cov_20x:

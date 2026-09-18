@@ -190,6 +190,12 @@ def main():
                 "pos": position,
                 "end": end,
                 "chrom2": chrom2,
+                # The partner coordinate was computed for the cytoband lookup
+                # and the ISCN notation but never written out, so a
+                # translocation row named the partner chromosome without
+                # saying where on it. `end` equals `pos` for a breakend, so it
+                # could not stand in.
+                "pos2": partner_position or (end if chrom2 and chrom2 != chrom else 0),
                 "svlen": svlen,
                 "qual": qual,
                 "filter": filt,
@@ -219,6 +225,7 @@ def main():
         "pos",
         "end",
         "chrom2",
+        "pos2",
         "svlen",
         "qual",
         "filter",
