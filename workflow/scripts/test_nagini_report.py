@@ -743,7 +743,7 @@ class AmpliconReportTest(unittest.TestCase):
                 "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Depth\">\n"
                 "##INFO=<ID=AD,Number=.,Type=Integer,Description=\"Allelic depths\">\n"
                 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1\n"
-                "chr17\t7674220\t.\tC\tT\t100\tPASS\tGENE=TP53;HGVS_P=p.R273H;VAF=0.125;DP=800;AD=700,100\tGT:AF:DP:AD\t0/1:0.125:800:700,100\n"
+                "chr17\t7673802\t.\tC\tT\t100\tPASS\tGENE=TP53;HGVS_P=p.R273H;VAF=0.125;DP=800;AD=700,100\tGT:AF:DP:AD\t0/1:0.125:800:700,100\n"
             )
             parsed_vcf = REPORT.parse_amplicon_vcf(vcf_file)
             self.assertEqual(len(parsed_vcf), 1)
@@ -770,7 +770,7 @@ class AmpliconReportTest(unittest.TestCase):
             vcf_file.write_text(
                 "##fileformat=VCFv4.2\n"
                 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1\n"
-                "chr17\t7674220\t.\tC\tT\t100\tPASS\tGENE=TP53;HGVS_P=p.R273H;VAF=0.125;DP=800;AD=700,100\tGT:AF:DP:AD\t0/1:0.125:800:700,100\n"
+                "chr17\t7673802\t.\tC\tT\t100\tPASS\tGENE=TP53;HGVS_P=p.R273H;VAF=0.125;DP=800;AD=700,100\tGT:AF:DP:AD\t0/1:0.125:800:700,100\n"
             )
             cramino = root / "cramino.txt"
             cramino.write_text("Reads\t5000\nYield [Gb]: 0.02\nMean quality: 18.2\n")
@@ -778,7 +778,7 @@ class AmpliconReportTest(unittest.TestCase):
             pileup_tsv = root / "pileup.tsv"
             pileup_tsv.write_text(
                 "chrom\tpos\tref\talt\traw_depth\tfiltered_depth\tA\tC\tG\tT\tA_fwd\tA_rev\tC_fwd\tC_rev\tG_fwd\tG_rev\tT_fwd\tT_rev\tINS\tINS_fwd\tINS_rev\tDEL\tDEL_fwd\tDEL_rev\tDEL_span\tS\tinsertions\tdeletions\tis_capped\tcap_value\n"
-                "chr17\t7675107\tC\tT\t1200\t1200\t2\t1195\t2\t1\t1\t1\t600\t595\t1\t1\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t.\t.\t0\t0\n"
+                "chr17\t7675088\tC\tT\t1200\t1200\t2\t1195\t2\t1\t1\t1\t600\t595\t1\t1\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t.\t.\t0\t0\n"
             )
 
             output = root / "amplicon_report.xlsx"
@@ -815,15 +815,18 @@ class AmpliconReportTest(unittest.TestCase):
             self.assertIn("1. FLT3 INTERNAL TANDEM DUPLICATION (FLT3-ITD)", amp_sheet_text)
             self.assertIn("Allelic Ratio (AR)", amp_sheet_text)
             self.assertIn("Reading Frame", amp_sheet_text)
-            self.assertIn("ELN Risk Classification", amp_sheet_text)
-            self.assertIn("DETECTED\t30\t15.5\t0.18\tIn-frame\tLOW AR (<0.5)", amp_sheet_text)
+            self.assertIn("AR Category", amp_sheet_text)
+            self.assertIn("DETECTED\t30\t15.5\t0.18\tIn-frame\tAR < 0.5", amp_sheet_text)
             self.assertIn("2. TARGETED GENE MUTATIONS (TP53, FLT3, NPM1, IDH1, IDH2)", amp_sheet_text)
-            self.assertIn("TP53\t\t\t\tp.R273H\tchr17\t7674220\tC\tT\t800\t100\t12.5\tPASS", amp_sheet_text)
+            self.assertIn("TP53\t\t\t\tp.R273H\tchr17\t7673802\tC\tT\t800\t100\t12.5\tPASS", amp_sheet_text)
+            # The call now lands on its own hotspot row, not a neighbouring codon.
+            self.assertIn("p.R273\tExon 8\tchr17:7673802", amp_sheet_text)
+            self.assertIn("MUTATION DETECTED (p.R273H @ 7673802, 12.5%)", amp_sheet_text)
             self.assertIn("3. AMPLICON COVERAGE & QUALITY METRICS (NANOSTREAM)", amp_sheet_text)
             self.assertIn("FLT3_1\tFLT3", amp_sheet_text)
             self.assertIn("4. CLINICAL HOTSPOT COVERAGE & BACKGROUND NOISE AUDIT", amp_sheet_text)
             self.assertIn("Hotspot Codon\tTarget Exon\tCoordinate (GRCh38)\tRef Base", amp_sheet_text)
-            self.assertIn("TP53\tp.R175\tExon 5\tchr17:7675107\tC\t1,200x\t5\t0.42%\tHotspot mutation (dominant negative)\tCLEAN (Noise 0.42%)", amp_sheet_text)
+            self.assertIn("TP53\tp.R175\tExon 5\tchr17:7675088\tC\t1,200x\t5\t0.42%\tHotspot mutation (dominant negative)\tCLEAN (Noise 0.42%)", amp_sheet_text)
 
 
 if __name__ == "__main__":

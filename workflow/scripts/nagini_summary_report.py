@@ -18,6 +18,8 @@ try:
         LAYOUT,
         STYLE_SPECS,
         TABLE,
+        _amplicon_float,
+        _amplicon_int,
         _find_metric,
         _is_pathogenic_clinvar,
         build_amplicon_sheet,
@@ -28,6 +30,10 @@ try:
         parse_bcr_abl_tsv,
         parse_cramino,
         parse_flt3_itd_tsv,
+        derive_flt3_itd_from_variants,
+        is_pass_filter,
+        itd_is_assessed,
+        itd_is_detected,
         parse_small_variant_vcf,
         parse_tsv,
         safe_sheet_name,
@@ -40,6 +46,8 @@ except ImportError:
         LAYOUT,
         STYLE_SPECS,
         TABLE,
+        _amplicon_float,
+        _amplicon_int,
         _find_metric,
         _is_pathogenic_clinvar,
         build_amplicon_sheet,
@@ -50,6 +58,10 @@ except ImportError:
         parse_bcr_abl_tsv,
         parse_cramino,
         parse_flt3_itd_tsv,
+        derive_flt3_itd_from_variants,
+        is_pass_filter,
+        itd_is_assessed,
+        itd_is_detected,
         parse_small_variant_vcf,
         parse_tsv,
         safe_sheet_name,
@@ -259,6 +271,10 @@ def build_summary_report(
                 amp_stats_rows = sec["coverage"]
 
         is_amplicon = bool(amp_stats_rows or amp_itd_rows or amp_var_rows or assay in ("amplicon", "flt3_tp53"))
+        if is_amplicon and not amp_itd_rows:
+            amp_itd_rows = derive_flt3_itd_from_variants(
+                amp_var_rows, vcf_available=bool(amp_vcf_path and os.path.exists(amp_vcf_path))
+            )
         if is_amplicon:
             has_any_amplicon = True
             amplicon_samples_data.append({
@@ -410,41 +426,28 @@ def build_summary_report(
             except (ValueError, ZeroDivisionError, AttributeError):
                 fold_enrich_str = "-"
 
-        det_itd = [
-            r for r in amp_itd_rows
-            if str(r.get("status", "")).upper() == "DETECTED" or float(r.get("af", 0)) > 0.01
-        ]
+        assessed_itd = [r for r in amp_itd_rows if itd_is_assessed(r)]
+        det_itd = [r for r in amp_itd_rows if itd_is_detected(r)]
         if det_itd:
             itd_entry = det_itd[0]
-            try:
-                itd_af = float(itd_entry.get("af", 0.0))
-                if itd_af <= 1.0 and itd_af > 0:
-                    itd_af *= 100.0
-            except (ValueError, TypeError):
-                itd_af = 0.0
-            itd_len = int(float(str(itd_entry.get("dup_len", itd_entry.get("itd_length", itd_entry.get("length", 0)))) or 0))
-            try:
-                alt_u = int(itd_entry.get("alt_unique_reads", 0))
-                ref_u = int(itd_entry.get("ref_unique_reads", 0))
-                if ref_u > 0:
-                    ar_val = alt_u / ref_u
-                elif itd_af > 0 and itd_af < 100.0:
-                    ar_val = itd_af / (100.0 - itd_af)
-                else:
-                    ar_val = 0.0
-            except (ValueError, TypeError):
-                ar_val = 0.0
+            itd_af = _amplicon_float(itd_entry.get("af_pct"))
+            itd_len = _amplicon_int(itd_entry.get("dup_len", itd_entry.get("itd_length")))
+            ar_val = _amplicon_float(itd_entry.get("ar"))
             ar_part = f", AR {ar_val:.2f}" if ar_val > 0 else ""
             itd_display = f"DETECTED ({itd_len} bp, {itd_af:.1f}%{ar_part})"
             itd_style = 4
-        elif is_amplicon:
+        elif assessed_itd:
             itd_display = "NEGATIVE"
             itd_style = 5
+        elif is_amplicon:
+            # No ITD result for an amplicon sample is a gap, not a negative.
+            itd_display = "NOT ASSESSED"
+            itd_style = 6
         else:
             itd_display = "-"
             itd_style = 0
 
-        det_amp_vars = [v for v in amp_var_rows if str(v.get("filter", "PASS")).upper() in ("PASS", ".")]
+        det_amp_vars = [v for v in amp_var_rows if is_pass_filter(v.get("filter"))]
         if det_amp_vars:
             v_labels = []
             for v in det_amp_vars[:3]:
@@ -458,7 +461,7 @@ def build_summary_report(
             amp_mut_str = ", ".join(v_labels)
             if len(det_amp_vars) > 3:
                 amp_mut_str += f" (+{len(det_amp_vars) - 3})"
-            amp_mut_style = 4 if any(float(v.get("vaf", 0)) >= 5.0 for v in det_amp_vars) else 6
+            amp_mut_style = 4 if any(_amplicon_float(v.get("vaf")) >= 5.0 for v in det_amp_vars) else 6
         elif is_amplicon:
             amp_mut_str = "None detected"
             amp_mut_style = 5
@@ -466,7 +469,7 @@ def build_summary_report(
             amp_mut_str = "-"
             amp_mut_style = 0
 
-        total_amp_reads_val = sum(int(r.get("read_count", 0)) for r in amp_stats_rows) if amp_stats_rows else ("-" if not is_amplicon else 0)
+        total_amp_reads_val = sum(_amplicon_int(r.get("read_count")) for r in amp_stats_rows) if amp_stats_rows else ("-" if not is_amplicon else 0)
 
         sample_status, sample_style = ("PASS", 5)
         if det_muts or cis_pairs or (det_itd and itd_style == 4) or (det_amp_vars and amp_mut_style == 4):

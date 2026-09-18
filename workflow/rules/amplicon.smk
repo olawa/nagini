@@ -26,13 +26,6 @@ def _amplicon_targets_bed():
     return _amplicon_resource("amplicon_targets.bed")
 
 
-def _amplicon_exons_bed():
-    override = config.get("amplicon", {}).get("exons_bed", "")
-    if override and os.path.isfile(override):
-        return override
-    return _amplicon_resource("exon_coverage.bed")
-
-
 def _amplicon_pools_yaml():
     override = config.get("amplicon", {}).get("pools", "")
     if override and os.path.isfile(override):
@@ -50,39 +43,34 @@ def _amplicon_gtf():
     return ""
 
 
-def _find_rindels_binary():
-    """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
-    override = config.get("rindels", {}).get("binary", "") or config.get("amplicon", {}).get("rindels_binary", "")
+def _amplicon_rindels_binary():
+    """Rindels binary for the amplicon rules.
+
+    Deliberately named apart from bcr_abl.smk's ``_find_rindels_binary``: both
+    files are included into the same namespace, so a second definition of that
+    name would silently replace the first for every rule in the workflow.
+    """
+    override = config.get("amplicon", {}).get("rindels_binary", "")
     if override and (os.path.isfile(override) or shutil.which(override)):
         return override
-    candidates = [
-        os.path.expanduser("~/bin/rindels"),
-        "/home/cgu-lab/bin/rindels",
-        os.path.expanduser("~/tmp/tools/rindels/target/release/rindels"),
-        "/home/cgu-lab/tmp/tools/rindels/target/release/rindels",
-        os.path.expanduser("~/.cargo/bin/rindels"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c) and os.access(c, os.X_OK):
-            return c
-    which_r = shutil.which("rindels")
-    if which_r:
-        return which_r
-    return "rindels"
+    return _find_rindels_binary()
+
+
+def _amplicon_top_n():
+    """Reads kept per amplicon before calling; 0 disables downsampling."""
+    return int(config.get("amplicon", {}).get("top_n", 0) or 0)
 
 
 def get_amplicon_bam_for_calling(wildcards):
     """Return downsampled top-N BAM if top_n > 0, else full merged BAM."""
-    top_n = int(config.get("amplicon", {}).get("top_n", 0) or 0)
-    if top_n > 0:
+    if _amplicon_top_n() > 0:
         return f"alignment/amplicon/{wildcards.sample}_{wildcards.type}.topn.bam"
     return f"alignment/merged/{wildcards.sample}_{wildcards.type}.bam"
 
 
 def get_amplicon_bai_for_calling(wildcards):
     """Return downsampled top-N BAI if top_n > 0, else full merged BAI."""
-    top_n = int(config.get("amplicon", {}).get("top_n", 0) or 0)
-    if top_n > 0:
+    if _amplicon_top_n() > 0:
         return f"alignment/amplicon/{wildcards.sample}_{wildcards.type}.topn.bam.bai"
     return f"alignment/merged/{wildcards.sample}_{wildcards.type}.bam.bai"
 
@@ -109,6 +97,12 @@ rule amplicon_nanostream_stats:
         partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("amplicon", {}).get("threads", 4),
         time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
+    # Deliberately no container by default: this rule runs the nanostream binary
+    # resolved by get_nanostream_binary(), and a container would hide a binary
+    # found on the host PATH. Set amplicon.nanostream_container together with a
+    # binary path inside the image to containerise it.
+    container:
+        config.get("amplicon", {}).get("nanostream_container", None)
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -134,7 +128,7 @@ rule amplicon_downsample_topn:
         fastq=temp("reads/amplicon/{sample}_{type}.topn.fastq.gz"),
     params:
         binary=lambda wildcards: get_nanostream_binary(),
-        top_n=lambda wildcards: config.get("amplicon", {}).get("top_n", 1000),
+        top_n=lambda wildcards: _amplicon_top_n(),
         min_qs=lambda wildcards: config.get("amplicon", {}).get("min_qs", 10),
         len_range=lambda wildcards: config.get("amplicon", {}).get("len_range", "1000-3500"),
     log:
@@ -146,6 +140,9 @@ rule amplicon_downsample_topn:
         partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("amplicon", {}).get("threads", 4),
         time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
+    # See amplicon_nanostream_stats: host binary, so no container by default.
+    container:
+        config.get("amplicon", {}).get("nanostream_container", None)
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -186,6 +183,8 @@ rule amplicon_topn_align:
         partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("amplicon", {}).get("align_threads", 8),
         time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("amplicon", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -198,7 +197,11 @@ rule amplicon_topn_align:
 
 
 rule amplicon_rindels:
-    """Call targeted SNVs, indels, and insertions inside amplicon target regions with Rindels."""
+    """Call targeted SNVs, indels, and insertions inside amplicon target regions with Rindels.
+
+    FLT3-ITD is read out of this VCF by amplicon_summary; the ``rindels itd``
+    subcommand is a short-read caller and is not used on ONT data.
+    """
     input:
         bam=get_amplicon_bam_for_calling,
         bai=get_amplicon_bai_for_calling,
@@ -209,7 +212,7 @@ rule amplicon_rindels:
         tbi="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz.tbi",
         pileup_counts="reports/amplicon/{sample}_{type}.pileup_counts.tsv",
     params:
-        binary=lambda wildcards: _find_rindels_binary(),
+        binary=lambda wildcards: _amplicon_rindels_binary(),
         gtf=lambda wildcards: _amplicon_gtf(),
         extra=lambda wildcards: config.get("amplicon", {}).get("rindels_extra", "--ont --amplicon"),
     log:
@@ -221,8 +224,11 @@ rule amplicon_rindels:
         partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
         threads=config.get("amplicon", {}).get("threads", 4),
         time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
-    conda:
-        "../../envs/nagini.yaml"
+    # Deliberately no container by default: Rindels is a host binary, as in
+    # bcr_abl_rindels. Set amplicon.rindels_container plus amplicon.rindels_binary
+    # together to run it from an image.
+    container:
+        config.get("amplicon", {}).get("rindels_container", None)
     shell:
         """
         exec > {log} 2>&1
@@ -231,6 +237,10 @@ rule amplicon_rindels:
             echo "Error: Rindels binary not found at $RINDELS_BIN"
             exit 1
         fi
+        # Record which binary produced this call set: the path is resolved from
+        # the host, so the version is not otherwise pinned anywhere.
+        echo "Rindels binary: $RINDELS_BIN"
+        "$RINDELS_BIN" --version || true
 
         GTF_ARG=""
         if [ -n "{params.gtf}" ] && [ -f "{params.gtf}" ]; then
@@ -246,50 +256,8 @@ rule amplicon_rindels:
             -t {threads}
 
         if [ -s "{output.vcf}" ] && [ ! -s "{output.tbi}" ]; then
-            if command -v bcftools >/dev/null 2>&1; then
-                bcftools index -t {output.vcf} || true
-            fi
+            bcftools index -t {output.vcf}
         fi
-        """
-
-
-rule amplicon_rindels_itd:
-    """Identify and quantify FLT3 internal tandem duplications (ITD) using Rindels ITD."""
-    input:
-        bam=get_amplicon_bam_for_calling,
-        bai=get_amplicon_bai_for_calling,
-        ref=config["reference"]["fasta"],
-    output:
-        tsv="reports/amplicon/{sample}_{type}.flt3_itd.tsv",
-    params:
-        binary=lambda wildcards: _find_rindels_binary(),
-        region=lambda wildcards: config.get("amplicon", {}).get("flt3_itd_region", "chr13:28032002-28035169"),
-    log:
-        "logs/amplicon_rindels_itd/{sample}_{type}.log",
-    threads: config.get("amplicon", {}).get("threads", 2)
-    resources:
-        mem_mb=config.get("amplicon", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("amplicon", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("amplicon", {}).get("threads", 2),
-        time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
-    conda:
-        "../../envs/nagini.yaml"
-    shell:
-        """
-        exec > {log} 2>&1
-        RINDELS_BIN="{params.binary}"
-        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
-            echo "Error: Rindels binary not found at $RINDELS_BIN"
-            exit 1
-        fi
-
-        "$RINDELS_BIN" itd -b {input.bam} -r {input.ref} \
-            --region {params.region} \
-            -o {output.tsv} \
-            --sample-name {wildcards.sample} || {
-                echo -e "gene\tregion\tlength\taf\tstatus\nFLT3\t{params.region}\t0\t0.0\tNEGATIVE" > {output.tsv}
-            }
         """
 
 
@@ -304,6 +272,15 @@ rule amplicon_stats_tsv:
         script=f"{workflow.basedir}/scripts/amplicon_report.py",
     log:
         "logs/amplicon_stats_tsv/{sample}_{type}.log",
+    threads: 1
+    resources:
+        mem_mb=config.get("amplicon", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("amplicon", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
+        threads=1,
+        time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("amplicon", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
@@ -318,32 +295,58 @@ rule amplicon_stats_tsv:
 
 
 rule amplicon_summary:
-    """Compile unified clinical summary report combining amplicon QC, Rindels variants, and ITD calls."""
+    """Compile the clinical summary: amplicon QC, Rindels variants, derived FLT3-ITD.
+
+    The FLT3-ITD table is derived here from insertions inside the FLT3 exon
+    13-15 target of the long-read VCF. When no VCF is available the table is
+    written with status NOT_ASSESSED, so a missing call is never delivered as a
+    negative result.
+    """
     input:
         stats="reports/amplicon/{sample}_{type}.amplicon_stats.json",
         vcf="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz",
-        itd="reports/amplicon/{sample}_{type}.flt3_itd.tsv",
         pileup="reports/amplicon/{sample}_{type}.pileup_counts.tsv",
         pools=_amplicon_pools_yaml(),
     output:
         tsv="reports/amplicon/{sample}_{type}.amplicon_summary.tsv",
         json="reports/amplicon/{sample}_{type}.amplicon_summary.json",
+        itd="reports/amplicon/{sample}_{type}.flt3_itd.tsv",
     params:
         script=f"{workflow.basedir}/scripts/amplicon_report.py",
+        itd_region=lambda wildcards: config.get("amplicon", {}).get("flt3_itd_region", ""),
+        itd_min_length=lambda wildcards: config.get("amplicon", {}).get("flt3_itd_min_length", 6),
+        itd_min_vaf=lambda wildcards: config.get("amplicon", {}).get("flt3_itd_min_vaf", 1.0),
     log:
         "logs/amplicon_summary/{sample}_{type}.log",
+    threads: 1
+    resources:
+        mem_mb=config.get("amplicon", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("amplicon", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
+        threads=1,
+        time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("amplicon", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     shell:
         """
         exec > {log} 2>&1
+        REGION_ARG=""
+        if [ -n "{params.itd_region}" ]; then
+            REGION_ARG="--flt3-itd-region {params.itd_region}"
+        fi
         python3 {params.script} \
             --json {input.stats} \
             --vcf {input.vcf} \
-            --itd {input.itd} \
             --pileup {input.pileup} \
             --pools {input.pools} \
             --sample {wildcards.sample} \
+            $REGION_ARG \
+            --flt3-itd-min-length {params.itd_min_length} \
+            --flt3-itd-min-vaf {params.itd_min_vaf} \
+            --output-itd-tsv {output.itd} \
             --output-summary-tsv {output.tsv} \
             --output-summary-json {output.json}
         """
+

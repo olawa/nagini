@@ -15,10 +15,45 @@ import os
 import re
 from datetime import datetime, timezone
 
+import sys
+
 try:
     import xlsxwriter
 except ImportError:
     xlsxwriter = None
+
+# Amplicon parsing, hotspot definitions and FLT3-ITD derivation live in
+# amplicon_report so that the Excel report and the delivered TSV/JSON are
+# produced from exactly the same code.
+try:
+    from amplicon_report import (
+        CLINICAL_HOTSPOTS,
+        FLT3_ITD_REGION,
+        STATUS_NOT_ASSESSED,
+        audit_hotspots,
+        derive_flt3_itd_from_variants,
+        is_pass_filter,
+        itd_is_assessed,
+        itd_is_detected,
+        parse_amplicon_pileup_counts,
+        parse_amplicon_vcf,
+        parse_flt3_itd_tsv,
+    )
+except ImportError:  # running as a snakemake script from another directory
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from amplicon_report import (
+        CLINICAL_HOTSPOTS,
+        FLT3_ITD_REGION,
+        STATUS_NOT_ASSESSED,
+        audit_hotspots,
+        derive_flt3_itd_from_variants,
+        is_pass_filter,
+        itd_is_assessed,
+        itd_is_detected,
+        parse_amplicon_pileup_counts,
+        parse_amplicon_vcf,
+        parse_flt3_itd_tsv,
+    )
 
 
 def open_text(path):
@@ -266,6 +301,22 @@ def parse_tsv(path):
         reader = csv.DictReader(handle, delimiter="\t")
         rows = list(reader)
         return list(reader.fieldnames or []), rows
+
+
+def _amplicon_float(value, default=0.0):
+    """Float from report data, tolerating '.', '-', '' and None."""
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError, AttributeError):
+        return default
+
+
+def _amplicon_int(value, default=0):
+    """Int from report data, tolerating '.', '-', '' and float-formatted text."""
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError, AttributeError):
+        return default
 
 
 def _sv_position(value, default=0):
@@ -784,158 +835,137 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
     return layout
 
 
-CLINICAL_HOTSPOTS = [
-    {"gene": "TP53", "codon": "p.R175", "exon": "Exon 5", "chrom": "chr17", "pos": 7675107, "ref": "C", "clinical": "Hotspot mutation (dominant negative)"},
-    {"gene": "TP53", "codon": "p.R248", "exon": "Exon 7", "chrom": "chr17", "pos": 7674220, "ref": "C", "clinical": "DNA contact hotspot (loss of transactivation)"},
-    {"gene": "TP53", "codon": "p.R273", "exon": "Exon 8", "chrom": "chr17", "pos": 7673802, "ref": "C", "clinical": "DNA contact hotspot (loss of transactivation)"},
-    {"gene": "FLT3", "codon": "p.D835", "exon": "Exon 20", "chrom": "chr13", "pos": 28018504, "ref": "G", "clinical": "TKD activation loop mutation (TKI resistance)"},
-    {"gene": "NPM1", "codon": "p.W288", "exon": "Exon 11", "chrom": "chr5", "pos": 171410544, "ref": "T", "clinical": "Exon 11 4bp frameshift insertion (NPM1c+)"},
-    {"gene": "IDH1", "codon": "p.R132", "exon": "Exon 4", "chrom": "chr2", "pos": 208248388, "ref": "C", "clinical": "Active site neomorphic 2-HG hotspot"},
-    {"gene": "IDH2", "codon": "p.R140", "exon": "Exon 4", "chrom": "chr15", "pos": 90088702, "ref": "C", "clinical": "Active site neomorphic 2-HG hotspot"},
-    {"gene": "IDH2", "codon": "p.R172", "exon": "Exon 5", "chrom": "chr15", "pos": 90088461, "ref": "C", "clinical": "Active site neomorphic 2-HG hotspot"},
-]
-
-
-def parse_amplicon_pileup_counts(path):
-    if not path or not os.path.exists(path):
-        return {}
-    pileup_map = {}
-    with open_text(path) as handle:
-        reader = csv.DictReader((line for line in handle if not line.startswith("#")), delimiter="\t")
-        for row in reader:
-            chrom = row.get("chrom", "")
-            try:
-                pos = int(row.get("pos", 0))
-            except (ValueError, TypeError):
-                continue
-            pileup_map[(chrom, pos)] = row
-    return pileup_map
+def _itd_style(row):
+    """(status text, style) for an ITD row: detected / negative / not assessed."""
+    if not itd_is_assessed(row):
+        return "NOT ASSESSED", 6
+    if itd_is_detected(row):
+        return "DETECTED", 4
+    return "NEGATIVE", 5
 
 
 def build_amplicon_sheet(sample, amplicon_stats_rows, variant_rows, itd_rows, pileup_counts_path=""):
+    blank = [("", 0)] * 13
     layout = [
-        [("AML TARGETED AMPLICON PANEL CLINICAL REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
-        [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
-        [("1. FLT3 INTERNAL TANDEM DUPLICATION (FLT3-ITD)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
+        [("AML TARGETED AMPLICON PANEL CLINICAL REPORT", 2)] + [("", 2)] * 12,
+        list(blank),
+        [("1. FLT3 INTERNAL TANDEM DUPLICATION (FLT3-ITD)", 3)] + [("", 3)] * 8,
         [
             ("Gene", 1), ("Status", 1), ("ITD Length (bp)", 1), ("Allelic Fraction (%)", 1),
-            ("Allelic Ratio (AR)", 1), ("Reading Frame", 1), ("ELN Risk Classification", 1),
-            ("Target Region", 1), ("Inserted Sequence", 1)
+            ("Allelic Ratio (AR)", 1), ("Reading Frame", 1), ("AR Category", 1),
+            ("Target Region", 1), ("Inserted Sequence", 1),
         ],
     ]
+
+    region_default = "{}:{}-{}".format(*FLT3_ITD_REGION)
     if not itd_rows:
         layout.append([
-            ("FLT3", 0), ("NEGATIVE", 5), (0, 0), (0.0, 0), ("-", 0), ("-", 0),
-            ("Wildtype (Normal)", 5), ("chr13:28032002-28035169", 0), ("None detected", 0)
+            ("FLT3", 6), ("NOT ASSESSED", 6), ("-", 0), ("-", 0), ("-", 0), ("-", 0),
+            ("-", 6), (region_default, 0), ("No FLT3-ITD result was produced", 0),
         ])
     else:
         for r in itd_rows:
-            st = str(r.get("status", "")).upper()
+            status_txt, status_style = _itd_style(r)
+            detected = itd_is_detected(r)
+            assessed = itd_is_assessed(r)
             try:
-                af_val = float(r.get("af", 0.0))
-                if af_val <= 1.0 and af_val > 0:
-                    af_val = af_val * 100.0
+                af_val = float(r.get("af_pct", 0.0))
             except (ValueError, TypeError):
                 af_val = 0.0
-            is_det = (st == "DETECTED") or (af_val > 1.0)
-            st_style = 4 if is_det else 5
             try:
-                itd_len = int(float(str(r.get("dup_len", r.get("itd_length", r.get("length", 0)))) or 0))
+                itd_len = int(float(str(r.get("dup_len", r.get("itd_length", 0))) or 0))
             except (ValueError, TypeError):
                 itd_len = 0
-
-            # Calculate Allelic Ratio (AR = ITD reads / WT reads)
-            try:
-                alt_u = int(r.get("alt_unique_reads", 0))
-                ref_u = int(r.get("ref_unique_reads", 0))
-                if ref_u > 0:
-                    ar_val = alt_u / ref_u
-                elif is_det and af_val > 0 and af_val < 100.0:
-                    ar_val = af_val / (100.0 - af_val)
-                else:
-                    ar_val = 0.0
-            except (ValueError, TypeError):
-                ar_val = 0.0
-            ar_str = f"{ar_val:.2f}" if is_det else "-"
-
-            in_frame_raw = str(r.get("in_frame", "")).strip().lower()
-            if in_frame_raw in ("true", "1", "yes"):
-                frame_str = "In-frame"
-            elif in_frame_raw in ("false", "0", "no"):
-                frame_str = "Frameshift"
-            else:
-                frame_str = "In-frame" if (itd_len % 3 == 0 and itd_len > 0) else ("Frameshift" if itd_len > 0 else "-")
-
-            if is_det:
-                eln_risk = "HIGH AR (>=0.5)" if ar_val >= 0.5 else "LOW AR (<0.5)"
-                eln_style = 4 if ar_val >= 0.5 else 6
-            else:
-                eln_risk = "Wildtype (Normal)"
-                eln_style = 5
-
+            ar_cell = r.get("ar", "-")
             layout.append([
-                (r.get("gene", "FLT3"), 8 if is_det else 0),
-                ("DETECTED" if is_det else "NEGATIVE", st_style),
-                (itd_len, 0),
-                (round(af_val, 2), st_style),
-                (ar_str, eln_style if is_det else 0),
-                (frame_str, 0),
-                (eln_risk, eln_style),
-                (r.get("region", "chr13:28032002-28035169"), 0),
-                (r.get("inserted_seq", r.get("seq", "N/A")), 0),
+                (r.get("gene", "FLT3"), 8 if detected else 0),
+                (status_txt, status_style),
+                (itd_len if assessed else "-", 0),
+                (round(af_val, 2) if assessed else "-", status_style),
+                (ar_cell if detected else "-", status_style if detected else 0),
+                (r.get("reading_frame", "-"), 0),
+                (r.get("ar_category", r.get("eln_risk", "-")), status_style),
+                (r.get("region") or region_default, 0),
+                (r.get("inserted_seq", "") or ("None detected" if assessed else "-"), 0),
             ])
 
-    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-    layout.append([("2. TARGETED GENE MUTATIONS (TP53, FLT3, NPM1, IDH1, IDH2)", 3)] + [("", 3)] * 12)
     layout.append([
+        ("FLT3-ITD is derived from insertions called in the FLT3 exon 13-15 target of the "
+         "long-read Rindels VCF. AR is reported for reference; ELN 2022 no longer uses the "
+         "allelic ratio for risk stratification.", 0)
+    ] + [("", 0)] * 12)
+
+    # --- 2. Targeted gene mutations -----------------------------------------
+    passing = [v for v in variant_rows if is_pass_filter(v.get("filter"))]
+    filtered = [v for v in variant_rows if not is_pass_filter(v.get("filter"))]
+
+    var_header = [
         ("Gene", 1), ("Exon", 1), ("Consequence", 1), ("HGVS.c", 1), ("HGVS.p", 1),
         ("Chrom", 1), ("Position", 1), ("Ref", 1), ("Alt", 1),
-        ("Depth", 1), ("Alt Reads", 1), ("VAF (%)", 1), ("Filter", 1)
-    ])
-    if not variant_rows:
+        ("Depth", 1), ("Alt Reads", 1), ("VAF (%)", 1), ("Filter", 1),
+    ]
+
+    def variant_row(v):
+        try:
+            vaf = float(v.get("vaf", 0.0))
+        except (ValueError, TypeError):
+            vaf = 0.0
+        filt = str(v.get("filter", "PASS")).upper()
+        passing_call = is_pass_filter(filt)
+        mut_style = 4 if (passing_call and vaf >= 5.0) else (6 if vaf > 0 else 0)
+        try:
+            pos = int(v.get("pos", 0))
+        except (ValueError, TypeError):
+            pos = 0
+        try:
+            depth = int(v.get("depth", 0))
+        except (ValueError, TypeError):
+            depth = 0
+        try:
+            alt_d = int(v.get("alt_depth", 0))
+        except (ValueError, TypeError):
+            alt_d = 0
+        return [
+            (v.get("gene", ""), 8 if (passing_call and vaf >= 5.0) else 0),
+            (v.get("exon", ""), 0),
+            (v.get("consequence", ""), 0),
+            (v.get("hgvs_c", ""), 0),
+            (v.get("hgvs_p", ""), 0),
+            (v.get("chrom", ""), 0),
+            (pos, 0),
+            (v.get("ref", ""), 0),
+            (v.get("alt", ""), 0),
+            (depth, 0),
+            (alt_d, 0),
+            (vaf, mut_style),
+            (filt, 5 if passing_call else 6),
+        ]
+
+    layout.append(list(blank))
+    layout.append([("2. TARGETED GENE MUTATIONS (TP53, FLT3, NPM1, IDH1, IDH2)", 3)] + [("", 3)] * 12)
+    layout.append(list(var_header))
+    if not passing:
         layout.append([("No candidate mutations called in target exons", 0)] + [("", 0)] * 12)
     else:
-        for v in variant_rows:
-            try:
-                vaf = float(v.get("vaf", 0.0))
-            except (ValueError, TypeError):
-                vaf = 0.0
-            filt = str(v.get("filter", "PASS")).upper()
-            mut_style = 4 if (filt in ("PASS", ".") and vaf >= 5.0) else (6 if vaf > 0 else 0)
-            try:
-                pos = int(v.get("pos", 0))
-            except (ValueError, TypeError):
-                pos = 0
-            try:
-                depth = int(v.get("depth", 0))
-            except (ValueError, TypeError):
-                depth = 0
-            try:
-                alt_d = int(v.get("alt_depth", 0))
-            except (ValueError, TypeError):
-                alt_d = 0
-            layout.append([
-                (v.get("gene", ""), 8 if vaf >= 5.0 else 0),
-                (v.get("exon", ""), 0),
-                (v.get("consequence", ""), 0),
-                (v.get("hgvs_c", ""), 0),
-                (v.get("hgvs_p", ""), 0),
-                (v.get("chrom", ""), 0),
-                (pos, 0),
-                (v.get("ref", ""), 0),
-                (v.get("alt", ""), 0),
-                (depth, 0),
-                (alt_d, 0),
-                (vaf, mut_style),
-                (filt, 5 if filt in ("PASS", ".") else 6),
-            ])
+        for v in passing:
+            layout.append(variant_row(v))
 
-    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+    if filtered:
+        layout.append(list(blank))
+        layout.append([
+            ("2b. FILTERED CALLS - NOT FOR CLINICAL REPORTING ({} calls removed by the caller)".format(len(filtered)), 6)
+        ] + [("", 6)] * 12)
+        layout.append(list(var_header))
+        for v in filtered:
+            layout.append(variant_row(v))
+
+    # --- 3. Amplicon coverage ------------------------------------------------
+    layout.append(list(blank))
     layout.append([("3. AMPLICON COVERAGE & QUALITY METRICS (NANOSTREAM)", 3)] + [("", 3)] * 9)
     layout.append([
         ("Amplicon", 1), ("Gene", 1), ("Pool", 1), ("Read Count", 1),
-        ("Pool Fraction (%)", 1), ("Run Fraction (%)", 1), ("Median Length (bp)", 1),
-        ("Mean BaseQ", 1), ("Coordinates", 1), ("Status", 1)
+        ("Pool Fraction (%)", 1), ("Panel Fraction (%)", 1), ("Median Length (bp)", 1),
+        ("Mean BaseQ", 1), ("Coordinates", 1), ("Status", 1),
     ])
     if not amplicon_stats_rows:
         layout.append([("No amplicon statistics available", 0)] + [("", 0)] * 9)
@@ -980,86 +1010,40 @@ def build_amplicon_sheet(sample, amplicon_stats_rows, variant_rows, itd_rows, pi
                 (st, st_style),
             ])
 
-    # 4. CLINICAL HOTSPOT COVERAGE & BACKGROUND NOISE AUDIT
-    layout.append([("", 0)] * 10)
+    # --- 4. Hotspot background noise audit -----------------------------------
+    layout.append(list(blank))
     layout.append([("4. CLINICAL HOTSPOT COVERAGE & BACKGROUND NOISE AUDIT", 3)] + [("", 3)] * 9)
     layout.append([
         ("Gene", 1), ("Hotspot Codon", 1), ("Target Exon", 1), ("Coordinate (GRCh38)", 1),
         ("Ref Base", 1), ("Depth", 1), ("Non-Ref Reads", 1), ("Noise Floor (%)", 1),
-        ("Clinical Significance", 1), ("Status / Assessment", 1)
+        ("Clinical Significance", 1), ("Status / Assessment", 1),
     ])
 
     pileup_map = parse_amplicon_pileup_counts(pileup_counts_path) if pileup_counts_path else {}
-    for hs in CLINICAL_HOTSPOTS:
-        chrom = hs["chrom"]
-        pos = hs["pos"]
-        ref_b = hs["ref"]
-        called_var = next(
-            (v for v in variant_rows if v.get("chrom") == chrom and abs(int(v.get("pos", 0)) - pos) <= 2),
-            None
-        )
-        row_data = pileup_map.get((chrom, pos))
-        if row_data:
-            try:
-                dp = int(row_data.get("filtered_depth", row_data.get("raw_depth", 0)))
-            except (ValueError, TypeError):
-                dp = 0
-            base_ref = row_data.get("ref", ref_b).upper()
-            try:
-                other_sum = sum(int(row_data.get(b, 0)) for b in ("A", "C", "G", "T") if b != base_ref)
-                other_sum += int(row_data.get("INS", 0)) + int(row_data.get("DEL", 0))
-            except (ValueError, TypeError):
-                other_sum = 0
-            noise_pct = (other_sum / dp * 100.0) if dp > 0 else 0.0
-
-            if called_var:
-                mut_str = called_var.get("hgvs_p") or f"{called_var.get('ref')}>{called_var.get('alt')}"
-                vaf_call = called_var.get("vaf", 0.0)
-                status_txt = f"MUTATION DETECTED ({mut_str}, {vaf_call}%)"
-                status_style = 4
-            elif dp < 500:
-                status_txt = f"LOW DEPTH ({dp:,}x)"
-                status_style = 6
-            elif noise_pct > 1.5:
-                status_txt = f"ELEVATED NOISE ({noise_pct:.2f}%)"
-                status_style = 6
-            else:
-                status_txt = f"CLEAN (Noise {noise_pct:.2f}%)"
-                status_style = 5
-
-            layout.append([
-                (hs["gene"], 8 if called_var else 0),
-                (hs["codon"], 0),
-                (hs["exon"], 0),
-                (f"{chrom}:{pos}", 0),
-                (base_ref, 0),
-                (f"{dp:,}x", 0),
-                (f"{other_sum:,}", 0),
-                (f"{noise_pct:.2f}%", 0),
-                (hs["clinical"], 0),
-                (status_txt, status_style),
-            ])
+    for row in audit_hotspots(pileup_map, variant_rows):
+        status_txt = row["status"]
+        detected = status_txt.startswith("MUTATION DETECTED")
+        if detected:
+            status_style = 4
+        elif status_txt.startswith("CLEAN"):
+            status_style = 5
+        elif status_txt == "NOT ASSESSED":
+            status_style = 0
         else:
-            if called_var:
-                mut_str = called_var.get("hgvs_p") or f"{called_var.get('ref')}>{called_var.get('alt')}"
-                vaf_call = called_var.get("vaf", 0.0)
-                status_txt = f"MUTATION DETECTED ({mut_str}, {vaf_call}%)"
-                status_style = 4
-            else:
-                status_txt = "NOT ASSESSED (no pileup)"
-                status_style = 0
-            layout.append([
-                (hs["gene"], 8 if called_var else 0),
-                (hs["codon"], 0),
-                (hs["exon"], 0),
-                (f"{chrom}:{pos}", 0),
-                (ref_b, 0),
-                ("-", 0),
-                ("-", 0),
-                ("-", 0),
-                (hs["clinical"], 0),
-                (status_txt, status_style),
-            ])
+            status_style = 6
+        assessed = status_txt != "NOT ASSESSED"
+        layout.append([
+            (row["gene"], 8 if detected else 0),
+            (row["codon"], 0),
+            (row["exon"], 0),
+            (f"{row['chrom']}:{row['pos']}", 0),
+            (row["ref"], 0),
+            (f"{row['depth']:,}x" if assessed else "-", 0),
+            (f"{row['non_ref_reads']:,}" if assessed else "-", 0),
+            (f"{row['noise_pct']:.2f}%" if assessed else "-", 0),
+            (row["clinical"], 0),
+            (status_txt, status_style),
+        ])
 
     return layout
 
@@ -1072,135 +1056,8 @@ def parse_amplicon_stats_tsv(path):
         return list(reader)
 
 
-def parse_flt3_itd_tsv(path):
-    rows = []
-    if not path or not os.path.exists(path):
-        return rows
-    with open_text(path) as handle:
-        header = None
-        for line in handle:
-            text = line.strip()
-            if not text or text.startswith("#"):
-                continue
-            fields = text.split("\t")
-            if header is None:
-                header = [f.lower() for f in fields]
-                continue
-            row_dict = dict(zip(header, fields))
-            chrom = row_dict.get("chrom", "")
-            start = row_dict.get("dup_start", "")
-            end = row_dict.get("dup_end", "")
-            coords = f"{chrom}:{start}-{end}" if chrom and start and end else row_dict.get("region", row_dict.get("interval", "chr13:28032002-28035169"))
-            rows.append({
-                "gene": row_dict.get("gene", "FLT3"),
-                "region": coords,
-                "itd_length": row_dict.get("dup_len") or row_dict.get("itd_length") or row_dict.get("length") or "0",
-                "dup_len": row_dict.get("dup_len") or row_dict.get("itd_length") or row_dict.get("length") or "0",
-                "af": row_dict.get("af", row_dict.get("af_pct", row_dict.get("junction_af", "0.0"))),
-                "status": row_dict.get("status", "DETECTED" if float(row_dict.get("af", 0)) > 0.01 else "NEGATIVE"),
-                "inserted_seq": row_dict.get("inserted_seq", row_dict.get("seq", "")),
-                "in_frame": row_dict.get("in_frame", ""),
-                "confidence": row_dict.get("confidence", ""),
-                "alt_unique_reads": row_dict.get("alt_unique_reads", "0"),
-                "ref_unique_reads": row_dict.get("ref_unique_reads", "0"),
-            })
-    return rows
-
-
-def parse_amplicon_vcf(path):
-    if not path or not os.path.exists(path):
-        return []
-    variants = []
-    with open_text(path) as handle:
-        for line in handle:
-            if line.startswith("#"):
-                continue
-            fields = line.strip().split("\t")
-            if len(fields) < 8:
-                continue
-            chrom, pos, var_id, ref, alt, qual, filt, info = fields[:8]
-            fmt = fields[8] if len(fields) > 8 else ""
-            sample_data = fields[9] if len(fields) > 9 else ""
-            dp = 0
-            ad_alt = 0
-            vaf = 0.0
-            if fmt and sample_data:
-                fmt_map = dict(zip(fmt.split(":"), sample_data.split(":")))
-                try:
-                    dp = int(fmt_map.get("DP", 0))
-                except ValueError:
-                    pass
-                ad_str = fmt_map.get("AD", "")
-                if "," in ad_str:
-                    try:
-                        ad_alt = int(ad_str.split(",")[1])
-                    except ValueError:
-                        pass
-                elif ad_str:
-                    try:
-                        ad_alt = int(ad_str)
-                    except ValueError:
-                        pass
-                try:
-                    vaf = float(fmt_map.get("AF", fmt_map.get("VAF", 0.0)))
-                    if vaf > 1.0:
-                        vaf /= 100.0
-                except ValueError:
-                    if dp > 0:
-                        vaf = ad_alt / dp
-
-            info_map = parse_info(info)
-            if not dp and info_map.get("DP"):
-                try:
-                    dp = int(info_map["DP"])
-                except ValueError:
-                    pass
-            gene = info_map.get("GENE", info_map.get("SYMBOL", ""))
-            exon = info_map.get("EXON", "")
-            consequence = info_map.get("CONSEQUENCE", "")
-            hgvs_c = info_map.get("HGVS_C", info_map.get("HGVSC", ""))
-            hgvs_p = info_map.get("HGVS_P", info_map.get("HGVSP", ""))
-            ann = info_map.get("ANN", "")
-            csq = info_map.get("CSQ", "")
-            if ann:
-                first_ann = ann.split(",")[0].split("|")
-                if len(first_ann) >= 2 and not consequence:
-                    consequence = first_ann[1]
-                if len(first_ann) >= 4 and not gene:
-                    gene = first_ann[3]
-                if len(first_ann) >= 9 and not exon:
-                    exon = first_ann[8]
-                if len(first_ann) >= 10 and not hgvs_c:
-                    hgvs_c = first_ann[9]
-                if len(first_ann) >= 11 and not hgvs_p:
-                    hgvs_p = first_ann[10]
-            elif csq:
-                first_csq = csq.split(",")[0].split("|")
-                if len(first_csq) >= 2 and not consequence:
-                    consequence = first_csq[1]
-                if len(first_csq) >= 4 and not gene:
-                    gene = first_csq[3]
-
-            variants.append({
-                "chrom": chrom,
-                "pos": int(pos),
-                "ref": ref,
-                "alt": alt,
-                "filter": filt,
-                "gene": gene,
-                "exon": exon,
-                "consequence": consequence,
-                "hgvs_c": hgvs_c,
-                "hgvs_p": hgvs_p,
-                "depth": dp,
-                "alt_depth": ad_alt,
-                "vaf": round(vaf * 100.0, 2),
-            })
-    return variants
-
-
 def parse_amplicon_summary_tsv(path):
-    sections = {"itd": [], "variants": [], "coverage": []}
+    sections = {"itd": [], "variants": [], "filtered": [], "coverage": []}
     if not path or not os.path.exists(path):
         return sections
     current_section = None
@@ -1214,6 +1071,8 @@ def parse_amplicon_summary_tsv(path):
                 sec_name = text.split(":", 1)[1].strip().lower()
                 if "itd" in sec_name:
                     current_section = "itd"
+                elif "filtered" in sec_name:
+                    current_section = "filtered"
                 elif "variant" in sec_name:
                     current_section = "variants"
                 elif "coverage" in sec_name or "amplicon" in sec_name:
@@ -1292,6 +1151,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     amplicon_stats_rows = parse_amplicon_stats_tsv(amplicon_stats)
     amplicon_itd_rows = parse_flt3_itd_tsv(amplicon_itd)
     amplicon_variant_rows = parse_amplicon_vcf(amplicon_vcf)
+    amplicon_vcf_available = bool(amplicon_vcf and os.path.exists(amplicon_vcf))
     if amplicon_summary and (not amplicon_itd_rows or not amplicon_variant_rows or not amplicon_stats_rows):
         sec = parse_amplicon_summary_tsv(amplicon_summary)
         if not amplicon_itd_rows and sec.get("itd"):
@@ -1300,6 +1160,14 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             amplicon_variant_rows = sec["variants"]
         if not amplicon_stats_rows and sec.get("coverage"):
             amplicon_stats_rows = sec["coverage"]
+
+    # No ITD table reached the report: derive it here from the same VCF rather
+    # than leaving the section blank, and mark it NOT_ASSESSED when there was no
+    # VCF at all, so a missing call is never shown as a negative result.
+    if not amplicon_itd_rows and (amplicon_vcf_available or amplicon_variant_rows):
+        amplicon_itd_rows = derive_flt3_itd_from_variants(
+            amplicon_variant_rows, vcf_available=amplicon_vcf_available
+        )
 
     has_amplicon = bool(amplicon_stats_rows or amplicon_itd_rows or amplicon_variant_rows or amplicon_summary or amplicon_pileup)
 
@@ -1707,49 +1575,30 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, 4 if cis_pairs else 0), ("COMPOUND MUTATION (CIS)" if cis_pairs else ("POLYCLONAL (TRANS)" if bcr_abl_phasing_rows else "PASS"), 4 if cis_pairs else 5)])
 
     if has_amplicon:
-        det_itd = [
-            r for r in amplicon_itd_rows
-            if str(r.get("status", "")).upper() == "DETECTED" or float(r.get("af", 0)) > 0.01
-        ]
+        assessed_itd = [r for r in amplicon_itd_rows if itd_is_assessed(r)]
+        det_itd = [r for r in amplicon_itd_rows if itd_is_detected(r)]
         if det_itd:
             itd_entry = det_itd[0]
-            try:
-                itd_af = float(itd_entry.get("af", 0.0))
-                if itd_af <= 1.0 and itd_af > 0:
-                    itd_af *= 100.0
-            except (ValueError, TypeError):
-                itd_af = 0.0
-            itd_len = int(float(str(itd_entry.get("dup_len", itd_entry.get("itd_length", itd_entry.get("length", 0)))) or 0))
-            try:
-                alt_u = int(itd_entry.get("alt_unique_reads", 0))
-                ref_u = int(itd_entry.get("ref_unique_reads", 0))
-                if ref_u > 0:
-                    ar_val = alt_u / ref_u
-                elif itd_af > 0 and itd_af < 100.0:
-                    ar_val = itd_af / (100.0 - itd_af)
-                else:
-                    ar_val = 0.0
-            except (ValueError, TypeError):
-                ar_val = 0.0
-            in_frame_raw = str(itd_entry.get("in_frame", "")).strip().lower()
-            if in_frame_raw in ("true", "1", "yes"):
-                frame_lbl = "In-frame"
-            elif in_frame_raw in ("false", "0", "no"):
-                frame_lbl = "Frameshift"
-            else:
-                frame_lbl = "In-frame" if (itd_len % 3 == 0 and itd_len > 0) else ("Frameshift" if itd_len > 0 else "")
-
+            itd_af = _amplicon_float(itd_entry.get("af_pct"))
+            itd_len = _amplicon_int(itd_entry.get("dup_len", itd_entry.get("itd_length")))
+            ar_val = _amplicon_float(itd_entry.get("ar"))
+            frame_lbl = itd_entry.get("reading_frame", "")
             ar_lbl = f", AR {ar_val:.2f}" if ar_val > 0 else ""
-            fr_lbl = f", {frame_lbl}" if frame_lbl else ""
+            fr_lbl = f", {frame_lbl}" if frame_lbl and frame_lbl != "-" else ""
             itd_sum_str = f"DETECTED ({itd_len} bp, VAF {itd_af:.1f}%{ar_lbl}{fr_lbl})"
             itd_sum_flag = "ACTION REQUIRED"
             itd_sum_style = 4
-        else:
+        elif assessed_itd:
             itd_sum_str = "NEGATIVE"
             itd_sum_flag = "PASS"
             itd_sum_style = 5
+        else:
+            # The caller failed or produced nothing: say so instead of "NEGATIVE".
+            itd_sum_str = "NOT ASSESSED"
+            itd_sum_flag = "REVIEW"
+            itd_sum_style = 6
 
-        det_vars = [v for v in amplicon_variant_rows if str(v.get("filter", "PASS")).upper() in ("PASS", ".")]
+        det_vars = [v for v in amplicon_variant_rows if is_pass_filter(v.get("filter"))]
         if det_vars:
             var_labels = []
             for v in det_vars[:4]:
@@ -1764,7 +1613,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             if len(det_vars) > 4:
                 var_sum_str += f" (+{len(det_vars) - 4} more)"
             var_sum_flag = "REVIEW"
-            var_sum_style = 4 if any(float(v.get("vaf", 0)) >= 5.0 for v in det_vars) else 6
+            var_sum_style = 4 if any(_amplicon_float(v.get("vaf")) >= 5.0 for v in det_vars) else 6
         else:
             var_sum_str = "None detected in target exons"
             var_sum_flag = "NONE"
@@ -1779,7 +1628,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("AML AMPLICON PANEL CLINICAL SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
-        overview.append([("FLT3-ITD Status", 7), ("Internal tandem duplication (rindels itd)", 0), (itd_sum_str, itd_sum_style), (itd_sum_flag, itd_sum_style)])
+        overview.append([("FLT3-ITD Status", 7), ("Internal tandem duplication (Rindels long-read insertions)", 0), (itd_sum_str, itd_sum_style), (itd_sum_flag, itd_sum_style)])
         overview.append([("Target Gene Mutations", 7), ("TP53, FLT3, NPM1, IDH1, IDH2 (Rindels)", 0), (var_sum_str, var_sum_style), (var_sum_flag, var_sum_style)])
         overview.append([("Amplicon Pool Balance", 7), ("Target coverage depth across 3 pools", 0), (amp_balance_str, amp_balance_style), (amp_balance_flag, amp_balance_style)])
 
