@@ -318,6 +318,18 @@ files:
     input: "reports/amplicon/{sample}_{type}.pileup_counts.tsv"
     output: "results/reports/amplicon/{sample}_{type}.pileup_counts.tsv"
     when: "assay_module:amplicon"
+  - name: neville-layout SNV and indel table
+    input: "reports/neville_compat/{sample}_{type}.snv_indels.tsv"
+    output: "results/reports/neville_compat/{sample}_{type}.snv_indels.tsv"
+    when: "assay_module:amplicon"
+  - name: neville-layout SV table
+    input: "reports/neville_compat/{sample}_{type}.svs.tsv"
+    output: "results/reports/neville_compat/{sample}_{type}.svs.tsv"
+    when: "assay_module:amplicon"
+  - name: neville-layout Excel report
+    input: "reports/neville_compat/{sample}_{type}.neville_layout.xlsx"
+    output: "results/reports/neville_compat/{sample}_{type}.neville_layout.xlsx"
+    when: "assay_module:amplicon"
 
 
   - name: MultiQC Nanopore report
