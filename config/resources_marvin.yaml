@@ -75,6 +75,14 @@ sniffles2_call:
   mem_mb: 32768
   mem_per_cpu: 4096
   partition: "core,core_bkup"
+
+savana_ont_to:
+  threads: 16
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 2048
+  partition: "core,core_bkup"
+
 cramino:
   threads: 4
   time: "08:00:00"

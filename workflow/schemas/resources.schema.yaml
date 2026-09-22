@@ -42,6 +42,8 @@ properties:
     $ref: "#/definitions/resources"
   bcr_abl_rindels:
     $ref: "#/definitions/resources"
+  savana_ont_to:
+    $ref: "#/definitions/resources"
 additionalProperties: true
 
 required: [default_resources]

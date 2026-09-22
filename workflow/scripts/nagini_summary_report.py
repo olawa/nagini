@@ -433,7 +433,7 @@ def build_summary_report(
             itd_af = _amplicon_float(itd_entry.get("af_pct"))
             itd_len = _amplicon_int(itd_entry.get("dup_len", itd_entry.get("itd_length")))
             ar_val = _amplicon_float(itd_entry.get("ar"))
-            ar_part = f", AR {ar_val:.2f}" if ar_val > 0 else ""
+            ar_part = ", AR >100" if (ar_val >= 999.0 or str(itd_entry.get("ar", "")).startswith(">")) else (f", AR {ar_val:.2f}" if ar_val > 0 else "")
             itd_display = f"DETECTED ({itd_len} bp, {itd_af:.1f}%{ar_part})"
             itd_style = 4
         elif assessed_itd:
@@ -650,8 +650,8 @@ def build_summary_report(
     # run. The TSVs already lead with a sample column, so a finding can be read
     # across five samples in one place instead of by opening five files.
     for sheet_name, keys in (
-        ("SVs", ("sv_tsv", "rindels_sv_tsv")),
-        ("Translocations", ("translocations_tsv", "rindels_translocations_tsv")),
+        ("SVs", ("sv_tsv", "rindels_sv_tsv", "savana_sv_tsv")),
+        ("Translocations", ("translocations_tsv", "rindels_translocations_tsv", "savana_translocations_tsv")),
         ("CNVs", ("cnv_tsv",)),
         ("Amplicon Stats", ("amplicon_stats",)),
     ):
@@ -834,6 +834,8 @@ def run_from_snakemake(snakemake):
     trans_tsvs = list(getattr(snakemake.params, "translocation_tsv_paths", []))
     rindels_sv_tsvs = list(getattr(snakemake.params, "rindels_sv_tsv_paths", []))
     rindels_trans_tsvs = list(getattr(snakemake.params, "rindels_translocation_tsv_paths", []))
+    savana_sv_tsvs = list(getattr(snakemake.params, "savana_sv_tsv_paths", []))
+    savana_trans_tsvs = list(getattr(snakemake.params, "savana_translocation_tsv_paths", []))
     cnv_tsvs = list(getattr(snakemake.params, "cnv_tsv_paths", []))
     snv_vcfs = list(getattr(snakemake.params, "snv_vcf_paths", []))
     bcr_fusions = list(getattr(snakemake.params, "bcr_abl_fusion_paths", []))
@@ -867,6 +869,10 @@ def run_from_snakemake(snakemake):
             "rindels_sv_tsv": rindels_sv_tsvs[i] if i < len(rindels_sv_tsvs) else "",
             "rindels_translocations_tsv": (
                 rindels_trans_tsvs[i] if i < len(rindels_trans_tsvs) else ""
+            ),
+            "savana_sv_tsv": savana_sv_tsvs[i] if i < len(savana_sv_tsvs) else "",
+            "savana_translocations_tsv": (
+                savana_trans_tsvs[i] if i < len(savana_trans_tsvs) else ""
             ),
             "cnv_tsv": cnv_tsvs[i] if i < len(cnv_tsvs) else "",
             "snv_vcf": snv_vcfs[i] if i < len(snv_vcfs) else "",

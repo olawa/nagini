@@ -221,6 +221,30 @@ class StackedTablesTest(unittest.TestCase):
     def test_no_sheet_when_no_sample_produced_the_table(self):
         self.assertEqual(SUMMARY_MODULE.stack_sample_tables([{"sample": "x"}], ("cnv_tsv",)), [])
 
+    def test_savana_sv_tables_stack_together(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            first = tmp / "sniffles.tsv"
+            first.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\n"
+                "gustaf1\tT\tSniffles2\tDEL\tchr1\n"
+            )
+            second = tmp / "savana.tsv"
+            second.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\n"
+                "gustaf1\tT\tSAVANA\tBND\tchr2\n"
+            )
+            records = [
+                {"sample": "gustaf1", "type": "T", "sv_tsv": str(first), "savana_sv_tsv": str(second)},
+            ]
+            rows = SUMMARY_MODULE.stack_sample_tables(records, ("sv_tsv", "rindels_sv_tsv", "savana_sv_tsv"))
+
+        header = [cell[0] for cell in rows[0]]
+        self.assertEqual(header[0], "sample")
+        callers = [row[header.index("caller")][0] for row in rows[1:]]
+        self.assertEqual(callers, ["Sniffles2", "SAVANA"])
+
+
 
 class DnaNumberTest(unittest.TestCase):
     def test_the_lab_identifier_leads_the_overview_and_the_stacked_tables(self):

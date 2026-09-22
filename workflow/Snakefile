@@ -146,6 +146,60 @@ use rule tabix from cnv_sv as cnv_sv_sniffles2_tabix with:
         )
 
 
+use rule savana_ont_to from cnv_sv as cnv_sv_savana_ont_to with:
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+        fai=config["reference"]["fai"],
+    output:
+        vcf_somatic="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf",
+        vcf_classified="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.vcf",
+        vcf_breakpoints="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints.vcf",
+        fa="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.inserted_sequences.fa",
+        bedpe="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints.bedpe",
+        tsv="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints_read_support.tsv",
+    params:
+        dir="cnv_sv/savana_ont_to/{sample}_{type}",
+        extra=config.get("savana_ont_to", {}).get("extra", ""),
+        genome_version=get_savana_genome_version,
+    log:
+        "logs/savana_ont_to/{sample}_{type}.output.log",
+    benchmark:
+        repeat(
+            "benchmarks/savana_ont_to/{sample}_{type}.output.benchmark.tsv",
+            config.get("savana_ont_to", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bgzip from cnv_sv as cnv_sv_savana_bgzip with:
+    input:
+        vcf="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf",
+    output:
+        gz="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz",
+    log:
+        "logs/savana_bgzip/{sample}_{type}.classified.somatic.vcf.gz.log",
+    benchmark:
+        repeat(
+            "benchmarks/savana_bgzip/{sample}_{type}.classified.somatic.vcf.gz.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from cnv_sv as cnv_sv_savana_tabix with:
+    input:
+        gz="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz",
+    output:
+        tbi="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi",
+    log:
+        "logs/savana_tabix/{sample}_{type}.classified.somatic.vcf.gz.tbi.log",
+    benchmark:
+        repeat(
+            "benchmarks/savana_tabix/{sample}_{type}.classified.somatic.vcf.gz.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
 # ===========================================================================
 # HYDRA-GENETICS MODULE: snv_indels / Mutect2
 # ===========================================================================

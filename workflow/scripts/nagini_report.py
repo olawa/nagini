@@ -304,9 +304,12 @@ def parse_tsv(path):
 
 
 def _amplicon_float(value, default=0.0):
-    """Float from report data, tolerating '.', '-', '' and None."""
+    """Float from report data, tolerating '.', '-', '', '>100' and None."""
     try:
-        return float(str(value).strip())
+        s = str(value).strip()
+        if s.startswith(">"):
+            s = s[1:].strip()
+        return float(s)
     except (TypeError, ValueError, AttributeError):
         return default
 
@@ -1099,6 +1102,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
                     bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv="",
                     rindels_sv_tsv="", rindels_translocations_tsv="",
+                    savana_sv_tsv="", savana_translocations_tsv="",
                     target_cramino="",
                     amplicon_stats="", amplicon_summary="", amplicon_itd="",
                     amplicon_vcf="", amplicon_pileup="", dna_number="",
@@ -1114,10 +1118,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         translocation_columns, translocations, cytobands
     )
 
-    # Two callers reach the same breakpoints by different evidence: Sniffles2
+    # Two or three callers reach breakpoints by different evidence: Sniffles2
     # from split and spanning reads, Rindels --sv-lite from pair and clip
-    # evidence without assembly. One table with a Caller column lets a
-    # dic(9;20) call be corroborated instead of read from one caller alone.
+    # evidence without assembly, and SAVANA from somatic classification against
+    # 1000G germline SVs. One table with a Caller column lets a breakpoint
+    # call be corroborated instead of read from one caller alone.
     rindels_sv_columns, rindels_svs = parse_tsv(rindels_sv_tsv)
     rindels_sv_columns, rindels_svs = annotate_sv_rows(
         rindels_sv_columns, rindels_svs, cytobands
@@ -1126,12 +1131,23 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     rindels_trans_columns, rindels_translocations = annotate_sv_rows(
         rindels_trans_columns, rindels_translocations, cytobands
     )
+    savana_sv_columns, savana_svs = parse_tsv(savana_sv_tsv)
+    savana_sv_columns, savana_svs = annotate_sv_rows(
+        savana_sv_columns, savana_svs, cytobands
+    )
+    savana_trans_columns, savana_translocations = parse_tsv(savana_translocations_tsv)
+    savana_trans_columns, savana_translocations = annotate_sv_rows(
+        savana_trans_columns, savana_translocations, cytobands
+    )
     sv_columns, svs = merge_caller_rows(
-        (sv_columns, svs, "Sniffles2"), (rindels_sv_columns, rindels_svs, "Rindels")
+        (sv_columns, svs, "Sniffles2"),
+        (rindels_sv_columns, rindels_svs, "Rindels"),
+        (savana_sv_columns, savana_svs, "SAVANA"),
     )
     translocation_columns, translocations = merge_caller_rows(
         (translocation_columns, translocations, "Sniffles2"),
         (rindels_trans_columns, rindels_translocations, "Rindels"),
+        (savana_trans_columns, savana_translocations, "SAVANA"),
     )
     wgs_columns, wgs_rows = parse_tsv(wgs_coverage)
     target_columns, target_rows = parse_tsv(target_coverage)
@@ -1583,7 +1599,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             itd_len = _amplicon_int(itd_entry.get("dup_len", itd_entry.get("itd_length")))
             ar_val = _amplicon_float(itd_entry.get("ar"))
             frame_lbl = itd_entry.get("reading_frame", "")
-            ar_lbl = f", AR {ar_val:.2f}" if ar_val > 0 else ""
+            ar_lbl = ", AR >100" if (ar_val >= 999.0 or str(itd_entry.get("ar", "")).startswith(">")) else (f", AR {ar_val:.2f}" if ar_val > 0 else "")
             fr_lbl = f", {frame_lbl}" if frame_lbl and frame_lbl != "-" else ""
             itd_sum_str = f"DETECTED ({itd_len} bp, VAF {itd_af:.1f}%{ar_lbl}{fr_lbl})"
             itd_sum_flag = "ACTION REQUIRED"
@@ -1814,6 +1830,10 @@ def run_from_snakemake(snakemake):
         rindels_translocations_tsv=_first_or_str(
             getattr(snakemake.input, "rindels_translocations", "")
         ),
+        savana_sv_tsv=_first_or_str(getattr(snakemake.input, "savana_sv", "")),
+        savana_translocations_tsv=_first_or_str(
+            getattr(snakemake.input, "savana_translocations", "")
+        ),
         wgs_coverage=_first_or_str(getattr(snakemake.input, "wgs_coverage", "")),
         target_coverage=_first_or_str(getattr(snakemake.input, "target_coverage", "")),
         cramino=_first_or_str(getattr(snakemake.input, "cramino", "")),
@@ -1848,6 +1868,10 @@ def main():
     parser.add_argument("--snv-vcf", default="")
     parser.add_argument("--sv-tsv", default="")
     parser.add_argument("--translocations-tsv", default="")
+    parser.add_argument("--rindels-sv-tsv", default="")
+    parser.add_argument("--rindels-translocations-tsv", default="")
+    parser.add_argument("--savana-sv-tsv", default="")
+    parser.add_argument("--savana-translocations-tsv", default="")
     parser.add_argument("--wgs-coverage", default="")
     parser.add_argument("--target-coverage", default="")
     parser.add_argument("--cramino", required=True)
@@ -1884,6 +1908,10 @@ def main():
         bcr_abl_exon_coverage=args.bcr_abl_exon_coverage,
         bcr_abl_plot_png=args.bcr_abl_plot_png,
         cnv_tsv=args.cnv_tsv,
+        rindels_sv_tsv=args.rindels_sv_tsv,
+        rindels_translocations_tsv=args.rindels_translocations_tsv,
+        savana_sv_tsv=args.savana_sv_tsv,
+        savana_translocations_tsv=args.savana_translocations_tsv,
         amplicon_stats=args.amplicon_stats,
         amplicon_summary=args.amplicon_summary,
         amplicon_itd=args.amplicon_itd,

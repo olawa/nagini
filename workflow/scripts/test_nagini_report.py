@@ -346,6 +346,37 @@ class FullReportTest(unittest.TestCase):
         trans = sheets["Translocations"]
         self.assertEqual(set(self._column(trans, "caller")), {"Sniffles2", "Rindels"})
 
+    def test_savana_caller_is_merged_with_caller_column(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            vcf, sv, translocations, _, cramino, cytoband, *rest = write_test_inputs(root)
+            savana_sv = root / "savana_sv.tsv"
+            savana_sv.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\tpos\tend\tchrom2\ttranslocation\n"
+                "example\tT\tSAVANA\tDEL\tchr1\t1000\t5000\t\tFalse\n"
+            )
+            savana_trans = root / "savana_trans.tsv"
+            savana_trans.write_text(
+                "sample\ttype\tcaller\tsvtype\tchrom\tpos\tend\tchrom2\ttranslocation\n"
+                "example\tT\tSAVANA\tBND\tchr1\t500\t500\tchr2\tTrue\n"
+            )
+            output = root / "three_callers.xlsx"
+            REPORT.generate_report(
+                str(output), "example", "T", "hs1", "none", str(vcf),
+                str(sv), str(translocations), str(rest[0]) if rest else "",
+                "", str(cramino), str(cytoband),
+                savana_sv_tsv=str(savana_sv),
+                savana_translocations_tsv=str(savana_trans),
+            )
+            sheets = read_workbook(output)
+
+        self.assertEqual(sheets["SVs"][0][0], "caller")
+        self.assertEqual(set(self._column(sheets["SVs"], "caller")), {"Sniffles2", "SAVANA"})
+        self.assertIn("DEL", self._column(sheets["SVs"], "svtype"))
+        trans = sheets["Translocations"]
+        self.assertEqual(set(self._column(trans, "caller")), {"Sniffles2", "SAVANA"})
+
+
     def test_structural_variants_are_annotated_with_cytobands(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sheets = read_workbook(self._build(tmpdir))

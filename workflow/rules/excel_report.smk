@@ -14,6 +14,8 @@ rule nagini_excel_report:
         cnv_ideogram=get_report_cnv_ideogram,
         rindels_sv=get_report_rindels_sv_tsv,
         rindels_translocations=get_report_rindels_translocations_tsv,
+        savana_sv=get_report_savana_sv_tsv,
+        savana_translocations=get_report_savana_translocations_tsv,
         cnv=get_report_cnv_tsv,
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
         target_coverage=get_report_target_coverage,
@@ -78,6 +80,8 @@ _SUMMARY_OPTIONAL_KEYS = (
     "translocation_tsvs",
     "rindels_sv_tsvs",
     "rindels_translocation_tsvs",
+    "savana_sv_tsvs",
+    "savana_translocation_tsvs",
     "cnv_tsvs",
     "snv_vcfs",
     "bcr_abl_fusions",
@@ -139,12 +143,12 @@ def summary_report_files():
                     "snv_vcfs": snv_vcf,
                     "sv_tsvs": (
                         f"reports/sv_summary/{s}_{t}.tsv"
-                        if sample_needs_sv_calling(s)
+                        if sniffles2_enabled(s)
                         else ""
                     ),
                     "translocation_tsvs": (
                         f"reports/sv_summary/{s}_{t}.translocations.tsv"
-                        if sample_needs_sv_calling(s)
+                        if sniffles2_enabled(s)
                         else ""
                     ),
                     "rindels_sv_tsvs": (
@@ -155,6 +159,16 @@ def summary_report_files():
                     "rindels_translocation_tsvs": (
                         f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv"
                         if sample_has_rindels_sv(s)
+                        else ""
+                    ),
+                    "savana_sv_tsvs": (
+                        f"reports/sv_summary_savana/{s}_{t}.tsv"
+                        if savana_enabled(s)
+                        else ""
+                    ),
+                    "savana_translocation_tsvs": (
+                        f"reports/sv_summary_savana/{s}_{t}.translocations.tsv"
+                        if savana_enabled(s)
                         else ""
                     ),
                     "cnv_tsvs": (
@@ -235,6 +249,10 @@ rule nagini_summary_excel_report:
         rindels_sv_tsv_paths=lambda wildcards: get_summary_report_paths("rindels_sv_tsvs"),
         rindels_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
             "rindels_translocation_tsvs"
+        ),
+        savana_sv_tsv_paths=lambda wildcards: get_summary_report_paths("savana_sv_tsvs"),
+        savana_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
+            "savana_translocation_tsvs"
         ),
         cnv_tsv_paths=lambda wildcards: get_summary_report_paths("cnv_tsvs"),
         design_bed=lambda wildcards: get_resolved_design_bed(),

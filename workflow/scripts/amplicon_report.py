@@ -139,9 +139,12 @@ def _to_int(value: Any, default: int = 0) -> int:
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
-    """Best-effort float, tolerating '.', '', 'NA' and None."""
+    """Best-effort float, tolerating '.', '', 'NA', '>100' and None."""
     try:
-        return float(str(value).strip())
+        s = str(value).strip()
+        if s.startswith(">"):
+            s = s[1:].strip()
+        return float(s)
     except (ValueError, TypeError, AttributeError):
         return default
 
@@ -412,9 +415,10 @@ def variant_matches_hotspot(variant: Dict[str, Any], hotspot: Dict[str, Any]) ->
     """Whether a called variant belongs to this hotspot codon.
 
     Matching is by overlap with the hotspot codon span rather than a fixed
-    distance, and an indel is widened by its own length so that a left-aligned
-    representation still overlaps. When the VCF carries a gene annotation it
-    must agree, so a neighbouring variant in another gene is never relabelled.
+    distance, and an indel is widened to the left by its own length (capped at
+    12 bp) so that a left-aligned representation still overlaps the codon.
+    When the VCF carries a gene annotation it must agree, so a neighbouring
+    variant in another gene is never relabelled.
     """
     if str(variant.get("chrom", "")) != hotspot["chrom"]:
         return False
@@ -429,9 +433,9 @@ def variant_matches_hotspot(variant: Dict[str, Any], hotspot: Dict[str, Any]) ->
         return False
 
     ref_len = max(len(str(variant.get("ref", "") or "")), 1)
-    indel_len = abs(_to_int(variant.get("length_change"), 0))
+    indel_len = min(abs(_to_int(variant.get("length_change"), 0)), 12)
     var_start = pos - indel_len
-    var_end = pos + ref_len - 1 + indel_len
+    var_end = pos + ref_len - 1
     return var_start <= end and var_end >= start
 
 
@@ -532,16 +536,26 @@ def parse_region(region: Any, default=FLT3_ITD_REGION) -> Tuple[str, int, int]:
 
 
 def _itd_row(
-    gene="FLT3", chrom="", start="", end="", itd_len=0, af_pct=0.0, ar=0.0,
+    gene="FLT3", chrom="", start="", end="", itd_len=0, af_pct=0.0, ar: Any = 0.0,
     status=STATUS_NEGATIVE, filt="", depth=0, alt_depth=0, inserted_seq="", region_str="",
 ) -> Dict[str, Any]:
     detected = status == STATUS_DETECTED
+    ar_num = _to_float(ar)
     if detected:
         frame = "In-frame" if itd_len % 3 == 0 else "Frameshift"
-        ar_cat = "AR >= 0.5" if ar >= 0.5 else "AR < 0.5"
+        ar_cat = "AR >= 0.5" if (ar_num >= 0.5 or str(ar).startswith(">")) else "AR < 0.5"
     else:
         frame = "-"
         ar_cat = "Wildtype (Normal)" if status == STATUS_NEGATIVE else "-"
+    if detected:
+        if isinstance(ar, str) and ar.startswith(">"):
+            ar_display = ar
+        elif ar_num >= 999.0:
+            ar_display = ">100"
+        else:
+            ar_display = round(ar_num, 2)
+    else:
+        ar_display = "-"
     return {
         "gene": gene,
         "chrom": chrom,
@@ -552,7 +566,7 @@ def _itd_row(
         "dup_len": str(itd_len),
         "af": f"{af_pct / 100.0:.6f}" if af_pct else "0.0",
         "af_pct": round(af_pct, 2),
-        "ar": round(ar, 2) if detected else "-",
+        "ar": ar_display,
         "in_frame": "true" if (detected and itd_len % 3 == 0) else ("false" if detected else ""),
         "reading_frame": frame,
         # ELN 2017 used an allelic-ratio cut-off; ELN 2022 dropped it from risk
@@ -622,6 +636,9 @@ def derive_flt3_itd_from_variants(
         wt = depth - alt_depth
         if wt > 0 and alt_depth > 0:
             ar = alt_depth / wt
+        elif alt_depth > 0 or vaf >= 100.0:
+            # Homozygous ITD / LOH: no wild-type allele detected
+            ar = 999.0
         elif 0.0 < vaf < 100.0:
             ar = vaf / (100.0 - vaf)
         else:
@@ -706,9 +723,15 @@ def parse_flt3_itd_tsv(itd_path: str) -> List[Dict[str, Any]]:
                 if ref_u <= 0:
                     ref_u = max(_to_int(row_dict.get("depth"), 0) - alt_u, 0)
                 if row_dict.get("ar") not in (None, "", ".", "-"):
-                    ar_val = _to_float(row_dict.get("ar"), 0.0)
+                    ar_str = str(row_dict.get("ar")).strip()
+                    if ar_str.startswith(">"):
+                        ar_val = 999.0
+                    else:
+                        ar_val = _to_float(ar_str, 0.0)
                 elif ref_u > 0 and alt_u > 0:
                     ar_val = alt_u / ref_u
+                elif is_det and (alt_u > 0 or af_pct >= 100.0):
+                    ar_val = 999.0
                 elif is_det and 0.0 < af_pct < 100.0:
                     ar_val = af_pct / (100.0 - af_pct)
                 else:
@@ -726,11 +749,19 @@ def parse_flt3_itd_tsv(itd_path: str) -> List[Dict[str, Any]]:
                         else ("Frameshift" if itd_len > 0 else "-")
 
                 if is_det:
-                    ar_cat = "AR >= 0.5" if ar_val >= 0.5 else "AR < 0.5"
+                    ar_cat = "AR >= 0.5" if (ar_val >= 0.5 or str(row_dict.get("ar", "")).startswith(">")) else "AR < 0.5"
                 elif status_str == STATUS_NEGATIVE:
                     ar_cat = "Wildtype (Normal)"
                 else:
                     ar_cat = "-"
+
+                if is_det:
+                    if str(row_dict.get("ar", "")).startswith(">") or ar_val >= 999.0:
+                        ar_out = ">100"
+                    else:
+                        ar_out = round(ar_val, 2)
+                else:
+                    ar_out = "-"
 
                 rows.append({
                     "gene": row_dict.get("gene", "FLT3"),
@@ -739,7 +770,7 @@ def parse_flt3_itd_tsv(itd_path: str) -> List[Dict[str, Any]]:
                     "dup_len": str(itd_len),
                     "af": row_dict.get("af", "0.0"),
                     "af_pct": round(af_pct, 2),
-                    "ar": round(ar_val, 2) if is_det else "-",
+                    "ar": ar_out,
                     "reading_frame": frame_str,
                     "eln_risk": ar_cat,
                     "ar_category": ar_cat,

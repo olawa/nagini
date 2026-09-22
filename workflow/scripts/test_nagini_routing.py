@@ -298,6 +298,26 @@ class OutputConditionTest(unittest.TestCase):
         self.assertFalse(routing.is_known_condition("assay:nonexistent", self.assays))
         self.assertFalse(routing.is_known_condition("assay_module:", self.assays))
 
+    def test_sv_engine_conditions_are_registered(self):
+        self.assertIn("savana_enabled", routing.SAMPLE_CONDITION_NAMES)
+        self.assertIn("savana_enabled", routing.PIPELINE_CONDITION_NAMES)
+        self.assertIn("sniffles2_enabled", routing.SAMPLE_CONDITION_NAMES)
+        self.assertIn("sniffles2_enabled", routing.PIPELINE_CONDITION_NAMES)
+        self.assertTrue(routing.is_known_condition("savana_enabled", self.assays))
+        self.assertTrue(routing.is_known_condition("sniffles2_enabled", self.assays))
+
+    def test_savana_outputs_are_gated_on_savana_enabled(self):
+        output_spec = yaml.safe_load((REPO / "config/output_files.yaml").read_text())
+        savana_entries = [
+            entry
+            for entry in output_spec["files"]
+            if "savana" in entry["output"]
+        ]
+        self.assertTrue(savana_entries)
+        for entry in savana_entries:
+            self.assertEqual(entry.get("when"), "savana_enabled", entry["output"])
+
+
 
 class SummaryTest(unittest.TestCase):
     def test_summary_reports_what_will_run(self):

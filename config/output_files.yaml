@@ -57,27 +57,55 @@ files:
   - name: Sniffles2 structural variant VCF
     input: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
     output: "results/cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
-    when: sv_calling
+    when: sniffles2_enabled
   - name: Sniffles2 structural variant index
     input: "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
     output: "results/cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
-    when: sv_calling
+    when: sniffles2_enabled
   - name: Sniffles2 SNF evidence
     input: "cnv_sv/sniffles2_call/{sample}_{type}.snf"
     output: "results/cnv_sv/sniffles2_call/{sample}_{type}.snf"
-    when: sv_calling
+    when: sniffles2_enabled
   - name: structural variant summary
     input: "reports/sv_summary/{sample}_{type}.tsv"
     output: "results/reports/sv_summary/{sample}_{type}.tsv"
-    when: sv_calling
+    when: sniffles2_enabled
   - name: translocation summary
     input: "reports/sv_summary/{sample}_{type}.translocations.tsv"
     output: "results/reports/sv_summary/{sample}_{type}.translocations.tsv"
-    when: sv_calling
+    when: sniffles2_enabled
   - name: structural variant summary JSON
     input: "reports/sv_summary/{sample}_{type}.json"
     output: "results/reports/sv_summary/{sample}_{type}.json"
-    when: sv_calling
+    when: sniffles2_enabled
+  - name: SAVANA somatic structural variant VCF
+    input: "cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz"
+    output: "results/cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz"
+    when: savana_enabled
+  - name: SAVANA somatic structural variant index
+    input: "cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi"
+    output: "results/cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi"
+    when: savana_enabled
+  - name: SAVANA structural variant breakpoints BEDPE
+    input: "cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints.bedpe"
+    output: "results/cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints.bedpe"
+    when: savana_enabled
+  - name: SAVANA breakpoint read support TSV
+    input: "cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints_read_support.tsv"
+    output: "results/cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints_read_support.tsv"
+    when: savana_enabled
+  - name: SAVANA structural variant summary
+    input: "reports/sv_summary_savana/{sample}_{type}.tsv"
+    output: "results/reports/sv_summary_savana/{sample}_{type}.tsv"
+    when: savana_enabled
+  - name: SAVANA translocation summary
+    input: "reports/sv_summary_savana/{sample}_{type}.translocations.tsv"
+    output: "results/reports/sv_summary_savana/{sample}_{type}.translocations.tsv"
+    when: savana_enabled
+  - name: SAVANA structural variant summary JSON
+    input: "reports/sv_summary_savana/{sample}_{type}.json"
+    output: "results/reports/sv_summary_savana/{sample}_{type}.json"
+    when: savana_enabled
   - name: whole genome CNV summary
     input: "reports/cnv_summary/{sample}_{type}.cnv.tsv"
     output: "results/reports/cnv_summary/{sample}_{type}.cnv.tsv"

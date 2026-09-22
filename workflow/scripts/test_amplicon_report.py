@@ -7,12 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from amplicon_report import (
+    CLINICAL_HOTSPOTS,
     audit_hotspots,
     derive_flt3_itd_from_variants,
     parse_amplicon_pileup_counts,
     parse_amplicon_stats_json,
     parse_amplicon_vcf,
     parse_flt3_itd_tsv,
+    variant_matches_hotspot,
     write_amplicon_stats_tsv,
     write_amplicon_summary_tsv,
     write_flt3_itd_tsv,
@@ -343,6 +345,53 @@ chr17\t7674220\t.\tC\tT\t60\tPASS\tDP=1200;ANN=T|missense_variant|MODERATE|TP53|
         self.assertIn("7674999", content)
 
         Path(out_path).unlink()
+
+    def test_derive_flt3_itd_homozygous_ar_and_loh(self):
+        """Homozygous ITD or LOH (wt=0 or 100% VAF) must have high AR (>=0.5), not underflow to 0.0."""
+        variants = [{
+            "chrom": "chr13", "pos": 28034100, "length_change": 54, "filter": "PASS",
+            "vaf": 100.0, "depth": 1000, "alt_depth": 1000, "ref": "A", "alt": "A" + "T" * 54,
+        }]
+        rows = derive_flt3_itd_from_variants(variants)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r["status"], "DETECTED")
+        self.assertEqual(r["ar"], ">100")
+        self.assertEqual(r["ar_category"], "AR >= 0.5")
+
+    def test_parse_flt3_itd_tsv_homozygous(self):
+        """Round-trip parsing of ITD row with ar as '>100' or homozygous depth."""
+        itd_content = (
+            "gene\tchrom\tdup_start\tdup_end\tdup_len\taf\taf_pct\tar\tin_frame\t"
+            "reading_frame\tar_category\tstatus\tdepth\talt_depth\n"
+            "FLT3\tchr13\t28034000\t28034078\t78\t1.00\t100.0\t>100\ttrue\tIn-frame\tAR >= 0.5\tDETECTED\t1000\t1000\n"
+        )
+        path = write_tmp(itd_content)
+        parsed = parse_flt3_itd_tsv(path)
+        self.assertEqual(len(parsed), 1)
+        r = parsed[0]
+        self.assertEqual(r["ar"], ">100")
+        self.assertEqual(r["ar_category"], "AR >= 0.5")
+        self.assertEqual(r["status"], "DETECTED")
+        Path(path).unlink()
+
+    def test_variant_matches_hotspot_boundary_and_distant_indel(self):
+        """A distant 50 bp deletion must not match a hotspot codon just because of its length."""
+        hs_r175 = next(h for h in CLINICAL_HOTSPOTS if h["codon"] == "p.R175")
+        # Hotspot R175 is at chr17:7675087-7675089
+        # Variant 60 bp away with a 50 bp deletion
+        distant_del = {
+            "chrom": "chr17", "pos": 7675150, "gene": "TP53", "ref": "A" * 50, "alt": "A",
+            "length_change": -49, "vaf": 15.0, "filter": "PASS",
+        }
+        self.assertFalse(variant_matches_hotspot(distant_del, hs_r175))
+
+        # Close indel overlapping the codon span directly
+        close_snv = {
+            "chrom": "chr17", "pos": 7675088, "gene": "TP53", "ref": "C", "alt": "T",
+            "length_change": 0, "vaf": 25.0, "filter": "PASS",
+        }
+        self.assertTrue(variant_matches_hotspot(close_snv, hs_r175))
 
 
 if __name__ == "__main__":

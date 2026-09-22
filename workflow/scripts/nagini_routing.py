@@ -434,6 +434,8 @@ PIPELINE_CONDITION_NAMES = {
     "merged_fastq",
     "cnv_calling",
     "cnvkit_enabled",
+    "sniffles2_enabled",
+    "savana_enabled",
     "rindels_sv",
 }
 
@@ -459,6 +461,8 @@ SAMPLE_CONDITION_NAMES = {
     "cnv_calling",
     "sample_needs_cnv_calling",
     "cnvkit_enabled",
+    "sniffles2_enabled",
+    "savana_enabled",
     "rindels_sv",
 }
 

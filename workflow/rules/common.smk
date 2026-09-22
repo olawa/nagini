@@ -759,6 +759,41 @@ def cnvkit_enabled(sample):
     return config.get("cnv_engine", "both") != "rindels_only"
 
 
+def sniffles2_enabled(sample):
+    """Whether Sniffles2 SV calling runs for this sample.
+
+    Sniffles2 runs whenever SV calling is enabled and sv_engine is not set to
+    'savana_only'. Both Sniffles2 and SAVANA run in parallel as complements.
+    """
+    if not sample_needs_sv_calling(sample):
+        return False
+    return config.get("sv_engine", "both") != "savana_only"
+
+
+def savana_enabled(sample):
+    """Whether SAVANA SV calling runs for this sample.
+
+    SAVANA runs whenever SV calling is enabled and sv_engine is not set to
+    'sniffles2_only'. Both Sniffles2 and SAVANA run in parallel as complements.
+    """
+    if not sample_needs_sv_calling(sample):
+        return False
+    return config.get("sv_engine", "both") != "sniffles2_only"
+
+
+def get_savana_genome_version(wildcards=None):
+    """Return genome version argument for SAVANA tumor-only mode."""
+    configured = config.get("savana_ont_to", {}).get("genome_version", "")
+    if configured:
+        return configured
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    if "19" in build or "37" in build:
+        return "1000g_hg19"
+    elif "hs1" in build or "t2t" in build or "chm13" in build:
+        return "1000g_t2t"
+    return "1000g_hg38"
+
+
 def _find_rindels_binary():
     """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
     override = config.get("rindels", {}).get("binary", "") or config.get("bcr_abl", {}).get("rindels_binary", "")
@@ -1076,7 +1111,7 @@ def get_report_snv_tbi(wildcards):
 
 
 def get_report_sv_tsv(wildcards):
-    if sample_needs_sv_calling(wildcards.sample):
+    if sniffles2_enabled(wildcards.sample):
         return get_sample_type_path(wildcards, "reports/sv_summary", ".tsv")
     return []
 
@@ -1125,8 +1160,22 @@ def get_report_rindels_translocations_tsv(wildcards):
     return []
 
 
+def get_report_savana_sv_tsv(wildcards):
+    if savana_enabled(wildcards.sample):
+        return get_sample_type_path(wildcards, "reports/sv_summary_savana", ".tsv")
+    return []
+
+
+def get_report_savana_translocations_tsv(wildcards):
+    if savana_enabled(wildcards.sample):
+        return get_sample_type_path(
+            wildcards, "reports/sv_summary_savana", ".translocations.tsv"
+        )
+    return []
+
+
 def get_report_translocations_tsv(wildcards):
-    if sample_needs_sv_calling(wildcards.sample):
+    if sniffles2_enabled(wildcards.sample):
         return get_sample_type_path(
             wildcards, "reports/sv_summary", ".translocations.tsv"
         )
@@ -1305,6 +1354,8 @@ _PIPELINE_CONDITIONS = {
     ),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "cnvkit_enabled": lambda: any(cnvkit_enabled(s) for s in get_samples(samples)),
+    "sniffles2_enabled": lambda: any(sniffles2_enabled(s) for s in get_samples(samples)),
+    "savana_enabled": lambda: any(savana_enabled(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
 }
@@ -1324,6 +1375,8 @@ _SAMPLE_CONDITIONS = {
     "sv_calling": sample_needs_sv_calling,
     "annotate_svs": sample_needs_sv_calling,
     "sample_needs_sv_calling": sample_needs_sv_calling,
+    "sniffles2_enabled": sniffles2_enabled,
+    "savana_enabled": savana_enabled,
     "cnv_calling": sample_needs_cnv_calling,
     "sample_needs_cnv_calling": sample_needs_cnv_calling,
     "cnvkit_enabled": cnvkit_enabled,

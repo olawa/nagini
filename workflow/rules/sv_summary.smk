@@ -100,3 +100,46 @@ rule sv_summary_rindels:
         "{rule}: summarise Rindels structural variants for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/sv_summary.py"
+
+
+rule sv_summary_savana:
+    """Summarise SAVANA somatic SVs and extract translocations/BNDs."""
+    input:
+        vcf="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz",
+        tbi="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi",
+        annotation_bed=lambda wildcards: (
+            config.get("reference", {}).get("sv_annotation_bed", "")
+            or get_sample_design_bed(wildcards.sample)
+            or []
+        ),
+        cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
+    output:
+        tsv="reports/sv_summary_savana/{sample}_{type}.tsv",
+        translocations="reports/sv_summary_savana/{sample}_{type}.translocations.tsv",
+        json="reports/sv_summary_savana/{sample}_{type}.json",
+    params:
+        extra=config.get("sv_summary", {}).get("extra", ""),
+        caller="SAVANA",
+    log:
+        "logs/sv_summary_savana/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/sv_summary_savana/{sample}_{type}.tsv",
+            config.get("sv_summary", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("sv_summary", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("sv_summary", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("sv_summary", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("sv_summary", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("sv_summary", {}).get("threads", 1),
+        time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("sv_summary", {}).get("container", config["default_container"])
+    conda:
+        "../../envs/nagini.yaml"
+    message:
+        "{rule}: summarise SAVANA somatic structural variants for {wildcards.sample}_{wildcards.type}"
+    script:
+        "../scripts/sv_summary.py"
+
