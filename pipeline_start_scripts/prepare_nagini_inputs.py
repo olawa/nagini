@@ -247,6 +247,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Number of CPU cores allocated for the pipeline run.",
     )
+    parser.add_argument(
+        "--enable-rindels",
+        action="store_true",
+        default=False,
+        help="Enable Rindels variant caller for BCR-ABL1 or amplicon assays.",
+    )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument(
         "--no-check-references",
@@ -1920,6 +1926,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
 
     if getattr(args, "small_variant_caller", ""):
         config["small_variant_caller"] = args.small_variant_caller
+
+    if getattr(args, "enable_rindels", False):
+        config["enable_rindels"] = True
+        config.setdefault("bcr_abl", {})["enable_rindels"] = True
 
     clairs_to_platform = getattr(args, "clairs_to_platform", "")
     if not clairs_to_platform:

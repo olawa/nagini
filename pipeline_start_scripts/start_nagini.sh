@@ -74,6 +74,7 @@ cores=""
 filter_reads=""
 merged_fastq=""
 barcode_map_origin=""
+enable_rindels=false
 filter_qv=""
 filter_len=""
 filter_binary=""
@@ -361,6 +362,10 @@ while [[ $# -gt 0 ]]; do
             small_variant_caller="$2"
             shift 2
             ;;
+        --enable-rindels|--rindels)
+            enable_rindels=true
+            shift 1
+            ;;
         --clairs-to-platform)
             [[ $# -ge 2 ]] || die "$1 requires a value"
             clairs_to_platform="$2"
@@ -611,7 +616,20 @@ field_if "assay" "${assay:-from barcode map}"
 field_if "library type" "$library_type"
 field_if "sample type" "$sample_type"
 field_if "reference build" "$reference_build"
-field "variant caller" "${small_variant_caller:-auto (ClairS-TO + DeepVariant)}"
+if [[ "$assay" == "bcr_abl" ]]; then
+    if [[ "$enable_rindels" == "true" ]]; then
+        caller_display="Branford Pileup Caller + Rindels"
+    else
+        caller_display="Branford Pileup Caller (ABL1 KD panel, fast pileup)"
+    fi
+elif [[ "$assay" == "amplicon" ]]; then
+    caller_display="Rindels (Amplicon)"
+elif [[ "$assay" == "adaptive_cnv_sv" ]]; then
+    caller_display="None (CNV/SV only)"
+else
+    caller_display="${small_variant_caller:-auto (ClairS-TO + DeepVariant)}"
+fi
+field "variant caller" "$caller_display"
 field_if "design bed" "$bed_file"
 field_if "merged fastq" "$merged_fastq"
 
@@ -662,6 +680,7 @@ prepare_cmd=(
 [[ -n "$dorado_binary" ]] && prepare_cmd+=(--dorado-binary "$dorado_binary")
 [[ -n "$bed_file" ]] && prepare_cmd+=(--bed-file "$bed_file")
 [[ -n "$small_variant_caller" ]] && prepare_cmd+=(--small-variant-caller "$small_variant_caller")
+[[ "$enable_rindels" == "true" ]] && prepare_cmd+=(--enable-rindels)
 [[ -n "$clairs_to_platform" ]] && prepare_cmd+=(--clairs-to-platform "$clairs_to_platform")
 [[ -n "$clairs_to_container" ]] && prepare_cmd+=(--clairs-to-container "$clairs_to_container")
 [[ -n "$cores" ]] && prepare_cmd+=(--cores "$cores")
