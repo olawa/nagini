@@ -1035,6 +1035,39 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(buffer.getvalue(), "")
 
 
+class BasecallingModelDetectionTest(unittest.TestCase):
+    def test_detect_model_from_final_summary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            summary_file = run_dir / "final_summary_run123.txt"
+            summary_file.write_text("protocol=sequencing\nbasecall_model_version_id=dna_r10.4.1_e8.2_400bps_sup@v5.2.0\n")
+            model = PREPARE.detect_basecalling_model(run_dir)
+            self.assertEqual(model, "dna_r10.4.1_e8.2_400bps_sup@v5.2.0")
+
+    def test_detect_model_from_fastq_header(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            fq_file = run_dir / "sample_reads.fastq.gz"
+            with gzip.open(str(fq_file), "wt") as handle:
+                handle.write("@read1 runid=run123 model_version_id=dna_r10.4.1_e8.2_400bps_sup@v5.2.0\nACGT\n+\nIIII\n")
+            model = PREPARE.detect_basecalling_model(run_dir)
+            self.assertEqual(model, "dna_r10.4.1_e8.2_400bps_sup@v5.2.0")
+
+    def test_can_reuse_existing_tables_detects_input_type_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_path = Path(tmpdir)
+            samples_tsv = dir_path / "samples.tsv"
+            units_tsv = dir_path / "units.tsv"
+            samples_tsv.write_text("sample\nsample1\n")
+            units_tsv.write_text(
+                "sample\ttype\tprocessing_unit\tbarcode\tinput_type\tbam\n"
+                "sample1\tT\tPU1\tBC\tdorado_bam\tbasecalling/dorado_demux/barcode01.bam\n"
+            )
+
+            self.assertFalse(PREPARE.can_reuse_existing_tables(samples_tsv, units_tsv, "fastq"))
+            self.assertTrue(PREPARE.can_reuse_existing_tables(samples_tsv, units_tsv, "minknow"))
+
+
 class ReferenceRegistryTest(unittest.TestCase):
     """The registry is where a reference path is declared."""
 

@@ -230,6 +230,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --input-type)
             [[ $# -ge 2 ]] || die "$1 requires a value"
+            if [[ -n "$input_type" && "$input_type" != "$2" ]]; then
+                echo "WARNING: --input-type specified multiple times ('$input_type' vs '$2'). Using '$2'." >&2
+            fi
             input_type="$2"
             shift 2
             ;;

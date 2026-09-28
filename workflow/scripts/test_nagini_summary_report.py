@@ -246,6 +246,7 @@ class StackedTablesTest(unittest.TestCase):
 
 
 
+@unittest.skipIf(xlsxwriter is None, "xlsxwriter not available")
 class DnaNumberTest(unittest.TestCase):
     def test_the_lab_identifier_leads_the_overview_and_the_stacked_tables(self):
         """A workbook that shows only barcode-derived ids cannot be filed."""

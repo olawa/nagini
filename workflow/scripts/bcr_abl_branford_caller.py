@@ -1,10 +1,52 @@
 #!/usr/bin/env python3
 """Force-call BCR-ABL1 kinase domain resistance mutations (Branford panel).
 
-Performs sensitive, high-depth pileup calling at ~50 key ABL1 kinase domain codons,
-excluding reference skips (intron skips in cDNA spliced alignments), calculating
-exact VAFs, and annotating TKI resistance profiles (Imatinib, Dasatinib, Nilotinib,
-Bosutinib, Ponatinib, Asciminib).
+High-depth pileup calling at the Branford ABL1 kinase-domain positions,
+excluding reference skips (introns in cDNA spliced alignments), computing VAFs
+and annotating TKI resistance profiles.
+
+Every interrogated position is written to the all-sites TSV with its status and
+filter_reason, so the output answers "was T315I excluded?" and not only "was
+T315I found?". The mutations TSV and VCF carry DETECTED and SUBCLONAL only.
+
+Artifact filters, and what each one can and cannot see
+-----------------------------------------------------
+At ~46 000x, Nanopore's substitution noise puts hundreds of alternate reads on
+every position, so a bare VAF threshold calls noise. The filters below narrow
+that, but they are not a substitute for a per-position error baseline built
+from negative samples.
+
+SNR (--min-snr)
+    ad_alt divided by the largest of the two *other* non-reference bases.
+    Catches noise that spreads evenly across all three substitutions.
+    It is blind to the opposite and more common case: a context-specific
+    Nanopore error produces the same substitution every time, leaving the other
+    two bases clean, which yields a *high* SNR. At 46 000x a recurrent 1.4 %
+    error scores SNR 25.8x against a true 1.4 % subclone's 29.3x -- the two are
+    not separable by this statistic. Only a background panel separates them.
+
+STRAND_BIAS (--min-minor-strand-ratio, --max-sor)
+    Requires both a one-sided alt distribution and a departure from the
+    reference's own strand balance. Requiring both matters on amplicons: when
+    the whole amplicon is strand-skewed the reference is one-sided too, and a
+    real variant inherits that skew without being an artifact.
+
+LOW_BASEQ (--min-base-quality, --min-mean-baseq)
+    --min-base-quality drops individual base calls during the pileup, so it
+    also changes the depth that VAF is computed against. depth_unfiltered and
+    ad_alt_unfiltered are reported alongside, so a downstream comparison can
+    use counts that do not depend on this setting.
+
+DIRTY_CONTEXT (--min-kmer-rate, --kmer-window)
+    Fraction of alt reads whose flanking bases match the reference. Targets
+    homopolymer and indel-adjacent errors. Deviations that coincide with
+    another panel position are ignored, because a compound mutation in cis is
+    not a dirty context -- 25 of the 52 Branford positions sit within 3 bp of
+    another one, so without that exemption this filter would reject exactly
+    the compound mutations the phaser exists to resolve.
+
+Thresholds are conventional starting points, not values derived from these
+data. Calibrate them against the per-position background once it exists.
 """
 
 from __future__ import annotations
@@ -92,11 +134,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
-    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum Signal-to-Noise Ratio (Alt / max_other) (default 3.0)")
+    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio, ad_alt / largest other non-reference base. Blind to context-specific errors that favour one substitution; see the module docstring (default 3.0)")
     parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
+    parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
     parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
     parser.add_argument("--min-kmer-rate", type=float, default=0.60, help="Minimum kmer reference clean rate (default 0.60 / 60 percent)")
     parser.add_argument("--kmer-window", type=int, default=3, help="Flanking kmer window size in bp (default 3)")
+    parser.add_argument("--known-variants", type=Path, default=None, help="Optional BED/VCF of known polymorphisms whose flanking mismatches should not count as dirty context. Panel positions are always exempt.")
     parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args()
@@ -134,6 +178,64 @@ def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def load_exempt_positions(path: Optional[Path]) -> Dict[str, set]:
+    """Read extra positions whose flanking mismatches should not count as dirty.
+
+    Accepts a BED (chrom, start0, end) or a VCF (chrom, pos). Used for known
+    polymorphisms: a germline SNP beside a panel position is a real base, not a
+    context error, and without this it would reject that position in every
+    sample carrying the SNP.
+    """
+
+    exempt: Dict[str, set] = {}
+    if not path or not Path(path).is_file():
+        return exempt
+    for line in Path(path).read_text().splitlines():
+        text = line.strip()
+        if not text or text.startswith(("#", "track", "browser")):
+            continue
+        fields = text.split("\t")
+        if len(fields) < 2:
+            continue
+        chrom = fields[0]
+        try:
+            if str(path).lower().endswith((".vcf", ".vcf.gz")):
+                zero_based = int(fields[1]) - 1
+            else:
+                zero_based = int(fields[1])
+        except ValueError:
+            continue
+        exempt.setdefault(chrom, set()).add(zero_based)
+    return exempt
+
+
+def flank_masks(
+    chrom: str, pos0: int, window: int, exempt: Dict[str, set]
+) -> Tuple[Tuple[bool, ...], Tuple[bool, ...]]:
+    """Which flanking offsets may differ from the reference without penalty."""
+
+    sites = exempt.get(chrom, set())
+    left = tuple((pos0 - window + i) in sites for i in range(window))
+    right = tuple((pos0 + 1 + i) in sites for i in range(window))
+    return left, right
+
+
+def context_is_clean(
+    read_seq: str, ref_seq: str, mask: Tuple[bool, ...]
+) -> bool:
+    """Compare a flank to the reference, forgiving exempt offsets."""
+
+    if len(read_seq) != len(ref_seq):
+        return False
+    for index, (read_base, ref_base) in enumerate(zip(read_seq, ref_seq)):
+        if read_base == ref_base:
+            continue
+        if index < len(mask) and mask[index]:
+            continue
+        return False
+    return True
+
+
 def count_positions_batch(
     bam: pysam.AlignmentFile,
     chrom: str,
@@ -159,6 +261,11 @@ def count_positions_batch(
             "base_qual_count": {b: 0 for b in BASES},
             "kmer_clean_count": {b: 0 for b in BASES},
             "kmer_total_count": {b: 0 for b in BASES},
+            # Counted before --min-base-quality is applied. The quality filter
+            # changes the denominator that VAF is computed against, so anything
+            # comparing these calls against another platform needs counts that
+            # do not move when the threshold is tuned.
+            "unfiltered": {b: 0 for b in BASES},
         })
         results[pos_0based] = counts
 
@@ -182,8 +289,10 @@ def count_positions_batch(
         counts = results[ref_pos]
         lookup_key = (orig_chrom or chrom, ref_pos)
         has_kmer = bool(ref_seqs_by_pos and lookup_key in ref_seqs_by_pos)
+        left_mask: Tuple[bool, ...] = ()
+        right_mask: Tuple[bool, ...] = ()
         if has_kmer and ref_seqs_by_pos is not None:
-            ref_left, ref_right = ref_seqs_by_pos[lookup_key]
+            ref_left, ref_right, left_mask, right_mask = ref_seqs_by_pos[lookup_key]
             k_len = len(ref_left)
         else:
             ref_left, ref_right, k_len = "", "", 0
@@ -205,12 +314,14 @@ def count_positions_batch(
                 continue
 
             bq = aln.query_qualities[read.query_position] if aln.query_qualities is not None else 30
-            if min_baseq > 0 and bq < min_baseq:
-                counts["low_baseq"] += 1
-                continue
 
             base = aln.query_sequence[read.query_position].upper()
             if base not in BASES:
+                continue
+            counts["unfiltered"][base] += 1
+
+            if min_baseq > 0 and bq < min_baseq:
+                counts["low_baseq"] += 1
                 continue
 
             strand = "rev" if aln.is_reverse else "fwd"
@@ -226,7 +337,9 @@ def count_positions_batch(
                     counts["kmer_total_count"][base] += 1
                     read_left = qseq[qpos - k_len : qpos].upper()
                     read_right = qseq[qpos + 1 : qpos + 1 + k_len].upper()
-                    if read_left == ref_left and read_right == ref_right:
+                    if context_is_clean(read_left, ref_left, left_mask) and context_is_clean(
+                        read_right, ref_right, right_mask
+                    ):
                         counts["kmer_clean_count"][base] += 1
 
     return results
@@ -268,7 +381,18 @@ def main() -> None:
             sys.stderr.write(f"Warning: could not load TKI profiles from {args.features_json}: {e}\n")
 
     # Pre-extract reference k-mer context if reference fasta is provided
-    ref_seqs_by_pos: Dict[Tuple[str, int], Tuple[str, str]] = {}
+    # A mismatch in the flank is only evidence of a context error when it is
+    # not itself something we expect to vary. Panel positions are the obvious
+    # case: 25 of the 52 Branford sites lie within 3 bp of another one, so a
+    # compound mutation in cis would otherwise mark both of its own positions
+    # dirty and be rejected before the phaser ever sees it.
+    exempt_positions: Dict[str, set] = load_exempt_positions(
+        getattr(args, "known_variants", None)
+    )
+    for site in sites:
+        exempt_positions.setdefault(site["chrom"], set()).add(site["pos"] - 1)
+
+    ref_seqs_by_pos: Dict[Tuple[str, int], Tuple[str, str, Tuple[bool, ...], Tuple[bool, ...]]] = {}
     if args.reference_fasta and args.reference_fasta.is_file():
         try:
             ref_fasta = pysam.FastaFile(str(args.reference_fasta))
@@ -286,7 +410,12 @@ def main() -> None:
                     if p0 >= kw and (p0 + 1 + kw) <= c_len:
                         left_seq = ref_fasta.fetch(c, p0 - kw, p0).upper()
                         right_seq = ref_fasta.fetch(c, p0 + 1, p0 + 1 + kw).upper()
-                        ref_seqs_by_pos[(site["chrom"], p0)] = (left_seq, right_seq)
+                        left_mask, right_mask = flank_masks(
+                            site["chrom"], p0, kw, exempt_positions
+                        )
+                        ref_seqs_by_pos[(site["chrom"], p0)] = (
+                            left_seq, right_seq, left_mask, right_mask,
+                        )
             ref_fasta.close()
         except Exception as e:
             sys.stderr.write(f"Warning: could not load reference fasta {args.reference_fasta} for k-mer check: {e}\n")
@@ -357,6 +486,13 @@ def main() -> None:
             ad_alt = per_base.get(alt, 0)
             vaf = (ad_alt / depth) if depth > 0 else 0.0
 
+            unfiltered = counts.get("unfiltered", {})
+            depth_unfiltered = sum(unfiltered.values())
+            ad_alt_unfiltered = unfiltered.get(alt, 0)
+            vaf_unfiltered = (
+                (ad_alt_unfiltered / depth_unfiltered) if depth_unfiltered > 0 else 0.0
+            )
+
             ad_ref_fwd = counts.get(f"{ref}_fwd", 0)
             ad_ref_rev = counts.get(f"{ref}_rev", 0)
             ad_alt_fwd = counts.get(f"{alt}_fwd", 0)
@@ -407,8 +543,20 @@ def main() -> None:
                 fails = []
                 if snr < args.min_snr:
                     fails.append(f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)")
-                if ref_has_both_strands and ad_alt >= 20 and alt_minor_strand_ratio < args.min_minor_strand_ratio:
-                    fails.append(f"STRAND_BIAS({alt_minor_strand_ratio:.3f}<{args.min_minor_strand_ratio:.2f})")
+                # One-sidedness alone is not bias: on a strand-skewed amplicon the
+                # reference is one-sided too, and a real variant inherits that skew.
+                # SOR compares the alt balance against the reference's own, so both
+                # have to agree before the call is rejected.
+                if (
+                    ref_has_both_strands
+                    and ad_alt >= 20
+                    and alt_minor_strand_ratio < args.min_minor_strand_ratio
+                    and sor > args.max_sor
+                ):
+                    fails.append(
+                        f"STRAND_BIAS(ratio={alt_minor_strand_ratio:.3f}<{args.min_minor_strand_ratio:.2f},"
+                        f"SOR={sor:.2f}>{args.max_sor:.1f})"
+                    )
                 if mean_baseq_alt < args.min_mean_baseq:
                     fails.append(f"LOW_BASEQ({mean_baseq_alt:.1f}<{args.min_mean_baseq:.1f})")
                 if k_tot > 0 and kmer_clean_percent < (args.min_kmer_rate * 100.0):
@@ -449,6 +597,9 @@ def main() -> None:
                 "ad_ref": ad_ref,
                 "ad_alt": ad_alt,
                 "vaf_percent": round(vaf * 100.0, 3),
+                "depth_unfiltered": depth_unfiltered,
+                "ad_alt_unfiltered": ad_alt_unfiltered,
+                "vaf_unfiltered_percent": round(vaf_unfiltered * 100.0, 3),
                 "status": status,
                 "filter_reason": filter_reason,
                 "snr": snr,
@@ -490,6 +641,7 @@ def main() -> None:
     headers = [
         "sample", "chrom", "pos", "ref", "alt", "mutation", "aa_change", "name",
         "depth", "ad_ref", "ad_alt", "vaf_percent", "status", "filter_reason",
+        "depth_unfiltered", "ad_alt_unfiltered", "vaf_unfiltered_percent",
         "snr", "ad_other", "vaf_other_percent", "other_bases",
         "alt_minor_strand_ratio", "sor",
         "mean_baseq_ref", "mean_baseq_alt", "kmer_clean_percent",
@@ -515,7 +667,11 @@ def main() -> None:
         handle.write(f"# min_af={args.min_af}\n")
         handle.write(f"# subclonal_af={args.subclonal_af}\n")
         handle.write(f"# min_snr={args.min_snr}\n")
+        handle.write(f"# max_sor={args.max_sor}\n")
         handle.write(f"# min_depth={args.min_depth}\n")
+        handle.write(f"# min_base_quality={args.min_base_quality}\n")
+        handle.write(f"# min_mean_baseq={args.min_mean_baseq}\n")
+        handle.write(f"# min_kmer_rate={args.min_kmer_rate} kmer_window={args.kmer_window}\n")
         handle.write("\t".join(headers) + "\n")
         for rec in detected_mutations:
             handle.write("\t".join(str(rec.get(h, "")) for h in headers) + "\n")

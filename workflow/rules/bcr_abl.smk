@@ -138,6 +138,12 @@ rule bcr_abl_branford_calling:
         min_minor_strand_ratio=lambda wildcards: config.get("bcr_abl", {}).get("min_minor_strand_ratio", 0.05),
         min_mean_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_mean_baseq", 14.0),
         min_kmer_rate=lambda wildcards: config.get("bcr_abl", {}).get("min_kmer_rate", 0.60),
+        max_sor=lambda wildcards: config.get("bcr_abl", {}).get("max_sor", 3.0),
+        known_variants_arg=lambda wildcards: (
+            f"--known-variants {config['bcr_abl']['known_variants']}"
+            if config.get("bcr_abl", {}).get("known_variants")
+            else ""
+        ),
         kmer_window=lambda wildcards: config.get("bcr_abl", {}).get("kmer_window", 3),
         fasta_arg=lambda wildcards, input: f"--reference-fasta {input.ref_fasta}" if input.ref_fasta else "",
         extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),
@@ -175,6 +181,8 @@ rule bcr_abl_branford_calling:
             --min-minor-strand-ratio {params.min_minor_strand_ratio} \
             --min-mean-baseq {params.min_mean_baseq} \
             --min-kmer-rate {params.min_kmer_rate} \
+            --max-sor {params.max_sor} \
+            {params.known_variants_arg} \
             --kmer-window {params.kmer_window} \
             {params.extra} \
             --threads {threads} > {log} 2>&1

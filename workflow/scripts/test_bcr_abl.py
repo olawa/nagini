@@ -37,7 +37,7 @@ def create_synthetic_bam(bam_path: Path, reads: list[dict], references: list[tup
             aln = pysam.AlignedSegment()
             aln.query_name = r.get("name", f"read_{r_idx}")
             aln.query_sequence = r["seq"]
-            aln.query_qualities = [30] * len(r["seq"])
+            aln.query_qualities = r.get("quals") or [r.get("qual", 30)] * len(r["seq"])
             aln.reference_id = [ref[0] for ref in references].index(r["chrom"])
             aln.reference_start = r["start"]  # 0-based
             aln.cigar = r.get("cigar", [(0, len(r["seq"]))])  # default match
@@ -201,6 +201,234 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
 
             self.assertEqual(rec_t315[status_idx], "ARTIFACT")
             self.assertIn("STRAND_BIAS", rec_t315[reason_idx])
+
+
+class TestBranfordContextAndStrandFilters(unittest.TestCase):
+    """The artifact filters must reject artifacts without rejecting biology."""
+
+    REF = ("ACGT" * 50)  # 200 bp, known at every position
+
+    def _write_reference(self, tmp: Path) -> Path:
+        fasta = tmp / "ref.fa"
+        fasta.write_text(
+            ">chr9\n"
+            + "\n".join(self.REF[i:i + 60] for i in range(0, len(self.REF), 60))
+            + "\n"
+        )
+        pysam.faidx(str(fasta))
+        return fasta
+
+    def _run_caller(self, tmp: Path, bam: Path, bed: Path, fasta: Path, extra=()):
+        all_sites = tmp / "all_sites.tsv"
+        muts = tmp / "muts.tsv"
+        BRANFORD_CALLER.sys.argv = [
+            "bcr_abl_branford_caller.py",
+            "--bam", str(bam), "--bed", str(bed), "--sample", "S",
+            "--output-all", str(all_sites), "--output-mutations", str(muts),
+            "--reference-fasta", str(fasta),
+            "--min-depth", "50", "--min-alt-reads", "5",
+            *extra,
+        ]
+        BRANFORD_CALLER.main()
+        rows = []
+        header = None
+        for line in all_sites.read_text().splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            fields = line.split("\t")
+            if header is None:
+                header = fields
+                continue
+            rows.append(dict(zip(header, fields)))
+        return rows
+
+    def test_kmer_filter_exempts_a_neighbouring_panel_position(self):
+        """A compound mutation in cis is not a dirty context.
+
+        25 of the 52 real Branford positions sit within 3 bp of another one, so
+        without this exemption two mutations on the same molecule would mark
+        each other's flank dirty and both would be rejected before the phaser
+        could resolve whether they are in cis.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fasta = self._write_reference(tmp)
+            # 0-based 99 and 100 are adjacent; both are panel positions.
+            ref_a, ref_b = self.REF[99], self.REF[100]
+            alt_a = "A" if ref_a != "A" else "C"
+            alt_b = "A" if ref_b != "A" else "C"
+            bed = tmp / "panel.bed"
+            bed.write_text(
+                f"chr9\t99\t100\tNM_1:c.(1{ref_a}>{alt_a})\t{ref_a}\t{alt_a}\tp.Leu387Phe\n"
+                f"chr9\t100\t101\tNM_1:c.(2{ref_b}>{alt_b})\t{ref_b}\t{alt_b}\tp.Met388Leu\n"
+            )
+
+            reads = []
+            for i in range(300):                      # wild type
+                reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": i % 2 == 0})
+            for i in range(200):                      # both variants, same molecule
+                seq = list(self.REF[:150])
+                seq[99], seq[100] = alt_a, alt_b
+                reads.append({"name": f"cis{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": i % 2 == 0})
+
+            bam = tmp / "cis.bam"
+            create_synthetic_bam(bam, reads, [("chr9", 200)])
+            rows = self._run_caller(tmp, bam, bed, fasta)
+
+        for row in rows:
+            self.assertEqual(
+                row["kmer_clean_percent"], "100.0",
+                f"{row['pos']}: the neighbouring panel position should be exempt",
+            )
+            self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
+            self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
+
+    def test_kmer_filter_still_rejects_a_genuinely_dirty_context(self):
+        """A mismatch that is not a known position still counts as dirty."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fasta = self._write_reference(tmp)
+            ref_base = self.REF[99]
+            alt_base = "A" if ref_base != "A" else "C"
+            bed = tmp / "panel.bed"
+            bed.write_text(
+                f"chr9\t99\t100\tNM_1:c.(1{ref_base}>{alt_base})\t{ref_base}\t{alt_base}\tp.Thr315Ile\n"
+            )
+
+            reads = []
+            for i in range(300):
+                reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": i % 2 == 0})
+            for i in range(200):
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
+                # 2 bp downstream, not a panel position: genuine context error.
+                seq[101] = "A" if self.REF[101] != "A" else "G"
+                reads.append({"name": f"dirty{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": i % 2 == 0})
+
+            bam = tmp / "dirty.bam"
+            create_synthetic_bam(bam, reads, [("chr9", 200)])
+            rows = self._run_caller(tmp, bam, bed, fasta)
+
+        self.assertEqual(rows[0]["kmer_clean_percent"], "0.0")
+        self.assertEqual(rows[0]["status"], "ARTIFACT")
+        self.assertIn("DIRTY_CONTEXT", rows[0]["filter_reason"])
+
+    def test_strand_bias_spares_a_variant_on_a_strand_skewed_amplicon(self):
+        """When the whole amplicon is one-sided the reference is one-sided too.
+
+        The minor-strand ratio alone would reject a real variant here; SOR sees
+        that the alt balance matches the reference's own and lets it through.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fasta = self._write_reference(tmp)
+            ref_base = self.REF[99]
+            alt_base = "A" if ref_base != "A" else "C"
+            bed = tmp / "panel.bed"
+            bed.write_text(
+                f"chr9\t99\t100\tNM_1:c.(1{ref_base}>{alt_base})\t{ref_base}\t{alt_base}\tp.Thr315Ile\n"
+            )
+
+            reads = []
+            for i in range(380):                       # reference, 97% forward
+                reads.append({"name": f"wt_f{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": False})
+            for i in range(12):
+                reads.append({"name": f"wt_r{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": True})
+            for i in range(100):                       # alt, same 97% skew
+                seq = list(self.REF[:150]); seq[99] = alt_base
+                reads.append({"name": f"alt_f{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": False})
+            for i in range(3):
+                seq = list(self.REF[:150]); seq[99] = alt_base
+                reads.append({"name": f"alt_r{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": True})
+
+            bam = tmp / "skew.bam"
+            create_synthetic_bam(bam, reads, [("chr9", 200)])
+            rows = self._run_caller(tmp, bam, bed, fasta)
+
+        row = rows[0]
+        self.assertLess(float(row["alt_minor_strand_ratio"]), 0.05,
+                        "the ratio alone should look one-sided here")
+        self.assertLessEqual(float(row["sor"]), 3.0,
+                             "SOR should see the alt matches the reference's skew")
+        self.assertNotIn("STRAND_BIAS", row["filter_reason"])
+        self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
+
+    def test_one_sided_alt_against_balanced_reference_is_still_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fasta = self._write_reference(tmp)
+            ref_base = self.REF[99]
+            alt_base = "A" if ref_base != "A" else "C"
+            bed = tmp / "panel.bed"
+            bed.write_text(
+                f"chr9\t99\t100\tNM_1:c.(1{ref_base}>{alt_base})\t{ref_base}\t{alt_base}\tp.Thr315Ile\n"
+            )
+
+            reads = []
+            for i in range(400):
+                reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": i % 2 == 0})
+            for i in range(60):                        # every alt read forward
+                seq = list(self.REF[:150]); seq[99] = alt_base
+                reads.append({"name": f"alt{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": False})
+
+            bam = tmp / "onesided.bam"
+            create_synthetic_bam(bam, reads, [("chr9", 200)])
+            rows = self._run_caller(tmp, bam, bed, fasta)
+
+        self.assertEqual(rows[0]["status"], "ARTIFACT")
+        self.assertIn("STRAND_BIAS", rows[0]["filter_reason"])
+
+    def test_unfiltered_counts_do_not_move_with_the_base_quality_filter(self):
+        """VAF depends on --min-base-quality; the comparison columns must not."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fasta = self._write_reference(tmp)
+            ref_base = self.REF[99]
+            alt_base = "A" if ref_base != "A" else "C"
+            bed = tmp / "panel.bed"
+            bed.write_text(
+                f"chr9\t99\t100\tNM_1:c.(1{ref_base}>{alt_base})\t{ref_base}\t{alt_base}\tp.Thr315Ile\n"
+            )
+
+            reads = []
+            for i in range(300):
+                reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
+                              "seq": self.REF[:150], "is_reverse": i % 2 == 0, "qual": 30})
+            for i in range(60):                        # good-quality alt
+                seq = list(self.REF[:150]); seq[99] = alt_base
+                reads.append({"name": f"good{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": i % 2 == 0, "qual": 30})
+            for i in range(40):                        # alt below the Q12 floor
+                seq = list(self.REF[:150]); seq[99] = alt_base
+                reads.append({"name": f"lowq{i}", "chrom": "chr9", "start": 0,
+                              "seq": "".join(seq), "is_reverse": i % 2 == 0, "qual": 5})
+
+            bam = tmp / "baseq.bam"
+            create_synthetic_bam(bam, reads, [("chr9", 200)])
+            strict = self._run_caller(tmp, bam, bed, fasta, ("--min-base-quality", "12"))[0]
+            loose = self._run_caller(tmp, bam, bed, fasta, ("--min-base-quality", "0"))[0]
+
+        # The filtered counts move with the threshold ...
+        self.assertEqual(strict["ad_alt"], "60")
+        self.assertEqual(loose["ad_alt"], "100")
+        # ... the unfiltered ones do not, whichever threshold was used.
+        self.assertEqual(strict["ad_alt_unfiltered"], "100")
+        self.assertEqual(loose["ad_alt_unfiltered"], "100")
+        self.assertEqual(strict["depth_unfiltered"], loose["depth_unfiltered"])
 
 
 class TestBcrAblPhaser(unittest.TestCase):

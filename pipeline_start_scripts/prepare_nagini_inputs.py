@@ -1555,6 +1555,105 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
     return sorted(samples_by_name.values(), key=lambda row: row["sample"]), units
 
 
+def can_reuse_existing_tables(
+    samples_path: Path,
+    units_path: Path,
+    expected_input_type: str,
+) -> bool:
+    """Check if existing samples.tsv and units.tsv can be reused for the requested input type."""
+    if not (samples_path.is_file() and units_path.is_file()):
+        return False
+    try:
+        units = read_tsv(units_path)
+        if not units:
+            return False
+        expected_unit_type = "dorado_bam" if expected_input_type == "minknow" else expected_input_type
+        if any(row.get("input_type") != expected_unit_type for row in units):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def detect_basecalling_model(input_dir: Path) -> str | None:
+    """Inspect run summary files, BAM headers, or FASTQ read headers to detect the basecalling model."""
+    if not input_dir or not input_dir.exists():
+        return None
+
+    # 1. Try MinKNOW / Dorado final_summary or report files
+    try:
+        for pattern in ("final_summary*.txt", "*summary*.txt"):
+            for summary_path in input_dir.rglob(pattern):
+                if not summary_path.is_file():
+                    continue
+                try:
+                    with summary_path.open("r", errors="ignore") as f:
+                        for line in f:
+                            m = re.search(r"^(?:basecall_model_version_id|model)=([^\s,;]+)", line.strip())
+                            if m:
+                                val = m.group(1).strip()
+                                if "@" in val or "dna_r" in val:
+                                    return val
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    # 2. Try FASTQ files
+    try:
+        count = 0
+        for path in input_dir.rglob("*"):
+            if not path.is_file() or not path.name.lower().endswith(FASTQ_SUFFIXES):
+                continue
+            count += 1
+            if count > 5:
+                break
+            try:
+                opener = gzip.open if str(path).lower().endswith(".gz") else open
+                with opener(str(path), "rt", errors="ignore") as handle:
+                    for _ in range(50):
+                        line = handle.readline()
+                        if not line:
+                            break
+                        if line.startswith("@"):
+                            m = re.search(r"(?:model_version_id|basecall_model_version_id)=([^\s,;]+)", line)
+                            if m:
+                                return m.group(1).strip()
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 3. Try BAM files
+    try:
+        count = 0
+        for path in input_dir.rglob("*.bam"):
+            if not path.is_file():
+                continue
+            count += 1
+            if count > 5:
+                break
+            try:
+                import pysam
+                with pysam.AlignmentFile(str(path), "rb", check_sq=False) as bf:
+                    for pg in bf.header.get("PG", []):
+                        cl = pg.get("CL", "")
+                        m = re.search(r"--model\s+([^\s]+)", cl)
+                        if m:
+                            return m.group(1).strip()
+                    for rg in bf.header.get("RG", []):
+                        ds = rg.get("DS", "")
+                        m = re.search(r"(?:basecall_model_version_id|model)=([^\s,;]+)", ds)
+                        if m:
+                            return m.group(1).strip()
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return None
+
+
 def validate_tables(
     samples: list[dict[str, str]],
     units: list[dict[str, str]],
@@ -1985,29 +2084,42 @@ def main() -> None:
     args.analysis_dir.mkdir(parents=True, exist_ok=True)
     if not args.input_type:
         raise SystemExit("--input-type is required.")
-    if not getattr(args, "basecalling_model", None) or str(args.basecalling_model).strip().lower() in ("unknown", "", "none"):
-        args.basecalling_model = DEFAULT_BASECALLING_MODEL
-
+    if (
+        not getattr(args, "basecalling_model", None)
+        or str(args.basecalling_model).strip().lower() in ("unknown", "", "none")
+        or args.basecalling_model == DEFAULT_BASECALLING_MODEL
+    ):
+        detected_model = detect_basecalling_model(args.input_dir)
+        if detected_model:
+            if getattr(args, "basecalling_model", None) != detected_model:
+                print(f"Auto-detected basecalling model from input files: {detected_model}")
+            args.basecalling_model = detected_model
+        elif not getattr(args, "basecalling_model", None):
+            args.basecalling_model = DEFAULT_BASECALLING_MODEL
 
     samples_path = args.analysis_dir / "samples.tsv"
     units_path = args.analysis_dir / "units.tsv"
+    reuse_existing = (
+        not args.force
+        and can_reuse_existing_tables(samples_path, units_path, args.input_type)
+    )
     if args.input_type == "fastq":
-        if samples_path.exists() and units_path.exists() and not args.force:
+        if reuse_existing:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_fastq_tables(args)
     elif args.input_type == "minknow":
-        if samples_path.exists() and units_path.exists() and not args.force:
+        if reuse_existing:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_minknow_tables(args)
     elif args.barcode_map or discover_bams_by_barcode(args.input_dir):
-        if samples_path.exists() and units_path.exists() and not args.force:
+        if reuse_existing:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_bam_tables_from_barcode_map(args)
     else:
-        if samples_path.exists() and units_path.exists() and not args.force:
+        if reuse_existing:
             samples, units = read_tsv(samples_path), read_tsv(units_path)
         else:
             samples, units = make_bam_tables(args)
