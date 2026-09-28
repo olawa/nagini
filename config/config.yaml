@@ -162,11 +162,18 @@ read_filter:
   # nanoMonitor workspace). There is no Python fallback: if the binary cannot
   # be resolved the run stops rather than silently filtering differently.
   #
-  # nanostream computes mean read quality as -10*log10(mean(10^(-q/10))).
-  # On BAM input it reads the qs tag directly; on FASTQ it recomputes from the
-  # quality string with that same formula, so the value matches a dorado
-  # qs:i header tag to within its integer rounding. It does not currently read
-  # the qs:i tag out of the FASTQ header itself.
+  # min_qv is compared against dorado's own mean read quality, the qs tag, on
+  # both BAM and FASTQ input: MinKNOW writes it into the FASTQ header in
+  # SAM-tag form (qs:f:18.9348), so filtering here agrees exactly with dorado
+  # --min-qscore and with the sequencing report. Reads whose header lacks the
+  # tag fall back to a value recomputed from the quality string as
+  # -10*log10(mean(10^(-q/10))), which is the same definition, not the
+  # arithmetic mean of the Phred scores.
+  #
+  # Reading qs out of a FASTQ header needs a nanostream built after the
+  # SAM-tag header parser landed. An older binary silently recomputes instead,
+  # which shifts min_qv by a few tenths of a QV and is not visible in the logs,
+  # so pin `binary:` for any run whose filtering has to be reproducible.
   enabled: false
   # Empty: look for nanostream (then nanofilter) on PATH, then
   # workflow/bin/<os>-<arch>/nanostream. Set to an absolute path to pin it.
