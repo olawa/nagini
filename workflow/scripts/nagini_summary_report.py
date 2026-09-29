@@ -419,11 +419,14 @@ def build_summary_report(
         det_muts = [r["mutation"] for r in mutation_rows if str(r.get("status", "")).upper() == "DETECTED"]
         mut_str = ", ".join(det_muts) if det_muts else ("None detected" if is_bcr_abl else "-")
 
-        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "CIS" in r.get("phase_state", "").upper()]
-        trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "TRANS" in r.get("phase_state", "").upper()]
+        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+        coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "COEXISTING" in r.get("phase_state", "").upper()]
+        trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
         phase_str = "-"
         if cis_pairs:
             phase_str = f"CIS ({', '.join(cis_pairs)})"
+        elif coexist_pairs:
+            phase_str = f"COEXISTING ({', '.join(coexist_pairs)})"
         elif trans_pairs:
             phase_str = f"TRANS ({', '.join(trans_pairs)})"
         elif is_bcr_abl:
@@ -748,18 +751,20 @@ def build_summary_report(
             all_active = det_m + subcl_m
             vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in all_active) if all_active else "-"
 
-            cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "CIS" in r.get("phase_state", "").upper()]
-            trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "TRANS" in r.get("phase_state", "").upper()]
-            phase_state = "PASS (No resistance muts)" if not all_active else ("SINGLE MUTATION" if len(all_active) == 1 else ("COMPOUND (CIS)" if cis_pairs else "POLYCLONAL (TRANS)"))
+            cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+            coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "COEXISTING" in r.get("phase_state", "").upper()]
+            trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+            phase_state = "PASS (No resistance muts)" if not all_active else ("SINGLE MUTATION" if len(all_active) == 1 else ("COMPOUND (CIS)" if cis_pairs else ("COEXISTING (CIS+TRANS)" if coexist_pairs else "POLYCLONAL (TRANS)")))
 
-            clinical_note = "Normal / Sensitive" if not all_active else ("Compound mutation (high TKI resistance)" if cis_pairs else ("Resistance mutation detected" if det_m else "Subclonal resistance mutation"))
+            clinical_note = "Normal / Sensitive" if not all_active else ("Compound mutation (high TKI resistance)" if (cis_pairs or coexist_pairs) else ("Resistance mutation detected" if det_m else "Subclonal resistance mutation"))
 
+            all_cis_display = cis_pairs + [f"{p} (coexisting)" for p in coexist_pairs]
             bcr_summary_rows.append([
                 (bd["sample"], 10),
                 (mut_names, 4 if det_m else (6 if subcl_m else 0)),
                 (vaf_details, 0),
-                (phase_state, 4 if cis_pairs else (6 if trans_pairs else (4 if det_m else (6 if subcl_m else 5)))),
-                (", ".join(cis_pairs) if cis_pairs else "-", 4 if cis_pairs else 0),
+                (phase_state, 4 if (cis_pairs or coexist_pairs) else (6 if trans_pairs else (4 if det_m else (6 if subcl_m else 5)))),
+                (", ".join(all_cis_display) if all_cis_display else "-", 4 if all_cis_display else 0),
                 (", ".join(trans_pairs) if trans_pairs else "-", 6 if trans_pairs else 0),
                 (clinical_note, 4 if det_m else (6 if subcl_m else 5)),
                 ("", 0), ("", 0), ("", 0),

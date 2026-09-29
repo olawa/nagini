@@ -1581,14 +1581,35 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             mut_action = "NONE"
             mut_action_style = 5
 
-        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper()]
-        phase_summary = f"CIS ({', '.join(cis_pairs)})" if cis_pairs else ("TRANS" if bcr_abl_phasing_rows else "N/A (<2 muts)")
+        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+        coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "COEXISTING" in r.get("phase_state", "").upper()]
+        trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+        if cis_pairs:
+            phase_summary = f"CIS ({', '.join(cis_pairs)})"
+            phase_flag = "COMPOUND MUTATION (CIS)"
+            phase_flag_style = 4
+        elif coexist_pairs:
+            phase_summary = f"COEXISTING ({', '.join(coexist_pairs)})"
+            phase_flag = "COEXISTING (CIS + TRANS)"
+            phase_flag_style = 4
+        elif trans_pairs:
+            phase_summary = f"TRANS ({', '.join(trans_pairs)})"
+            phase_flag = "POLYCLONAL (TRANS)"
+            phase_flag_style = 5
+        elif bcr_abl_phasing_rows:
+            phase_summary = "TRANS"
+            phase_flag = "POLYCLONAL (TRANS)"
+            phase_flag_style = 5
+        else:
+            phase_summary = "N/A (<2 muts)"
+            phase_flag = "PASS"
+            phase_flag_style = 5
 
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
         overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
         overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts else 0)), (mut_action, mut_action_style)])
-        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, 4 if cis_pairs else 0), ("COMPOUND MUTATION (CIS)" if cis_pairs else ("POLYCLONAL (TRANS)" if bcr_abl_phasing_rows else "PASS"), 4 if cis_pairs else 5)])
+        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, phase_flag_style if (cis_pairs or coexist_pairs) else 0), (phase_flag, phase_flag_style)])
 
     if has_amplicon:
         assessed_itd = [r for r in amplicon_itd_rows if itd_is_assessed(r)]
