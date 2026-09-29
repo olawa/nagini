@@ -81,6 +81,62 @@ def write_units_tsv(units_file: str, rows: list[dict[str, str]], fieldnames: lis
             writer.writerow(cleaned_row)
 
 
+def is_valid_input_path(val: str | None) -> bool:
+    if not val:
+        return False
+    v = str(val).strip()
+    return bool(v and v.upper() not in ("UNUSED", ".", "NONE", "NA", "NULL", "FALSE"))
+
+
+def resolve_sample_input(
+    row: dict[str, str],
+    run_dir: Path,
+    fq_col: str | None = None,
+    bam_col: str | None = None,
+) -> str:
+    input_type = str(row.get("input_type", "")).strip().lower()
+    fq_val = str(row.get(fq_col, "")).strip() if fq_col else ""
+    bam_val = str(row.get(bam_col, "")).strip() if bam_col else ""
+
+    valid_fq = fq_val if is_valid_input_path(fq_val) else ""
+    valid_bam = bam_val if is_valid_input_path(bam_val) else ""
+
+    candidates: list[str] = []
+    if "bam" in input_type:
+        if valid_bam:
+            candidates.append(valid_bam)
+        if valid_fq:
+            candidates.append(valid_fq)
+    elif "fastq" in input_type:
+        if valid_fq:
+            candidates.append(valid_fq)
+        if valid_bam:
+            candidates.append(valid_bam)
+    else:
+        # No explicit type: prefer fastq if present, otherwise bam
+        if valid_fq:
+            candidates.append(valid_fq)
+        if valid_bam:
+            candidates.append(valid_bam)
+
+    # Fallback to standard Nagini alignment folder if sample and type are known
+    sample = row.get("sample", "")
+    stype = row.get("type", "N")
+    if sample:
+        candidate_bam = run_dir / "alignment" / "merged" / f"{sample}_{stype}.bam"
+        candidates.append(str(candidate_bam))
+
+    for cand in candidates:
+        cand_path = Path(cand) if os.path.isabs(cand) else (run_dir / cand)
+        if cand_path.exists():
+            return str(cand_path)
+
+    if candidates:
+        cand = candidates[0]
+        return str(Path(cand) if os.path.isabs(cand) else (run_dir / cand))
+
+    return ""
+
 
 def nanostream_supports_split_chimeras(nanostream_bin: str) -> bool:
     try:
@@ -239,6 +295,10 @@ def main():
 
     if "fastq1" not in fieldnames:
         fieldnames.append("fastq1")
+    if "fastq2" not in fieldnames:
+        fieldnames.append("fastq2")
+    if "bam" not in fieldnames:
+        fieldnames.append("bam")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     fastq_amplicon_dir = out_dir / "fastq_amplicon"
@@ -267,23 +327,12 @@ def main():
         sample = row["sample"]
         stype = row.get("type", "N")
 
-        orig_input = ""
-        if fq_col and row.get(fq_col) and row[fq_col].strip():
-            orig_input = row[fq_col].strip()
-        elif bam_col and row.get(bam_col) and row[bam_col].strip():
-            orig_input = row[bam_col].strip()
-        else:
-            candidate_bam = run_dir / "alignment" / "merged" / f"{sample}_{stype}.bam"
-            if candidate_bam.is_file():
-                orig_input = str(candidate_bam)
+        orig_input = resolve_sample_input(row, run_dir, fq_col, bam_col)
 
         if not orig_input:
             sys.stderr.write(f"Warning: Neither fastq nor bam found for {sample}, keeping original\n")
             new_units.append(row)
             continue
-
-        if not os.path.isabs(orig_input):
-            orig_input = str(run_dir / orig_input)
 
         if not os.path.exists(orig_input):
             sys.stderr.write(f"Warning: Input file not found for {sample}: {orig_input}, keeping original\n")
@@ -344,8 +393,8 @@ def main():
         new_row = dict(row)
         # Explicitly set input_type to fastq and clear old BAM path so Nagini realigns from filtered FASTQ
         new_row["input_type"] = "fastq"
-        if "bam" in new_row:
-            new_row["bam"] = ""
+        new_row["bam"] = "UNUSED"
+        new_row["fastq2"] = "UNUSED"
 
         # Store path relative to out_dir if inside, else absolute
         try:
@@ -353,8 +402,6 @@ def main():
             new_row["fastq1"] = str(rel_path)
         except ValueError:
             new_row["fastq1"] = str(final_fq_path)
-        if "fastq2" in new_row:
-            new_row["fastq2"] = ""
 
         new_units.append(new_row)
 

@@ -73,6 +73,72 @@ class FilterBcrAblAmpliconsTest(unittest.TestCase):
             self.assertIn("coords", cmd)
             self.assertIn("input.bam", cmd)
 
+    def test_is_valid_input_path(self):
+        self.assertFalse(FILTER_MOD.is_valid_input_path(None))
+        self.assertFalse(FILTER_MOD.is_valid_input_path(""))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("   "))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("UNUSED"))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("unused"))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("NONE"))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("."))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("NA"))
+        self.assertFalse(FILTER_MOD.is_valid_input_path("null"))
+        self.assertTrue(FILTER_MOD.is_valid_input_path("sample.bam"))
+        self.assertTrue(FILTER_MOD.is_valid_input_path("/path/to/reads.fastq.gz"))
+
+    def test_resolve_sample_input_ignores_unused_fastq(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            bam_path = run_dir / "ratio0.1_T.bam"
+            bam_path.touch()
+
+            row = {
+                "sample": "ratio0.1",
+                "type": "T",
+                "input_type": "aligned_bam",
+                "fastq1": "UNUSED",
+                "fastq2": "UNUSED",
+                "bam": str(bam_path),
+            }
+            resolved = FILTER_MOD.resolve_sample_input(row, run_dir, fq_col="fastq1", bam_col="bam")
+            self.assertEqual(resolved, str(bam_path))
+
+    def test_resolve_sample_input_relative_bam(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            bams_subdir = run_dir / "bams"
+            bams_subdir.mkdir()
+            bam_path = bams_subdir / "sample.bam"
+            bam_path.touch()
+
+            row = {
+                "sample": "sample",
+                "type": "T",
+                "input_type": "aligned_bam",
+                "fastq1": "UNUSED",
+                "bam": "bams/sample.bam",
+            }
+            resolved = FILTER_MOD.resolve_sample_input(row, run_dir, fq_col="fastq1", bam_col="bam")
+            self.assertEqual(resolved, str(bam_path))
+
+    def test_resolve_sample_input_fallback_merged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            merged_dir = run_dir / "alignment" / "merged"
+            merged_dir.mkdir(parents=True)
+            merged_bam = merged_dir / "sample1_T.bam"
+            merged_bam.touch()
+
+            row = {
+                "sample": "sample1",
+                "type": "T",
+                "input_type": "aligned_bam",
+                "fastq1": "UNUSED",
+                "bam": "UNUSED",
+            }
+            resolved = FILTER_MOD.resolve_sample_input(row, run_dir, fq_col="fastq1", bam_col="bam")
+            self.assertEqual(resolved, str(merged_bam))
+
 
 if __name__ == "__main__":
     unittest.main()
