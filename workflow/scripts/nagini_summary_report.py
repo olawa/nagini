@@ -396,9 +396,9 @@ def build_summary_report(
         # Target / Kinase coverage
         kd_depth_str = "N/A"
         if exon_rows:
-            tot_len = sum(int(r.get("length", 0)) for r in exon_rows)
+            tot_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in exon_rows)
             if tot_len > 0:
-                avg_d = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length", 0)) for r in exon_rows) / tot_len
+                avg_d = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in exon_rows) / tot_len
                 kd_depth_str = f"{avg_d:.1f}x"
         elif mutation_rows:
             avg_d = sum(int(r.get("depth", 0)) for r in mutation_rows) / len(mutation_rows)
@@ -432,7 +432,7 @@ def build_summary_report(
         # Target depth alone says nothing about whether the enrichment worked;
         # the ratio to background does.
         fold_enrich_str = "-"
-        if target_cov_path:
+        if target_cov_path or (is_bcr_abl and kd_depth_str != "N/A"):
             try:
                 fold = float(kd_depth_str.rstrip("x")) / float(wgs_depth_str.rstrip("x"))
                 fold_enrich_str = f"{fold:.1f}x"
