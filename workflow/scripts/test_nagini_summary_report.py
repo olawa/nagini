@@ -294,6 +294,29 @@ class DnaNumberTest(unittest.TestCase):
         self.assertEqual([cell[0] for cell in stacked[0]][0], "sample")
 
 
+class CleanReportPathTest(unittest.TestCase):
+    def test_clean_report_path_normalizes_whitespace_delimiters(self):
+        def clean_report_path(path):
+            if not path:
+                return ""
+            res = str(path).strip()
+            while any(pattern in res for pattern in (" /", "/ ", " _", "_ ", " .")):
+                res = (
+                    res.replace(" /", "/")
+                    .replace("/ ", "/")
+                    .replace(" _", "_")
+                    .replace("_ ", "_")
+                    .replace(" .", ".")
+                )
+            return res.strip()
+
+        bad_path = " reports/bcr_abl/ ratio5-andel5 _ T .fusion_plot.png "
+        self.assertEqual(clean_report_path(bad_path), "reports/bcr_abl/ratio5-andel5_T.fusion_plot.png")
+
+        bad_summary = " qc/mosdepth/ ratio0.5-andel10 _ T .mosdepth.summary.txt "
+        self.assertEqual(clean_report_path(bad_summary), "qc/mosdepth/ratio0.5-andel10_T.mosdepth.summary.txt")
+
+
 def _shared_strings(xlsx_path):
     """Every string in the workbook, which is where cell text lives."""
 

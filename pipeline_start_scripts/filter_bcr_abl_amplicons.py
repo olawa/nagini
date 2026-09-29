@@ -376,9 +376,22 @@ def main():
     new_units_path = out_dir / "units.tsv"
     write_units_tsv(str(new_units_path), new_units, fieldnames)
 
-    # Copy samples.tsv and update config.nagini.yaml
+    # Copy and clean samples.tsv, and update config.nagini.yaml
     if samples_path.is_file():
-        shutil.copy2(str(samples_path), str(out_dir / "samples.tsv"))
+        try:
+            with open(samples_path, "r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter="\t")
+                fnames = [str(h).strip() for h in (reader.fieldnames or []) if h]
+                s_rows = []
+                for row in reader:
+                    s_rows.append({str(k).strip(): (str(v).strip() if v is not None else "") for k, v in row.items() if k})
+            with open(out_dir / "samples.tsv", "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fnames, delimiter="\t")
+                writer.writeheader()
+                for row in s_rows:
+                    writer.writerow(row)
+        except Exception:
+            shutil.copy2(str(samples_path), str(out_dir / "samples.tsv"))
     if config_path.is_file():
         try:
             import yaml

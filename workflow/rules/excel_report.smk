@@ -109,9 +109,9 @@ def summary_report_files():
 
     rows = []
     for sample in get_samples(samples):
-        s = str(sample).strip()
+        s = clean_report_path(sample)
         for unit_type in get_unit_types_for_sample(sample):
-            t = str(unit_type).strip()
+            t = clean_report_path(unit_type)
             snv_vcf = ""
             if sample_needs_dna_variant_calling(s):
                 caller = get_small_variant_caller(s, t)
@@ -122,70 +122,70 @@ def summary_report_files():
                 else:
                     caller_dir = "snv_indels/clairs_to_postprocess"
                 suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
-                snv_vcf = f"{caller_dir}/{s}_{t}{suffix}"
+                snv_vcf = clean_report_path(f"{caller_dir}/{s}_{t}{suffix}")
             bcr = sample_has_assay_module(s, "bcr_abl")
             amp = sample_has_assay_module(s, "amplicon")
             rows.append(
                 {
-                    "reports": f"reports/{s}_{t}.nagini_report.xlsx",
-                    "craminos": f"qc/cramino/{s}_{t}.txt",
-                    "wgs_coverages": f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt",
+                    "reports": clean_report_path(f"reports/{s}_{t}.nagini_report.xlsx"),
+                    "craminos": clean_report_path(f"qc/cramino/{s}_{t}.txt"),
+                    "wgs_coverages": clean_report_path(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt"),
                     "target_craminos": (
-                        f"qc/cramino_target/{s}_{t}.txt"
+                        clean_report_path(f"qc/cramino_target/{s}_{t}.txt")
                         if sample_has_target_metrics(s)
                         else ""
                     ),
                     "target_coverages": (
-                        f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt"
+                        clean_report_path(f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt")
                         if sample_has_target_metrics(s)
                         else ""
                     ),
                     "snv_vcfs": snv_vcf,
                     "sv_tsvs": (
-                        f"reports/sv_summary/{s}_{t}.tsv"
+                        clean_report_path(f"reports/sv_summary/{s}_{t}.tsv")
                         if sniffles2_enabled(s)
                         else ""
                     ),
                     "translocation_tsvs": (
-                        f"reports/sv_summary/{s}_{t}.translocations.tsv"
+                        clean_report_path(f"reports/sv_summary/{s}_{t}.translocations.tsv")
                         if sniffles2_enabled(s)
                         else ""
                     ),
                     "rindels_sv_tsvs": (
-                        f"reports/sv_summary_rindels/{s}_{t}.tsv"
+                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.tsv")
                         if sample_has_rindels_sv(s)
                         else ""
                     ),
                     "rindels_translocation_tsvs": (
-                        f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv"
+                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv")
                         if sample_has_rindels_sv(s)
                         else ""
                     ),
                     "savana_sv_tsvs": (
-                        f"reports/sv_summary_savana/{s}_{t}.tsv"
+                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.tsv")
                         if savana_enabled(s)
                         else ""
                     ),
                     "savana_translocation_tsvs": (
-                        f"reports/sv_summary_savana/{s}_{t}.translocations.tsv"
+                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.translocations.tsv")
                         if savana_enabled(s)
                         else ""
                     ),
                     "cnv_tsvs": (
-                        f"reports/cnv_summary/{s}_{t}.cnv.tsv"
+                        clean_report_path(f"reports/cnv_summary/{s}_{t}.cnv.tsv")
                         if sample_needs_cnv_calling(s)
                         else ""
                     ),
-                    "bcr_abl_fusions": f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv" if bcr else "",
-                    "bcr_abl_mutations": f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv" if bcr else "",
-                    "bcr_abl_phasings": f"reports/bcr_abl/{s}_{t}.phasing.tsv" if bcr else "",
-                    "bcr_abl_exons": f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv" if bcr else "",
-                    "bcr_abl_plots": f"reports/bcr_abl/{s}_{t}.fusion_plot.png" if bcr else "",
-                    "amplicon_stats": f"reports/amplicon/{s}_{t}.amplicon_stats.tsv" if amp else "",
-                    "amplicon_summaries": f"reports/amplicon/{s}_{t}.amplicon_summary.tsv" if amp else "",
-                    "amplicon_itds": f"reports/amplicon/{s}_{t}.flt3_itd.tsv" if amp else "",
-                    "amplicon_vcfs": f"snv_indels/rindels/{s}_{t}.amplicon.vcf.gz" if amp else "",
-                    "amplicon_pileups": f"reports/amplicon/{s}_{t}.pileup_counts.tsv" if amp else "",
+                    "bcr_abl_fusions": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv") if bcr else "",
+                    "bcr_abl_mutations": clean_report_path(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv") if bcr else "",
+                    "bcr_abl_phasings": clean_report_path(f"reports/bcr_abl/{s}_{t}.phasing.tsv") if bcr else "",
+                    "bcr_abl_exons": clean_report_path(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv") if bcr else "",
+                    "bcr_abl_plots": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_plot.png") if bcr else "",
+                    "amplicon_stats": clean_report_path(f"reports/amplicon/{s}_{t}.amplicon_stats.tsv") if amp else "",
+                    "amplicon_summaries": clean_report_path(f"reports/amplicon/{s}_{t}.amplicon_summary.tsv") if amp else "",
+                    "amplicon_itds": clean_report_path(f"reports/amplicon/{s}_{t}.flt3_itd.tsv") if amp else "",
+                    "amplicon_vcfs": clean_report_path(f"snv_indels/rindels/{s}_{t}.amplicon.vcf.gz") if amp else "",
+                    "amplicon_pileups": clean_report_path(f"reports/amplicon/{s}_{t}.pileup_counts.tsv") if amp else "",
                 }
             )
     return rows
@@ -196,7 +196,7 @@ def get_summary_report_inputs(wildcards):
 
     rows = summary_report_files()
     return {
-        key: [row[key] for row in rows if row[key]]
+        key: [clean_report_path(row[key]) for row in rows if clean_report_path(row[key])]
         for key in rows[0]
     } if rows else {}
 
@@ -204,7 +204,7 @@ def get_summary_report_inputs(wildcards):
 def get_summary_report_paths(key):
     """One entry per sample for an optional input, "" where it does not exist."""
 
-    return [row[key] for row in summary_report_files()]
+    return [clean_report_path(row[key]) for row in summary_report_files()]
 
 
 rule nagini_summary_excel_report:
@@ -215,27 +215,27 @@ rule nagini_summary_excel_report:
         xlsx="reports/nagini_summary_report.xlsx",
     params:
         sample_names=lambda wildcards: [
-            str(s).strip()
+            clean_report_path(s)
             for s in get_samples(samples)
             for _ in get_unit_types_for_sample(s)
         ],
         sample_types=lambda wildcards: [
-            str(t).strip()
+            clean_report_path(t)
             for s in get_samples(samples)
             for t in get_unit_types_for_sample(s)
         ],
         dna_numbers=lambda wildcards: [
-            get_sample_dna_number(str(s).strip())
+            clean_report_path(get_sample_dna_number(clean_report_path(s)))
             for s in get_samples(samples)
             for _ in get_unit_types_for_sample(s)
         ],
         barcodes=lambda wildcards: [
-            get_sample_barcode_name_str(str(s).strip(), str(t).strip())
+            clean_report_path(get_sample_barcode_name_str(clean_report_path(s), clean_report_path(t)))
             for s in get_samples(samples)
             for t in get_unit_types_for_sample(s)
         ],
         assays=lambda wildcards: [
-            get_assay(str(s).strip())
+            clean_report_path(get_assay(clean_report_path(s)))
             for s in get_samples(samples)
             for _ in get_unit_types_for_sample(s)
         ],

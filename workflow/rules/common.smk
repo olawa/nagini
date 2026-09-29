@@ -1056,6 +1056,22 @@ def validate_design_bed():
 validate_design_bed()
 
 
+def clean_report_path(path):
+    """Normalize and sanitize report path strings, removing accidental whitespace."""
+    if not path:
+        return ""
+    res = str(path).strip()
+    while any(pattern in res for pattern in (" /", "/ ", " _", "_ ", " .")):
+        res = (
+            res.replace(" /", "/")
+            .replace("/ ", "/")
+            .replace(" _", "_")
+            .replace("_ ", "_")
+            .replace(" .", ".")
+        )
+    return res.strip()
+
+
 def get_sample_type_path(wildcards, directory, suffix):
     """Build report paths from normalized sample/type components.
 
@@ -1065,18 +1081,15 @@ def get_sample_type_path(wildcards, directory, suffix):
     Snakemake would only report the problem later as a missing input.
     """
 
-    sample = str(wildcards.sample).strip()
-    unit_type = str(wildcards.type).strip()
-    d = str(directory).strip()
-    sfx = str(suffix).strip()
+    sample = clean_report_path(wildcards.sample)
+    unit_type = clean_report_path(wildcards.type)
+    d = clean_report_path(directory)
+    sfx = clean_report_path(suffix)
     if not sample or not unit_type:
         raise WorkflowError(
             f"Cannot build a report path with empty sample/type: {sample}/{unit_type}."
         )
-    res = f"{d}/{sample}_{unit_type}{sfx}"
-    while " /" in res or "/ " in res or " _" in res or "_ " in res or " ." in res:
-        res = res.replace(" /", "/").replace("/ ", "/").replace(" _", "_").replace("_ ", "_").replace(" .", ".")
-    return res.strip()
+    return clean_report_path(f"{d}/{sample}_{unit_type}{sfx}")
 
 
 
@@ -1451,23 +1464,25 @@ def compile_output_file_list(wildcards):
         template = str(file_definition["output"]).strip()
         if "{sample}" in template:
             for sample in get_samples(samples):
-                clean_sample = str(sample).strip()
+                clean_sample = clean_report_path(sample)
                 if not _sample_condition_met(condition, clean_sample):
                     continue
 
                 for unit_type in get_unit_types_for_sample(sample):
                     if allowed_types and unit_type not in allowed_types:
                         continue
-                    clean_type = str(unit_type).strip()
+                    clean_type = clean_report_path(unit_type)
                     output_files.append(
                         outdir
-                        / template.format(
-                            sample=clean_sample,
-                            type=clean_type,
+                        / clean_report_path(
+                            template.format(
+                                sample=clean_sample,
+                                type=clean_type,
+                            )
                         )
                     )
         else:
-            output_files.append(outdir / template)
+            output_files.append(outdir / clean_report_path(template))
 
 
     if dorado_barcodes:
