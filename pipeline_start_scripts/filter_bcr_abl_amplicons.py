@@ -93,7 +93,7 @@ def nanostream_supports_split_chimeras(nanostream_bin: str) -> bool:
 def run_nanostream_amplicons(
     nanostream_bin: str,
     primers_tsv: str,
-    input_fastq: str,
+    input_file: str,
     output_json: str,
     output_fastq_prefix: str,
     threads: int = 8,
@@ -101,9 +101,14 @@ def run_nanostream_amplicons(
     split_chimeras: bool = True,
     max_edit_dist: int = 3,
     end_length: int = 150,
+    min_qs: float = 0.0,
+    len_filter: str = "",
+    mode: str = "semiglobal",
 ) -> dict:
-    os.makedirs(os.path.dirname(output_json), exist_ok=True)
-    os.makedirs(os.path.dirname(output_fastq_prefix), exist_ok=True)
+    if os.path.dirname(output_json):
+        os.makedirs(os.path.dirname(output_json), exist_ok=True)
+    if os.path.dirname(output_fastq_prefix):
+        os.makedirs(os.path.dirname(output_fastq_prefix), exist_ok=True)
 
     cmd = [
         nanostream_bin,
@@ -114,8 +119,13 @@ def run_nanostream_amplicons(
         "--threads", str(threads),
         "--max-edit-dist", str(max_edit_dist),
         "--end-length", str(end_length),
+        "--mode", mode,
         "--summary",
     ]
+    if min_qs > 0:
+        cmd.extend(["--min-qs", str(min_qs)])
+    if len_filter:
+        cmd.extend(["--len", str(len_filter)])
     if split_by_amplicon:
         cmd.append("--split-by-amplicon")
     if split_chimeras:
@@ -126,11 +136,11 @@ def run_nanostream_amplicons(
                 f"[Nanostream] Note: {nanostream_bin} does not support '--split-chimeras' yet; "
                 f"skipping chimera splitting (recompile nanoMonitor to enable concatemer splitting).\n"
             )
-    cmd.append(input_fastq)
+    cmd.append(input_file)
 
 
 
-    sys.stderr.write(f"\n[Nanostream] Running amplicon filter for {Path(input_fastq).name}...\n")
+    sys.stderr.write(f"\n[Nanostream] Running amplicon filter for {Path(input_file).name}...\n")
     sys.stderr.write(f"Command: {' '.join(cmd)}\n")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -174,6 +184,23 @@ def main():
         help="Threads per sample for nanostream (default: 8)",
     )
     parser.add_argument(
+        "--min-qs",
+        type=float,
+        default=0.0,
+        help="Minimum mean Q-score filter for reads (default: 0 = disabled)",
+    )
+    parser.add_argument(
+        "--len",
+        default="",
+        help="Read length filter, e.g. '1000-2500' (default: disabled)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["semiglobal", "coords"],
+        default="semiglobal",
+        help="Primer matching mode: 'semiglobal' (sequence) or 'coords' (mapping coordinates if BAM)",
+    )
+    parser.add_argument(
         "--keep-all-amplicons",
         action="store_true",
         help="If set, include both major and minor amplicons in a combined FASTQ for each sample instead of picking the primary",
@@ -206,8 +233,12 @@ def main():
 
     fieldnames = list(units[0].keys())
     fq_col = "fastq1" if "fastq1" in fieldnames else ("fq1" if "fq1" in fieldnames else None)
-    if not fq_col:
-        sys.exit(f"Error: Neither 'fastq1' nor 'fq1' column found in {units_path}")
+    bam_col = "bam" if "bam" in fieldnames else ("bam1" if "bam1" in fieldnames else None)
+    if not fq_col and not bam_col:
+        sys.exit(f"Error: Neither 'fastq1' nor 'bam' column found in {units_path}")
+
+    if "fastq1" not in fieldnames:
+        fieldnames.append("fastq1")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     fastq_amplicon_dir = out_dir / "fastq_amplicon"
@@ -221,6 +252,11 @@ def main():
     print(f"Output run dir:  {out_dir}")
     print(f"Nanostream bin:  {nanostream_bin}")
     print(f"Primers TSV:     {primers_tsv}")
+    if args.min_qs > 0:
+        print(f"Min Q-score:     {args.min_qs}")
+    if args.len:
+        print(f"Length filter:   {args.len}")
+    print(f"Matching mode:   {args.mode}")
     print(f"Samples to process: {len(units)}")
     print("=" * 80)
 
@@ -230,12 +266,27 @@ def main():
     for row in units:
         sample = row["sample"]
         stype = row.get("type", "N")
-        orig_fq = row[fq_col]
-        if not os.path.isabs(orig_fq):
-            orig_fq = str(run_dir / orig_fq)
 
-        if not os.path.exists(orig_fq):
-            sys.stderr.write(f"Warning: FASTQ not found for {sample}: {orig_fq}, keeping original\n")
+        orig_input = ""
+        if fq_col and row.get(fq_col) and row[fq_col].strip():
+            orig_input = row[fq_col].strip()
+        elif bam_col and row.get(bam_col) and row[bam_col].strip():
+            orig_input = row[bam_col].strip()
+        else:
+            candidate_bam = run_dir / "alignment" / "merged" / f"{sample}_{stype}.bam"
+            if candidate_bam.is_file():
+                orig_input = str(candidate_bam)
+
+        if not orig_input:
+            sys.stderr.write(f"Warning: Neither fastq nor bam found for {sample}, keeping original\n")
+            new_units.append(row)
+            continue
+
+        if not os.path.isabs(orig_input):
+            orig_input = str(run_dir / orig_input)
+
+        if not os.path.exists(orig_input):
+            sys.stderr.write(f"Warning: Input file not found for {sample}: {orig_input}, keeping original\n")
             new_units.append(row)
             continue
 
@@ -246,12 +297,15 @@ def main():
         stats_data = run_nanostream_amplicons(
             nanostream_bin=nanostream_bin,
             primers_tsv=primers_tsv,
-            input_fastq=orig_fq,
+            input_file=orig_input,
             output_json=stats_json_path,
             output_fastq_prefix=out_fq_prefix,
             threads=args.threads,
             split_by_amplicon=True,
             split_chimeras=args.split_chimeras,
+            min_qs=args.min_qs,
+            len_filter=args.len,
+            mode=args.mode,
         )
 
         amplicons_dict = stats_data.get("amplicons", {})
@@ -285,7 +339,7 @@ def main():
                             shutil.copyfileobj(infile, outfile)
         else:
             sys.stderr.write(f"Warning: No amplicon FASTQs generated for {sample_prefix}\n")
-            final_fq_path = Path(orig_fq)
+            final_fq_path = Path(orig_input)
 
         new_row = dict(row)
         # Explicitly set input_type to fastq and clear old BAM path so Nagini realigns from filtered FASTQ
@@ -296,9 +350,11 @@ def main():
         # Store path relative to out_dir if inside, else absolute
         try:
             rel_path = final_fq_path.relative_to(out_dir)
-            new_row[fq_col] = str(rel_path)
+            new_row["fastq1"] = str(rel_path)
         except ValueError:
-            new_row[fq_col] = str(final_fq_path)
+            new_row["fastq1"] = str(final_fq_path)
+        if "fastq2" in new_row:
+            new_row["fastq2"] = ""
 
         new_units.append(new_row)
 
@@ -306,6 +362,8 @@ def main():
             "sample": sample,
             "type": stype,
             "raw_reads": total_raw,
+            "failed_qs": stats_data.get("failed_qs_filter", 0),
+            "failed_len": stats_data.get("failed_len_filter", 0),
             "matched_amplicons": total_matched,
             "match_rate": f"{(total_matched / max(total_raw, 1)) * 100.0:.1f}%",
             "primer_dimers": primer_dimers,
@@ -335,14 +393,14 @@ def main():
 
 
     # Print summary table
-    print("\n" + "=" * 96)
+    print("\n" + "=" * 108)
     print("AMPLICON FILTERING & CHIMERA SPLITTING RESULTS SUMMARY")
-    print("=" * 96)
-    print(f"{'Sample':<18} | {'Raw Reads':<9} | {'Matched':<9} | {'Match %':<8} | {'Dimers':<7} | {'Split Chim':<10} | {'Amplicons (count)'}")
-    print("-" * 96)
+    print("=" * 108)
+    print(f"{'Sample':<18} | {'Raw Reads':<9} | {'Fail QS':<8} | {'Matched':<9} | {'Match %':<8} | {'Dimers':<7} | {'Split Chim':<10} | {'Amplicons (count)'}")
+    print("-" * 108)
     for r in summary_report_table:
-        print(f"{r['sample']:<18} | {r['raw_reads']:<9} | {r['matched_amplicons']:<9} | {r['match_rate']:<8} | {r['primer_dimers']:<7} | {r['split_chimeras']:<10} | {r['amplicons']}")
-    print("=" * 96)
+        print(f"{r['sample']:<18} | {r['raw_reads']:<9} | {r['failed_qs']:<8} | {r['matched_amplicons']:<9} | {r['match_rate']:<8} | {r['primer_dimers']:<7} | {r['split_chimeras']:<10} | {r['amplicons']}")
+    print("=" * 108)
 
 
     print("\nSUCCESS! New amplicon-filtered analysis directory is ready at:")
