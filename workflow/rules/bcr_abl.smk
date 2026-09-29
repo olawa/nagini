@@ -505,7 +505,6 @@ rule bcr_abl_rindels:
         ref=config["reference"]["fasta"],
     output:
         vcf="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz",
-        tbi="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz.tbi",
         haplotypes="snv_indels/rindels/{sample}_{type}.haplotypes.tsv",
     params:
         binary=lambda wildcards: _find_rindels_binary(),
@@ -533,9 +532,11 @@ rule bcr_abl_rindels:
             {params.extra} --bcr-abl-genome {params.genome} \
             --write-haplotypes {output.haplotypes} -t {threads}
 
-        if [ -s "{output.vcf}" ] && [ ! -s "{output.tbi}" ]; then
+        if [ -s "{output.vcf}" ]; then
             if command -v bcftools >/dev/null 2>&1; then
                 bcftools index -t {output.vcf} || true
+            elif command -v tabix >/dev/null 2>&1; then
+                tabix -p vcf {output.vcf} || true
             fi
         fi
         """
