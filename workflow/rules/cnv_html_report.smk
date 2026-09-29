@@ -18,10 +18,6 @@ __license__ = "GPL-3"
 
 import os
 
-_REPORTS_SCRIPTS = os.path.join(
-    workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
-    "workflow", "scripts"
-)
 _REPORTS_TEMPLATES = os.path.join(
     workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
     "workflow", "templates"
@@ -46,7 +42,7 @@ def _cnvkit_cytoband(wildcards):
         cytoband = config["references"][build].get("cytoband", "")
         if cytoband:
             if cytoband.endswith(".gz"):
-                return f"reports/cnv_html_report/cytobands_{build}.txt"
+                return "reports/cnv_html_report/cytobands_" + str(build) + ".txt"
             return cytoband
     return []
 
@@ -111,7 +107,7 @@ rule cnvkit_json:
     message:
         "{rule}: Building CNVkit JSON for {wildcards.sample}_{wildcards.type}"
     script:
-        f"{_REPORTS_SCRIPTS}/cnv_json.py"
+        "../../vendor/hydra-genetics/reports/workflow/scripts/cnv_json.py"
 
 
 rule merge_cnvkit_json:
@@ -166,18 +162,18 @@ rule compile_cnv_html_report:
     """
     input:
         json="reports/cnv_html_report/{sample}_{type}.merged.json",
-        html_template=f"{_REPORTS_TEMPLATES}/cnv_html_report/index.html",
+        html_template=os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "index.html"),
         js_files=[
-            f"{_REPORTS_TEMPLATES}/assets/js/d3.v7.min.js",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/01-chromosome-plot.js",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/02-genome-plot.js",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/03-results-table.js",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/04-window-summary.js",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/05-main.js",
+            os.path.join(_REPORTS_TEMPLATES, "assets", "js", "d3.v7.min.js"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "01-chromosome-plot.js"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "02-genome-plot.js"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "03-results-table.js"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "04-window-summary.js"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "05-main.js"),
         ],
         css_files=[
-            f"{_REPORTS_TEMPLATES}/assets/css/icons.css",
-            f"{_REPORTS_TEMPLATES}/cnv_html_report/style.css",
+            os.path.join(_REPORTS_TEMPLATES, "assets", "css", "icons.css"),
+            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "style.css"),
         ],
     output:
         html="reports/cnv_html_report/{sample}_{type}.cnv_report.html",
