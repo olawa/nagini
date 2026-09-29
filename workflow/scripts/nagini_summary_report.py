@@ -422,11 +422,25 @@ def build_summary_report(
         cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
         coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "COEXISTING" in r.get("phase_state", "").upper()]
         trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+
+        cis_details = []
+        for r in phasing_rows:
+            ps = r.get("phase_state", "").upper()
+            if "CIS" in ps:
+                c_rds = int(r.get("cis_reads_11", 0))
+                c_span = int(r.get("total_spanning_reads", 0))
+                c_af = float(r.get("cis_vaf_percent", (c_rds / c_span * 100.0) if c_span > 0 else 0.0))
+                p_name = f"{r.get('mutation_1')}+{r.get('mutation_2')}"
+                if "COEXISTING" in ps:
+                    cis_details.append(f"{p_name} (coexist, {c_af:.1f}% AF, {c_rds:,} rds)")
+                else:
+                    cis_details.append(f"{p_name} ({c_af:.1f}% AF, {c_rds:,} rds)")
+
         phase_str = "-"
         if cis_pairs:
-            phase_str = f"CIS ({', '.join(cis_pairs)})"
+            phase_str = f"CIS ({', '.join(cis_details if cis_details else cis_pairs)})"
         elif coexist_pairs:
-            phase_str = f"COEXISTING ({', '.join(coexist_pairs)})"
+            phase_str = f"COEXISTING ({', '.join(cis_details if cis_details else coexist_pairs)})"
         elif trans_pairs:
             phase_str = f"TRANS ({', '.join(trans_pairs)})"
         elif is_bcr_abl:
@@ -758,7 +772,16 @@ def build_summary_report(
 
             clinical_note = "Normal / Sensitive" if not all_active else ("Compound mutation (high TKI resistance)" if (cis_pairs or coexist_pairs) else ("Resistance mutation detected" if det_m else "Subclonal resistance mutation"))
 
-            all_cis_display = cis_pairs + [f"{p} (coexisting)" for p in coexist_pairs]
+            all_cis_display = []
+            for r in p_rows:
+                ps = r.get("phase_state", "").upper()
+                if "CIS" in ps:
+                    c_rds = int(r.get("cis_reads_11", 0))
+                    c_span = int(r.get("total_spanning_reads", 0))
+                    c_af = float(r.get("cis_vaf_percent", (c_rds / c_span * 100.0) if c_span > 0 else 0.0))
+                    p_name = f"{r.get('mutation_1')}+{r.get('mutation_2')}"
+                    coexist_tag = " (coexist)" if "COEXISTING" in ps else ""
+                    all_cis_display.append(f"{p_name}{coexist_tag}: {c_af:.1f}% ({c_rds:,} rds)")
             bcr_summary_rows.append([
                 (bd["sample"], 10),
                 (mut_names, 4 if det_m else (6 if subcl_m else 0)),

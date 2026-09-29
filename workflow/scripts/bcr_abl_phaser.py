@@ -192,6 +192,7 @@ def phase_mutation_pair(
     total_spanning = n_11 + n_10 + n_01 + n_00 + n_other
     total_mutant_reads = n_11 + n_10 + n_01
     cis_fraction = (n_11 / total_mutant_reads) if total_mutant_reads > 0 else 0.0
+    cis_vaf = (n_11 / total_spanning * 100.0) if total_spanning > 0 else 0.0
 
     # Phasing classification
     if total_spanning < min_spanning:
@@ -236,6 +237,7 @@ def phase_mutation_pair(
         "alt_2": alt2,
         "phase_state": phase_state,
         "cis_fraction_percent": round(cis_fraction * 100.0, 2),
+        "cis_vaf_percent": round(cis_vaf, 2),
         "cis_reads_11": n_11,
         "trans_reads_10": n_10,
         "trans_reads_01": n_01,
@@ -269,7 +271,7 @@ def main() -> None:
 
     # Write Output TSV
     headers = [
-        "sample", "mutation_1", "mutation_2", "phase_state", "cis_fraction_percent",
+        "sample", "mutation_1", "mutation_2", "phase_state", "cis_fraction_percent", "cis_vaf_percent",
         "cis_reads_11", "trans_reads_10", "trans_reads_01", "wt_reads_00", "other_reads",
         "total_spanning_reads", "pos_1", "pos_2", "ref_1", "alt_1", "ref_2", "alt_2",
         "clinical_interpretation",

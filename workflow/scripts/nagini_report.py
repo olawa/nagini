@@ -775,29 +775,33 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (r.get("asciminib", "Unknown"), _style_tki_response(r.get("asciminib", ""))),
             ])
 
-    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-    layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+    layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
+    layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
     layout.append([
-        ("Mutation 1", 1), ("Mutation 2", 1), ("Phase State", 1), ("Cis (%)", 1),
-        ("Cis Reads (11)", 1), ("Trans Reads (10)", 1), ("Trans Reads (01)", 1), ("WT Reads (00)", 1),
-        ("Spanning Depth", 1), ("Clinical Interpretation", 1)
+        ("Mutation 1", 1), ("Mutation 2", 1), ("Phase State", 1), ("Cis % (of mut)", 1),
+        ("Cis AF (%)", 1), ("Cis Reads (11)", 1), ("Trans Reads (10)", 1), ("Trans Reads (01)", 1),
+        ("WT Reads (00)", 1), ("Spanning Depth", 1), ("Clinical Interpretation", 1)
     ])
     if not phasing_rows:
-        layout.append([("No compound mutation pairs to phase (< 2 mutations detected)", 0)] + [("", 0)] * 9)
+        layout.append([("No compound mutation pairs to phase (< 2 mutations detected)", 0)] + [("", 0)] * 10)
     else:
         for r in phasing_rows:
             ps = str(r.get("phase_state", ""))
             ps_style = 4 if "CIS" in ps.upper() else (6 if "TRANS" in ps.upper() else 0)
+            cis_rds = int(r.get("cis_reads_11", 0))
+            tot_span = int(r.get("total_spanning_reads", 0))
+            cis_af = float(r.get("cis_vaf_percent", (cis_rds / tot_span * 100.0) if tot_span > 0 else 0.0))
             layout.append([
                 (r.get("mutation_1", ""), 0),
                 (r.get("mutation_2", ""), 0),
                 (ps, ps_style),
                 (float(r.get("cis_fraction_percent", 0.0)), ps_style),
-                (int(r.get("cis_reads_11", 0)), 0),
+                (cis_af, ps_style if cis_af > 0 else 0),
+                (cis_rds, 0),
                 (int(r.get("trans_reads_10", 0)), 0),
                 (int(r.get("trans_reads_01", 0)), 0),
                 (int(r.get("wt_reads_00", 0)), 0),
-                (int(r.get("total_spanning_reads", 0)), 0),
+                (tot_span, 0),
                 (r.get("clinical_interpretation", ""), 0),
             ])
 
@@ -1584,12 +1588,26 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
         coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "COEXISTING" in r.get("phase_state", "").upper()]
         trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+
+        cis_details = []
+        for r in bcr_abl_phasing_rows:
+            ps = r.get("phase_state", "").upper()
+            if "CIS" in ps:
+                c_rds = int(r.get("cis_reads_11", 0))
+                c_span = int(r.get("total_spanning_reads", 0))
+                c_af = float(r.get("cis_vaf_percent", (c_rds / c_span * 100.0) if c_span > 0 else 0.0))
+                p_name = f"{r.get('mutation_1')}+{r.get('mutation_2')}"
+                if "COEXISTING" in ps:
+                    cis_details.append(f"{p_name} (coexist, {c_af:.1f}% AF, {c_rds:,} rds)")
+                else:
+                    cis_details.append(f"{p_name} ({c_af:.1f}% AF, {c_rds:,} rds)")
+
         if cis_pairs:
-            phase_summary = f"CIS ({', '.join(cis_pairs)})"
+            phase_summary = f"CIS ({', '.join(cis_details if cis_details else cis_pairs)})"
             phase_flag = "COMPOUND MUTATION (CIS)"
             phase_flag_style = 4
         elif coexist_pairs:
-            phase_summary = f"COEXISTING ({', '.join(coexist_pairs)})"
+            phase_summary = f"COEXISTING ({', '.join(cis_details if cis_details else coexist_pairs)})"
             phase_flag = "COEXISTING (CIS + TRANS)"
             phase_flag_style = 4
         elif trans_pairs:

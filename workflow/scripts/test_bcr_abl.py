@@ -488,6 +488,8 @@ class TestBcrAblPhaser(unittest.TestCase):
             self.assertEqual(pair["cis_reads_11"], 20)
             self.assertEqual(pair["trans_reads_10"], 0)
             self.assertEqual(pair["trans_reads_01"], 0)
+            self.assertEqual(pair["cis_fraction_percent"], 100.0)
+            self.assertEqual(pair["cis_vaf_percent"], 20.0)
             self.assertEqual(pair["phase_state"], "CIS (Compound)")
 
     def test_single_molecule_trans_phasing(self):
@@ -542,6 +544,8 @@ class TestBcrAblPhaser(unittest.TestCase):
             self.assertEqual(pair["cis_reads_11"], 0)
             self.assertEqual(pair["trans_reads_10"], 10)
             self.assertEqual(pair["trans_reads_01"], 10)
+            self.assertEqual(pair["cis_fraction_percent"], 0.0)
+            self.assertEqual(pair["cis_vaf_percent"], 0.0)
             self.assertEqual(pair["phase_state"], "TRANS (Polyclonal)")
 
 
@@ -573,7 +577,7 @@ class TestBcrAblReportIntegration(unittest.TestCase):
                 "SAMPLE_1\tchr9\t130872896\tC\tT\tT315I\tp.Thr315Ile\tNM_1\t5000\t4000\t1000\t20.0\tDETECTED\tResistant\tResistant\tResistant\tResistant\tSensitive\tSensitive\n"
             )
             phasing_tsv.write_text(
-                "sample\tmutation_1\tmutation_2\tphase_state\tcis_fraction_percent\tcis_reads_11\ttrans_reads_10\ttrans_reads_01\twt_reads_00\tother_reads\ttotal_spanning_reads\tpos_1\tpos_2\tref_1\talt_1\tref_2\talt_2\tclinical_interpretation\n"
+                "sample\tmutation_1\tmutation_2\tphase_state\tcis_fraction_percent\tcis_vaf_percent\tcis_reads_11\ttrans_reads_10\ttrans_reads_01\twt_reads_00\tother_reads\ttotal_spanning_reads\tpos_1\tpos_2\tref_1\talt_1\tref_2\talt_2\tclinical_interpretation\n"
             )
 
             exon_cov_tsv = tmp / "exon_cov.tsv"
