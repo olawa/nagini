@@ -13,6 +13,97 @@ SPEC.loader.exec_module(FILTER_MOD)
 
 
 class FilterBcrAblAmpliconsTest(unittest.TestCase):
+    def test_handoff_config_repoints_samples_and_units(self):
+        """The copied config must read the filtered tables, not the originals."""
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = Path(tmpdir) / "original"
+            original.mkdir()
+            out_dir = Path(tmpdir) / "amplicon_filtered"
+            out_dir.mkdir()
+            config_path = original / "config.nagini.yaml"
+            # prepare_nagini_inputs.py writes these as resolved absolute paths.
+            config_path.write_text(yaml.safe_dump({
+                "samples": str(original / "samples.tsv"),
+                "units": str(original / "units.tsv"),
+                "reference_build": "hg19",
+                "read_filter": {"enabled": True, "min_qv": 20},
+            }))
+
+            dest = FILTER_MOD.write_handoff_config(config_path, out_dir)
+            written = yaml.safe_load(dest.read_text())
+
+            self.assertEqual(written["samples"], str((out_dir / "samples.tsv").resolve()))
+            self.assertEqual(written["units"], str((out_dir / "units.tsv").resolve()))
+            # Nothing may still point at the pre-filtering directory.
+            self.assertNotIn(str(original), written["samples"])
+            self.assertNotIn(str(original), written["units"])
+
+    def test_handoff_config_disables_read_filter_and_keeps_the_rest(self):
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            out_dir.mkdir()
+            config_path = Path(tmpdir) / "config.nagini.yaml"
+            config_path.write_text(yaml.safe_dump({
+                "samples": "/elsewhere/samples.tsv",
+                "units": "/elsewhere/units.tsv",
+                "reference_build": "hg19",
+                "read_filter": {"enabled": True, "min_qv": 20},
+                "bcr_abl": {"enabled": True},
+            }))
+
+            written = yaml.safe_load(
+                FILTER_MOD.write_handoff_config(config_path, out_dir).read_text()
+            )
+
+            # Already-filtered amplicons must not be filtered again.
+            self.assertIs(written["read_filter"]["enabled"], False)
+            # ... but unrelated settings survive the round trip.
+            self.assertEqual(written["read_filter"]["min_qv"], 20)
+            self.assertEqual(written["reference_build"], "hg19")
+            self.assertEqual(written["bcr_abl"], {"enabled": True})
+
+    def test_handoff_config_adds_read_filter_when_absent(self):
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            out_dir.mkdir()
+            config_path = Path(tmpdir) / "config.nagini.yaml"
+            config_path.write_text(yaml.safe_dump({"reference_build": "hg19"}))
+
+            written = yaml.safe_load(
+                FILTER_MOD.write_handoff_config(config_path, out_dir).read_text()
+            )
+            self.assertIs(written["read_filter"]["enabled"], False)
+
+    def test_handoff_config_fails_loudly_on_a_broken_config(self):
+        """A verbatim copy would be exactly the bug this replaces."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            out_dir.mkdir()
+            config_path = Path(tmpdir) / "config.nagini.yaml"
+            config_path.write_text("samples: [unclosed\n  - broken: :\n")
+
+            with self.assertRaises(Exception):
+                FILTER_MOD.write_handoff_config(config_path, out_dir)
+            self.assertFalse((out_dir / "config.nagini.yaml").exists())
+
+    def test_nagini_root_is_this_checkout(self):
+        root = FILTER_MOD.nagini_root()
+        self.assertTrue((root / "workflow" / "Snakefile").is_file())
+        self.assertTrue((root / "pipeline_start_scripts").is_dir())
+        # No one machine's layout may be baked into the script.
+        offenders = [
+            line.strip()
+            for line in SCRIPT.read_text().splitlines()
+            if "/home/cgu-lab" in line and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(offenders, [])
+
     def test_find_default_primers(self):
         primers_file = FILTER_MOD.find_default_primers()
         self.assertTrue(os.path.isfile(primers_file))

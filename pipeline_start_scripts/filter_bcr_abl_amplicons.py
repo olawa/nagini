@@ -34,13 +34,14 @@ def find_nanostream(custom_path: str | None = None) -> str:
     if which_path:
         return which_path
 
+    # The ~ entries already cover the lab workstation, where the pipeline runs
+    # as cgu-lab and ~ expands to /home/cgu-lab; naming that path literally as
+    # well only added a duplicate that breaks for every other operator.
     candidates = [
         os.path.expanduser("~/bin/nanostream"),
-        "/home/cgu-lab/bin/nanostream",
         "/usr/local/bin/nanostream",
         os.path.expanduser("~/.cargo/bin/nanostream"),
         os.path.expanduser("~/tmp/tools/nanoMonitor/target/release/nanostream"),
-        "/home/cgu-lab/tmp/tools/nanoMonitor/target/release/nanostream",
     ]
 
     for c in candidates:
@@ -59,6 +60,35 @@ def find_default_primers() -> str:
     if primers_path.is_file():
         return str(primers_path)
     raise FileNotFoundError(f"Default primers file not found at {primers_path}")
+
+
+def nagini_root() -> Path:
+    """The nagini checkout this script belongs to."""
+    return Path(__file__).resolve().parent.parent
+
+
+def write_handoff_config(config_path: Path, out_dir: Path) -> Path:
+    """Copy the nagini config into out_dir, repointed at out_dir's own tables.
+
+    prepare_nagini_inputs.py writes absolute samples/units paths into the
+    config. Copying it verbatim therefore leaves the new run reading the
+    ORIGINAL units.tsv, so the amplicon filtering is done and then silently
+    discarded: the run succeeds, the report looks ordinary, and the numbers
+    come from the unfiltered reads. Repoint both keys.
+    """
+    import yaml
+
+    out_dir = Path(out_dir)
+    with open(config_path, "r", encoding="utf-8") as handle:
+        cfg = yaml.safe_load(handle) or {}
+    # The reads are already filtered amplicons.
+    cfg.setdefault("read_filter", {})["enabled"] = False
+    cfg["samples"] = str((out_dir / "samples.tsv").resolve())
+    cfg["units"] = str((out_dir / "units.tsv").resolve())
+    dest = out_dir / "config.nagini.yaml"
+    with open(dest, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(cfg, handle, sort_keys=False)
+    return dest
 
 
 def parse_units_tsv(units_file: str) -> list[dict[str, str]]:
@@ -440,16 +470,7 @@ def main():
         except Exception:
             shutil.copy2(str(samples_path), str(out_dir / "samples.tsv"))
     if config_path.is_file():
-        try:
-            import yaml
-            with open(config_path, "r", encoding="utf-8") as f:
-                cfg = yaml.safe_load(f) or {}
-            # Disable pre-alignment nanofilter because reads are already filtered amplicons
-            cfg.setdefault("read_filter", {})["enabled"] = False
-            with open(out_dir / "config.nagini.yaml", "w", encoding="utf-8") as f:
-                yaml.safe_dump(cfg, f, sort_keys=False)
-        except Exception:
-            shutil.copy2(str(config_path), str(out_dir / "config.nagini.yaml"))
+        write_handoff_config(config_path, out_dir)
 
 
     # Print summary table
@@ -466,9 +487,10 @@ def main():
     print("\nSUCCESS! New amplicon-filtered analysis directory is ready at:")
     print(f"  {out_dir}\n")
     print("To run Nagini on the amplicon-filtered dataset, run:")
+    root = nagini_root()
     print(f"  cd {out_dir}")
-    print("  snakemake --profile /home/cgu-lab/tmp/tools/nagini/profiles/workstation \\")
-    print("    --snakefile /home/cgu-lab/tmp/tools/nagini/workflow/Snakefile \\")
+    print(f"  snakemake --profile {root / 'profiles' / 'workstation'} \\")
+    print(f"    --snakefile {root / 'workflow' / 'Snakefile'} \\")
     print("    --configfile config.nagini.yaml\n")
 
 
