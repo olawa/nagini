@@ -170,6 +170,46 @@ class SampleRoutingTest(unittest.TestCase):
         self.assertIn("library_type=amplicon", warnings[0])
 
 
+    def test_read_filter_warns_when_the_input_is_already_aligned(self):
+        units = units_frame([
+            {"sample": "S", "assay": "bcr_abl", "input_type": "aligned_bam"},
+        ])
+        warnings = routing.read_filter_warnings(units, ["S"], True)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("aligned_bam", warnings[0])
+        self.assertIn("read_filter", warnings[0])
+
+    def test_read_filter_is_silent_when_disabled(self):
+        units = units_frame([
+            {"sample": "S", "assay": "bcr_abl", "input_type": "aligned_bam"},
+        ])
+        # Nothing is being promised, so there is nothing to warn about.
+        self.assertEqual(routing.read_filter_warnings(units, ["S"], False), [])
+
+    def test_read_filter_is_silent_for_inputs_it_can_actually_filter(self):
+        for input_type in ("fastq", "unmapped_bam", "dorado_bam"):
+            with self.subTest(input_type=input_type):
+                units = units_frame([
+                    {"sample": "S", "assay": "bcr_abl", "input_type": input_type},
+                ])
+                self.assertEqual(routing.read_filter_warnings(units, ["S"], True), [])
+
+    def test_read_filter_warns_per_affected_sample_only(self):
+        units = units_frame([
+            {"sample": "A", "assay": "bcr_abl", "input_type": "aligned_bam"},
+            {"sample": "B", "assay": "bcr_abl", "input_type": "fastq"},
+            {"sample": "C", "assay": "bcr_abl", "input_type": "aligned_bam"},
+        ])
+        warnings = routing.read_filter_warnings(units, ["A", "B", "C"], True)
+        self.assertEqual(len(warnings), 2)
+        self.assertTrue(any("Sample A" in w for w in warnings))
+        self.assertTrue(any("Sample C" in w for w in warnings))
+        self.assertFalse(any("Sample B" in w for w in warnings))
+
+    def test_read_filter_tolerates_a_units_table_without_input_type(self):
+        units = units_frame([{"sample": "S", "assay": "bcr_abl"}])
+        self.assertEqual(routing.read_filter_warnings(units, ["S"], True), [])
+
     def test_unknown_assay_names_the_valid_ones(self):
         units = units_frame([{"sample": "S", "assay": "bcrabl"}])
         with self.assertRaises(routing.RoutingError) as raised:

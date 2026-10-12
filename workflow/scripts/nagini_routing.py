@@ -386,6 +386,40 @@ def routing_warnings(units, samples, assays: dict) -> list:
     return warnings
 
 
+# Input types that reach the aligner already aligned, so stage_aligned_bam
+# takes the unit file verbatim and no read_filter rule ever sees it.
+PREALIGNED_INPUT_TYPES = ("aligned_bam",)
+
+
+def read_filter_warnings(units, samples, read_filter_enabled: bool) -> list:
+    """Warn where read_filter is configured but cannot apply.
+
+    stage_aligned_bam consumes the unit BAM directly, so an already-aligned
+    input bypasses both read_filter rules. Without this the settings in
+    config.yaml look like they are in force while the reads go through
+    untouched -- and whatever filtering they did get happened upstream, under
+    somebody else's thresholds.
+    """
+
+    if not read_filter_enabled:
+        return []
+
+    warnings = []
+    for sample in samples:
+        prealigned = [
+            value
+            for value in _column_values(units, sample, "input_type")
+            if value in PREALIGNED_INPUT_TYPES
+        ]
+        if prealigned:
+            warnings.append(
+                f"Sample {sample}: read_filter is enabled but input_type="
+                f"{prealigned[0]} is staged as-is, so no filtering is applied "
+                f"here. Whatever produced the BAM decided the thresholds."
+            )
+    return warnings
+
+
 def routing_summary(units, samples, assays: dict) -> list:
     """One row per sample: what will run and why.  Used for logging."""
 

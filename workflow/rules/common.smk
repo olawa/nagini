@@ -946,6 +946,14 @@ for _warning in _routing_call(
 ):
     sys.stderr.write(f"WARNING: {_warning}\n")
 
+for _warning in _routing_call(
+    nagini_routing.read_filter_warnings,
+    units,
+    list(get_samples(samples)),
+    bool(config.get("read_filter", {}).get("enabled", False)),
+):
+    sys.stderr.write(f"WARNING: {_warning}\n")
+
 if not str(config.get("clairs_to_call", {}).get("platform", "") or "").strip():
     _seen_models = set()
     for _sample in get_samples(samples):
