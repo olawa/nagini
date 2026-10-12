@@ -170,10 +170,11 @@ read_filter:
   # -10*log10(mean(10^(-q/10))), which is the same definition, not the
   # arithmetic mean of the Phred scores.
   #
-  # Reading qs out of a FASTQ header needs a nanostream built after the
-  # SAM-tag header parser landed. An older binary silently recomputes instead,
-  # which shifts min_qv by a few tenths of a QV and is not visible in the logs,
-  # so pin `binary:` for any run whose filtering has to be reproducible.
+  # This needs a recent nanostream. Older builds found no tag on either input
+  # -- the BAM path looked for uppercase QS while dorado writes qs, and the
+  # FASTQ parser only understood guppy-era key=value headers -- and silently
+  # recomputed instead. That shifts min_qv without anything in the logs saying
+  # so, so pin `binary:` for any run whose filtering has to be reproducible.
   enabled: false
   # Empty: look for nanostream (then nanofilter) on PATH, then
   # workflow/bin/<os>-<arch>/nanostream. Set to an absolute path to pin it.
