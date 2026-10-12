@@ -42,7 +42,7 @@ def _cnvkit_cytoband(wildcards):
         cytoband = config["references"][build].get("cytoband", "")
         if cytoband:
             if cytoband.endswith(".gz"):
-                return "reports/cnv_html_report/cytobands_" + str(build) + ".txt"
+                return f"reports/cnv_html_report/cytobands_{build}.txt"
             return cytoband
     return []
 
