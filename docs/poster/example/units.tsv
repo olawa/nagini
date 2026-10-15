@@ -1,0 +1,2 @@
+sample	type	platform	processing_unit	barcode	input_type	fastq1	fastq2	bam	methylation	run_id	basecalling_model	assay
+example	T	ONT	PU1	NB	fastq	.tests/integration/input/example.fastq	UNUSED	UNUSED	No	run_001	sup	bcr_abl

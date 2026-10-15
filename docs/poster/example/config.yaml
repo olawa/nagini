@@ -1,0 +1,12 @@
+---
+# Minimal overlay that selects the BCR-ABL1 assay on nagini's own integration
+# data. Layered on .tests/integration/config/config.yaml, which supplies the
+# references and containers.
+#
+#   snakemake -s workflow/Snakefile \
+#       --configfile .tests/integration/config/config.yaml \
+#                    docs/poster/example/config.yaml -n
+#
+# The assay itself is chosen by the `assay` column in units.tsv, not here.
+samples: "docs/poster/example/samples.tsv"
+units: "docs/poster/example/units.tsv"

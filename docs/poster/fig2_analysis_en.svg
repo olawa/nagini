@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 744" width="1000" height="744" font-family="Inter, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <style>
+      .big  { font-size:26px; font-weight:700; fill:#0b0b0b; }
+      .ttl  { font-size:15px; font-weight:650; fill:#0b0b0b; }
+      .sub  { font-size:13px; fill:#52514e; }
+      .ax   { font-size:12px; fill:#8a8982; }
+      .hdr  { font-size:12px; font-weight:700; fill:#8a8982; letter-spacing:1.4px; }
+      .mono { font-size:12px; fill:#52514e; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+      .exon { stroke:#ffffff; stroke-width:2; }
+    </style>
+  </defs>
+  <rect width="1000" height="744" fill="#fcfcfb"/>
+
+  <text x="40" y="44" class="big">What the analysis answers</text>
+  <text x="40" y="68" class="sub">Two questions about one amplicon: which fusion is present, and whether the kinase domain carries resistance.</text>
+
+  <!-- ===== 1. fusion ===== -->
+  <text x="40" y="110" class="hdr">1 — THE FUSION   chr22 BCR  ×  chr9 ABL1</text>
+  <text x="40" y="132" class="sub">Every read spanning the breakpoint is one molecule, counted towards its isoform.</text>
+
+  <text x="40" y="170" class="ttl" fill="#2a78d6">BCR</text>
+  <text x="40" y="187" class="mono">chr22</text>
+  <rect x="100" y="156" width="400" height="22" fill="#eef4fc" rx="3"/>
+  <rect class="exon" x="108" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
+  <text x="124" y="200" class="ax" text-anchor="middle">e1</text>
+  <rect class="exon" x="296" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
+  <text x="312" y="200" class="ax" text-anchor="middle">e13</text>
+  <rect class="exon" x="340" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
+  <text x="356" y="200" class="ax" text-anchor="middle">e14</text>
+  <rect class="exon" x="452" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
+  <text x="468" y="200" class="ax" text-anchor="middle">e19</text>
+
+  <text x="548" y="170" class="ttl" fill="#eb6834">ABL1</text>
+  <text x="548" y="187" class="mono">chr9</text>
+  <rect x="612" y="156" width="150" height="22" fill="#fdf0ea" rx="3"/>
+  <rect class="exon" x="620" y="152" width="32" height="30" fill="#eb6834" rx="3"/>
+  <text x="636" y="200" class="ax" text-anchor="middle">a2</text>
+  <rect class="exon" x="664" y="152" width="32" height="30" fill="#eb6834" rx="3"/>
+  <text x="680" y="200" class="ax" text-anchor="middle">a3</text>
+
+  <!-- joins: drop from the BCR exon, run right, rise into the ABL1 exon -->
+  <g stroke-width="2.5" fill="none" stroke="#8a8982">
+    <path d="M312,216 L312,228 L636,228 L636,216"/>
+    <path d="M356,216 L356,252 L636,252"/>
+    <path d="M124,216 L124,276 L636,276"/>
+    <path d="M468,216 L468,300 L636,300"/>
+  </g>
+  <path d="M356,216 L356,324 L680,324" stroke="#c9c8c0" stroke-width="2.5" fill="none" stroke-dasharray="5 4"/>
+
+  <text x="652" y="233" class="ttl">e13a2</text><text x="722" y="233" class="sub">b2a2 · p210 · CML</text>
+  <text x="652" y="257" class="ttl">e14a2</text><text x="722" y="257" class="sub">b3a2 · p210 · CML</text>
+  <text x="652" y="281" class="ttl">e1a2</text> <text x="722" y="281" class="sub">p190 · ALL</text>
+  <text x="652" y="305" class="ttl">e19a2</text><text x="722" y="305" class="sub">p230 · CNL</text>
+  <text x="696" y="329" class="ttl" fill="#8a8982">e14a3</text><text x="766" y="329" class="sub">p205 · atypical</text>
+
+  <line x1="40" y1="366" x2="960" y2="366" stroke="#e4e3dc" stroke-width="2"/>
+
+  <!-- ===== 2. kinase domain ===== -->
+  <text x="40" y="404" class="hdr">2 — THE RESISTANCE   ABL1 KINASE DOMAIN</text>
+  <text x="40" y="426" class="sub">73 Branford variants at 52 genomic positions across 38 codons. Tick height shows how many alternate alleles are reported.</text>
+
+  <rect x="70" y="470" width="860" height="6" fill="#e4e3dc" rx="3"/>
+  <rect x="81.8" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="91.5" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="94.8" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="101.3" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="107.7" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="111.0" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="117.5" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="140.2" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="175.9" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="185.6" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="188.9" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="195.4" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="237.6" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="257.0" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="260.3" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="299.2" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="311.6" y="440" width="3.6" height="30" fill="#e34948" rx="1"/>
+    <rect x="318.7" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="429.0" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="442.0" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="455.0" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="471.2" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="506.9" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="519.9" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="536.1" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="545.9" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="549.1" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="575.1" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="578.3" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="643.2" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="646.5" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="711.4" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="750.3" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="760.0" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="779.5" y="440" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <rect x="821.7" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="867.1" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <rect x="909.3" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
+  <line x1="102.5" y1="476" x2="102.5" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="102.5" y="500" class="ax" text-anchor="middle">250</text>
+    <line x1="264.7" y1="476" x2="264.7" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="264.7" y="500" class="ax" text-anchor="middle">300</text>
+    <line x1="427.0" y1="476" x2="427.0" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="427.0" y="500" class="ax" text-anchor="middle">350</text>
+    <line x1="589.2" y1="476" x2="589.2" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="589.2" y="500" class="ax" text-anchor="middle">400</text>
+    <line x1="751.5" y1="476" x2="751.5" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="751.5" y="500" class="ax" text-anchor="middle">450</text>
+    <line x1="913.8" y1="476" x2="913.8" y2="482" stroke="#c9c8c0" stroke-width="2"/>
+    <text x="913.8" y="500" class="ax" text-anchor="middle">500</text>
+  <text x="70" y="522" class="mono">codon 244</text>
+  <text x="930" y="522" class="mono" text-anchor="end">codon 499</text>
+
+  <!-- T315I called out below the axis, clear of every tick -->
+  <path d="M313.4,476 L313.4,532" stroke="#e34948" stroke-width="2"/>
+  <circle cx="313.4" cy="532" r="3.5" fill="#e34948"/>
+  <text x="325.4" y="528" class="ttl" fill="#e34948">T315I</text>
+  <text x="325.4" y="546" class="sub">gatekeeper — defeats every TKI except ponatinib and asciminib</text>
+
+  <g transform="translate(70,588)">
+    <rect x="0" y="-13" width="2.4" height="19" fill="#8a8982" rx="1"/>
+    <text x="14" y="3" class="sub">one alternate</text>
+    <rect x="120" y="-24" width="2.4" height="30" fill="#eb6834" rx="1"/>
+    <text x="134" y="3" class="sub">several alternates at one codon (20 codons)</text>
+  </g>
+
+  <!-- ===== 3. phasing ===== -->
+  <line x1="40" y1="618" x2="960" y2="618" stroke="#e4e3dc" stroke-width="2"/>
+  <text x="40" y="650" class="hdr">3 — AND IF TWO ARE FOUND: SAME MOLECULE?</text>
+  <text x="40" y="672" class="sub">One read spans the whole domain (~1 kb) —</text>
+  <text x="40" y="690" class="sub">the question is settled without statistical phasing.</text>
+
+  <g transform="translate(450,646)">
+    <text x="0" y="5" class="ttl" fill="#1baf7a">CIS</text>
+    <line x1="48" y1="0" x2="216" y2="0" stroke="#1baf7a" stroke-width="3.5"/>
+    <circle cx="104" cy="0" r="5.5" fill="#1baf7a"/><circle cx="168" cy="0" r="5.5" fill="#1baf7a"/>
+    <text x="232" y="5" class="sub">both on one read — compound mutation</text>
+  </g>
+  <g transform="translate(450,682)">
+    <text x="0" y="11" class="ttl">TRANS</text>
+    <line x1="48" y1="0" x2="216" y2="0" stroke="#8a8982" stroke-width="3.5"/>
+    <circle cx="104" cy="0" r="5.5" fill="#8a8982"/>
+    <line x1="48" y1="20" x2="216" y2="20" stroke="#8a8982" stroke-width="3.5"/>
+    <circle cx="168" cy="20" r="5.5" fill="#8a8982"/>
+    <text x="232" y="11" class="sub">separate reads — two independent clones</text>
+  </g>
+</svg>

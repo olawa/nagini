@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 790" width="1000" height="790" font-family="Inter, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a8982"/>
+    </marker>
+    <style>
+      .ttl   { font-size:15px; font-weight:650; fill:#0b0b0b; }
+      .sub   { font-size:13px; fill:#52514e; }
+      .mono  { font-size:12px; fill:#52514e; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+      .hdr   { font-size:12px; font-weight:700; fill:#8a8982; letter-spacing:1.4px; }
+      .big   { font-size:26px; font-weight:700; fill:#0b0b0b; }
+      .num   { font-size:21px; font-weight:700; }
+      .edge  { stroke:#8a8982; stroke-width:2; fill:none; marker-end:url(#a); }
+      .box   { fill:#ffffff; stroke:#d7d6cf; stroke-width:2; rx:8; }
+    </style>
+  </defs>
+  <rect width="1000" height="790" fill="#fcfcfb"/>
+
+  <text x="40" y="44" class="big">BCR-ABL1 på nagini</text>
+  <text x="40" y="68" class="sub">En kolumn i <tspan font-family="ui-monospace,Menlo,monospace">units.tsv</tspan> väljer analysen. Ingen separat pipeline, ingen fork.</text>
+
+  <!-- assay switch -->
+  <rect x="640" y="26" width="320" height="52" rx="8" fill="#eef4fc" stroke="#2a78d6" stroke-width="2"/>
+  <text x="658" y="47" class="mono" fill="#2a78d6" font-weight="700">assay: bcr_abl</text>
+  <text x="658" y="66" class="sub">40 jobb · 18 regler  (WGS-vägen: 70)</text>
+
+  <!-- ingest column -->
+  <text x="40" y="112" class="hdr">INLÄSNING</text>
+  <rect class="box" x="40" y="124" width="250" height="62"/>
+  <text x="56" y="148" class="ttl">FASTQ från MinKNOW</text>
+  <text x="56" y="168" class="mono">qs:f · ch:i · st:Z  (SAM-taggar)</text>
+
+  <path class="edge" d="M165,186 L165,214"/>
+
+  <rect class="box" x="40" y="216" width="250" height="68"/>
+  <rect x="40" y="216" width="5" height="68" fill="#2a78d6" rx="2"/>
+  <text x="56" y="240" class="ttl">Läsfilter — nanostream</text>
+  <text x="56" y="259" class="sub">qs ≥ 20 · 500–3000 bp</text>
+  <text x="56" y="276" class="mono">dorados eget qs, ej omräknat</text>
+
+  <path class="edge" d="M165,284 L165,312"/>
+
+  <rect class="box" x="40" y="314" width="250" height="68"/>
+  <rect x="40" y="314" width="5" height="68" fill="#2a78d6" rx="2"/>
+  <text x="56" y="338" class="ttl">minimap2 — splice</text>
+  <text x="56" y="357" class="mono">-ax splice -y -Y --MD</text>
+  <text x="56" y="374" class="sub">hg19 · cDNA-amplikon korsar introner</text>
+
+  <path class="edge" d="M165,382 L165,410"/>
+  <rect class="box" x="40" y="412" width="250" height="52"/>
+  <text x="56" y="435" class="ttl">Merge + target-BAM</text>
+  <text x="56" y="454" class="sub">BCR-ABL1-lokuset, chr9 + chr22</text>
+
+  <!-- fan out -->
+  <path class="edge" d="M290,438 L340,438 L340,170 L384,170"/>
+  <path class="edge" d="M290,438 L340,438 L340,330 L384,330"/>
+  <path class="edge" d="M290,438 L340,438 L340,490 L384,490"/>
+  <path class="edge" d="M290,438 L340,438 L340,636 L384,636"/>
+
+  <text x="386" y="112" class="hdr">ANALYS — TRE OBEROENDE FRÅGOR</text>
+
+  <!-- analysis 1 -->
+  <rect class="box" x="386" y="126" width="368" height="92"/>
+  <rect x="386" y="126" width="5" height="92" fill="#eb6834" rx="2"/>
+  <text x="404" y="150" class="ttl">Vilken fusion?</text>
+  <text x="404" y="170" class="mono">bcr_abl_fusion_counts</text>
+  <text x="404" y="192" class="sub">Split-läsningar över brytpunkten räknas per isoform</text>
+  <text x="404" y="210" class="sub">e13a2 · e14a2 · e1a2 · e19a2 · e14a3</text>
+  <text x="724" y="160" class="num" fill="#eb6834" text-anchor="end">5</text>
+  <text x="742" y="160" class="sub" text-anchor="end" dy="14">isoformer</text>
+
+  <!-- analysis 2 -->
+  <rect class="box" x="386" y="286" width="368" height="92"/>
+  <rect x="386" y="286" width="5" height="92" fill="#eb6834" rx="2"/>
+  <text x="404" y="310" class="ttl">Vilken resistens?</text>
+  <text x="404" y="330" class="mono">bcr_abl_branford_calling</text>
+  <text x="404" y="352" class="sub">ABL1-kinasdomänen, kodon 244–499</text>
+  <text x="404" y="370" class="sub">AF ≥ 1 % · subklonalt ned till 0,2 %</text>
+  <text x="724" y="320" class="num" fill="#eb6834" text-anchor="end">73</text>
+  <text x="742" y="320" class="sub" text-anchor="end" dy="14">varianter</text>
+  <text x="742" y="320" class="sub" text-anchor="end" dy="30">på 52 positioner</text>
+
+  <!-- analysis 3 -->
+  <rect class="box" x="386" y="446" width="368" height="92"/>
+  <rect x="386" y="446" width="5" height="68" fill="#1baf7a" rx="2"/>
+  <text x="404" y="470" class="ttl">Samma molekyl?</text>
+  <text x="404" y="490" class="mono">bcr_abl_phasing</text>
+  <text x="404" y="512" class="sub">Enskilda läsningar spänner hela domänen (~1 kb),</text>
+  <text x="404" y="530" class="sub">så CIS och TRANS kan skiljas åt direkt</text>
+  <text x="730" y="482" class="num" fill="#1baf7a" text-anchor="end">cis/trans</text>
+
+  <!-- supporting -->
+  <rect class="box" x="386" y="600" width="368" height="72" fill="#f6f5f0"/>
+  <text x="404" y="624" class="ttl">Underlag</text>
+  <text x="404" y="645" class="sub">Exontäckning · Arriba-diagram · mosdepth · cramino</text>
+  <text x="404" y="663" class="mono">skiljer ett negativt svar från ett otäckt</text>
+
+  <!-- outputs -->
+  <path class="edge" d="M754,172 L800,172 L800,380 L838,380"/>
+  <path class="edge" d="M754,332 L800,332 L800,380 L838,380"/>
+  <path class="edge" d="M754,492 L800,492 L800,380 L838,380"/>
+  <path class="edge" d="M754,636 L800,636 L800,380 L838,380"/>
+
+  <text x="840" y="112" class="hdr">LEVERANS</text>
+  <rect class="box" x="840" y="126" width="120" height="396" fill="#ffffff"/>
+  <rect x="840" y="126" width="120" height="5" fill="#1baf7a" rx="2"/>
+  <text x="856" y="160" class="ttl">Rapport</text>
+  <text x="856" y="182" class="mono">.xlsx</text>
+  <text x="856" y="200" class="sub">xlsxwriter,</text>
+  <text x="856" y="216" class="sub">samma form</text>
+  <text x="856" y="232" class="sub">som övriga</text>
+  <text x="856" y="248" class="sub">CGU-pipelines</text>
+
+  <line x1="856" y1="272" x2="944" y2="272" stroke="#d7d6cf" stroke-width="2"/>
+  <text x="856" y="298" class="ttl">Maskin-</text>
+  <text x="856" y="316" class="ttl">läsbart</text>
+  <text x="856" y="340" class="mono">.vcf</text>
+  <text x="856" y="358" class="mono">.tsv</text>
+  <text x="856" y="376" class="mono">.json</text>
+
+  <line x1="856" y1="400" x2="944" y2="400" stroke="#d7d6cf" stroke-width="2"/>
+  <text x="856" y="426" class="ttl">Figur</text>
+  <text x="856" y="448" class="mono">.png/.pdf</text>
+  <text x="856" y="470" class="sub">ritas även</text>
+  <text x="856" y="486" class="sub">när ingen</text>
+  <text x="856" y="502" class="sub">fusion finns</text>
+
+  <text x="40" y="716" class="hdr">SAMMA KOD I DRIFT</text>
+  <text x="40" y="742" class="sub">Analysen i den här figuren är inte en avgrening av nagini — det är nagini, med en assay vald.</text>
+  <text x="40" y="762" class="sub">Samma regler, samma containrar och samma referenser som WGS- och adaptive-vägarna, på marvin och miarka.</text>
+</svg>
