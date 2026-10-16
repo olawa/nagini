@@ -14,9 +14,9 @@ wrapper_commit="d3e6a345acb4e03ac0662ade94d9970bb233bdab"
 mkdir -p "${module_root}"
 
 for module_tag in \
-  "alignment:v0.8.0" \
-  "annotation:v1.4.1" \
-  "cnv_sv:v3.2.1" \
+  "alignment:v0.9.0" \
+  "annotation:v1.5.0" \
+  "cnv_sv:v3.4.0" \
   "qc:v0.8.0" \
   "reports:v1.1.1" \
   "snv_indels:v2.1.0"; do
@@ -25,6 +25,12 @@ for module_tag in \
   destination="${module_root}/${module}"
   if [[ -d "${destination}/.git" ]]; then
     echo "Keeping existing ${destination}; checking for ${tag}"
+    # Modules are read from their git tag (LocalGitFile), so a pin bump only
+    # needs the new tag present, not a checkout of it.
+    if ! git -C "${destination}" rev-parse --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+      echo "Fetching ${tag} into ${destination}"
+      git -C "${destination}" fetch --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}" >/dev/null
+    fi
     git -C "${destination}" rev-parse --verify "refs/tags/${tag}" >/dev/null
   else
     echo "Cloning hydra-genetics/${module}@${tag}"

@@ -72,9 +72,9 @@ container_runtime: singularity
 singularity_binds: []
 
 modules:
-  alignment: "v0.8.0"
-  annotation: "v1.4.1"
-  cnv_sv: "v3.2.1"
+  alignment: "v0.9.0"
+  annotation: "v1.5.0"
+  cnv_sv: "v3.4.0"
   qc: "v0.8.0"
   # Local compatibility tag derived from Hydra snv_indels v2.1.0; see
   # build/patches/snv_indels_v2.1.0_snakemake7.patch.

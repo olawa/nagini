@@ -30,11 +30,11 @@ wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
 
 | Modul | Tag i nagini | Användning |
 | --- | --- | --- |
-| alignment | `v0.8.0` | minimap2-index |
-| cnv_sv | `v3.2.1` | Sniffles2, bgzip, tabix |
+| alignment | `v0.9.0` | minimap2-index |
+| cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth, target-BED mosdepth, MultiQC |
 | snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, bcftools concat, tabix |
-| annotation | `v1.4.1` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
+| annotation | `v1.5.0` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
 
 `v2.1.0-nagini` är en lokal kompatibilitetstagg från Hydra
 `snv_indels v2.1.0`; patchen tar bort en oanvänd DeepTrio-include som annars
