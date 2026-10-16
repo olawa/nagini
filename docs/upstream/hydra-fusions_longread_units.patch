@@ -43,6 +43,20 @@ index 15517a7..b8753ca 100644
      unit="N|T|R",
  
  
+diff --git a/workflow/schemas/config.schema.yaml b/workflow/schemas/config.schema.yaml
+index ca716b3..61595ff 100644
+--- a/workflow/schemas/config.schema.yaml
++++ b/workflow/schemas/config.schema.yaml
+@@ -54,6 +54,9 @@ properties:
+       cytobands:
+         type: string
+         description: path to cytobands file
++      extra:
++        type: string
++        description: additional arguments passed to draw_fusions.R
+       gtf:
+         type: string
+         description: path to gtf file containing annotations
 diff --git a/workflow/schemas/units.schema.yaml b/workflow/schemas/units.schema.yaml
 index 1d33998..c531c25 100644
 --- a/workflow/schemas/units.schema.yaml

@@ -1,13 +1,17 @@
 # Ändringar som hör hemma uppströms
 
 Två saker i nagini kan inte lösas med `use rule ... with:` och behöver ändras i
-Hydra respektive snakemake-wrappers. Patcharna här är testade lokalt mot nagini
-men inte skickade någonstans.
+Hydra respektive snakemake-wrappers. Patcharna här är testade lokalt mot nagini och har skickats som pull requests:
+
+- snakemake-wrappers: https://github.com/snakemake/snakemake-wrappers/pull/5954
+- hydra-genetics/fusions: https://github.com/hydra-genetics/fusions/pull/78
+
+När de är släppta följer stegen nedan i nagini.
 
 | patch | repo | varför |
 |---|---|---|
 | `snakemake-wrappers_minimap2_samtools_fastq_extra.patch` | `snakemake/snakemake-wrappers` | Wrappern `bio/minimap2/aligner` konverterar en oalignerad BAM med `samtools fastq -T "*"`. Parametern `samtools_fastq_extra` (standard oförändrat `-T "*"`) låter nagini välja `-T MM,ML`. |
-| `hydra-fusions_v0.3.2_longread_units.patch` | `hydra-genetics/fusions` | Modulen går inte att ladda med långläsdata (`units.tsv` utan `flowcell`/`lane`), och `arriba_draw_fusion` saknar `params.extra`. |
+| `hydra-fusions_longread_units.patch` | `hydra-genetics/fusions` | Modulen går inte att ladda med långläsdata (`units.tsv` utan `flowcell`/`lane`), och `arriba_draw_fusion` saknar `params.extra`. |
 
 ## Varför `-T MM,ML` spelar roll
 
@@ -22,8 +26,7 @@ på samma rad. I wrapperns eget testdata ger standardläget dubbla taggar; med
 
 ### snakemake-wrappers
 
-1. Forka `snakemake/snakemake-wrappers`, skapa en gren och kör
-   `git apply docs/upstream/snakemake-wrappers_minimap2_samtools_fastq_extra.patch`.
+1. (Gjort, se PR ovan.) Patchen gäller `master` i `snakemake/snakemake-wrappers`.
 2. Testet `minimap2_ubam_sam_tags` i `bio/minimap2/aligner/test/Snakefile`
    körs med repots egna `test_wrappers.py` (kräver conda).
 3. PR-titeln ska följa conventional commits, till exempel
@@ -48,8 +51,8 @@ hela readmängden.
 
 ### hydra-genetics/fusions
 
-1. Forka `hydra-genetics/fusions`, skapa en gren från `v0.3.2` och kör
-   `git apply docs/upstream/hydra-fusions_v0.3.2_longread_units.patch`.
+1. (Gjort, se PR ovan.) Patchen gäller `develop` i `hydra-genetics/fusions`:
+   (patchen finns i `docs/upstream/hydra-fusions_longread_units.patch`).
 2. Ändringen följer samma mönster som alignment-modulen: långläsdata (`ONT`,
    `PACBIO`) indexeras på `processing_unit` och `barcode`, och `units.schema.yaml`
    kräver fälten per plattform.
