@@ -1,0 +1,99 @@
+diff --git a/workflow/rules/arriba.smk b/workflow/rules/arriba.smk
+index adf78ec..0bd3e02 100644
+--- a/workflow/rules/arriba.smk
++++ b/workflow/rules/arriba.smk
+@@ -55,6 +55,8 @@ rule arriba_draw_fusion:
+         protein_domains=config.get("arriba_draw_fusion", {}).get("protein_domains", ""),
+     output:
+         pdf=temp("fusions/arriba_draw_fusion/{sample}_{type}.pdf"),
++    params:
++        extra=config.get("arriba_draw_fusion", {}).get("extra", ""),
+     log:
+         "fusions/arriba_draw_fusion/{sample}_{type}.pdf.log",
+     benchmark:
+@@ -80,4 +82,5 @@ rule arriba_draw_fusion:
+         "--output={output.pdf} "
+         "--annotation={input.gtf} "
+         "--cytobands={input.cytobands} "
+-        "--proteinDomains={input.protein_domains}) &> {log}"
++        "--proteinDomains={input.protein_domains} "
++        "{params.extra}) &> {log}"
+diff --git a/workflow/rules/common.smk b/workflow/rules/common.smk
+index 15517a7..b8753ca 100644
+--- a/workflow/rules/common.smk
++++ b/workflow/rules/common.smk
+@@ -31,7 +31,11 @@ validate(samples, schema="../schemas/samples.schema.yaml")
+ 
+ ### Read and validate units file
+ 
+-units = pandas.read_table(config["units"], dtype=str).set_index(["sample", "type", "flowcell", "lane"], drop=False)
++units = pandas.read_table(config["units"], dtype=str)
++if "platform" in units.columns and units.platform.iloc[0] in ["PACBIO", "ONT"]:
++    units = units.set_index(["sample", "type", "processing_unit", "barcode"], drop=False).sort_index()
++else:  # Illumina data, with flowcell and lane columns
++    units = units.set_index(["sample", "type", "flowcell", "lane"], drop=False)
+ validate(units, schema="../schemas/units.schema.yaml")
+ 
+ ### Set wildcard constraints
+@@ -39,6 +43,7 @@ validate(units, schema="../schemas/units.schema.yaml")
+ 
+ wildcard_constraints:
+     sample="|".join(samples.index),
++    type="N|T|R",
+     unit="N|T|R",
+ 
+ 
+diff --git a/workflow/schemas/units.schema.yaml b/workflow/schemas/units.schema.yaml
+index 1d33998..c531c25 100644
+--- a/workflow/schemas/units.schema.yaml
++++ b/workflow/schemas/units.schema.yaml
+@@ -1,4 +1,4 @@
+-$schema: "http://json-schema.org/draft-04/schema#"
++$schema: "http://json-schema.org/draft-07/schema#"
+ description: row represents one dataset
+ properties:
+   sample:
+@@ -22,11 +22,38 @@ properties:
+   adapter:
+     type: string
+     description: one or more sequence, separated by ","
++  platform:
++    type: string
++    description: sequence platform, used to tell long-read (ONT, PACBIO) from short-read units
++  processing_unit:
++    type: string
++    description: processing unit from the bam header (long-read data)
++  barcode:
++    type: string
++    description: barcode (long-read data)
++  bam:
++    type: string
++    description: absolute path to bam file (long-read data)
++allOf:
++  - if:
++      required:
++        - platform
++      properties:
++        platform:
++          enum:
++            - ONT
++            - PACBIO
++    then:
++      required:
++        - processing_unit
++        - bam
++    else:
++      required:
++        - flowcell
++        - lane
++        - fastq1
++        - fastq2
++        - adapter
+ required:
+   - sample
+   - type
+-  - flowcell
+-  - lane
+-  - fastq1
+-  - fastq2
+-  - adapter

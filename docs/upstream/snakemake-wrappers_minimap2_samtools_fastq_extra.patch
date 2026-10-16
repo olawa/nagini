@@ -1,0 +1,61 @@
+diff --git a/bio/minimap2/aligner/meta.yaml b/bio/minimap2/aligner/meta.yaml
+index 6d8059d..579a603 100644
+--- a/bio/minimap2/aligner/meta.yaml
++++ b/bio/minimap2/aligner/meta.yaml
+@@ -15,3 +15,4 @@ params:
+   - sort: Enable sorting (if output not PAF), and can be either 'none', 'queryname' or 'coordinate'.
+   - sort_extra: Additional arguments for samtools/picard.
+   - extra: Additional arguments for minimap2.
++  - samtools_fastq_extra: Additional arguments for `samtools fastq` when the query is an unaligned BAM (default: `-T "*"`, i.e. carry all tags; e.g. `-T MM,ML` to carry only the base-modification tags).
+diff --git a/bio/minimap2/aligner/test/Snakefile b/bio/minimap2/aligner/test/Snakefile
+index 249fe08..3ed2da0 100644
+--- a/bio/minimap2/aligner/test/Snakefile
++++ b/bio/minimap2/aligner/test/Snakefile
+@@ -100,6 +100,24 @@ rule minimap2_ubam_sam:
+         "master/bio/minimap2/aligner"
+ 
+ 
++rule minimap2_ubam_sam_tags:
++    input:
++        target="target/{input1}.mmi",  # can be either genome index or genome fasta
++        query="query/reads.bam",
++    output:
++        "aligned/{input1}_aln.ubam.tags.sam",
++    log:
++        "logs/minimap2/{input1}.ubam.tags.log",
++    params:
++        extra="-x map-pb",  # optional
++        sorting="none",  # optional: Enable sorting. Possible values: 'none', 'queryname' or 'coordinate'
++        sort_extra="",  # optional: extra arguments for samtools/picard
++        samtools_fastq_extra="-T s1,s2",  # optional: carry only these tags from the uBAM (default: -T "*")
++    threads: 3
++    wrapper:
++        "master/bio/minimap2/aligner"
++
++
+ rule minimap2_ubam_sam_sorted:
+     input:
+         target="target/{input1}.mmi",  # can be either genome index or genome fasta
+diff --git a/bio/minimap2/aligner/wrapper.py b/bio/minimap2/aligner/wrapper.py
+index 8d1f89a..6e08fba 100644
+--- a/bio/minimap2/aligner/wrapper.py
++++ b/bio/minimap2/aligner/wrapper.py
+@@ -14,6 +14,7 @@ extra = snakemake.params.get("extra", "")
+ log = snakemake.log_fmt_shell(stdout=False, stderr=True)
+ sort = snakemake.params.get("sorting", "none")
+ sort_extra = snakemake.params.get("sort_extra", "")
++samtools_fastq_extra = snakemake.params.get("samtools_fastq_extra", '-T "*"')
+ 
+ if isinstance(snakemake.input.query, list):
+     in_ext = infer_out_format(snakemake.input.query[0])
+@@ -25,8 +26,8 @@ else:
+ pre_cmd = ""
+ query = ""
+ if in_ext == "BAM":
+-    # convert uBAM to fastq keeping all tags
+-    pre_cmd = f'samtools fastq -T "*" {snakemake.input.query} |'
++    # convert uBAM to fastq (by default keeping all tags)
++    pre_cmd = f"samtools fastq {samtools_fastq_extra} {snakemake.input.query} |"
+     # tell minimap2 to parse tags from fastq header
+     extra += " -y"
+     query = "-"
