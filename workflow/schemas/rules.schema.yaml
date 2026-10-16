@@ -16,15 +16,7 @@ properties:
     $ref: "#/definitions/rule_io"
   finalize_dorado_bam_alignment:
     $ref: "#/definitions/rule_io"
-  minimap2_fastq_align:
-    $ref: "#/definitions/rule_io"
   minimap2_unmapped_bam_align:
-    $ref: "#/definitions/rule_io"
-  samtools_merge_bam:
-    $ref: "#/definitions/rule_io"
-  mosdepth_genome:
-    $ref: "#/definitions/rule_io"
-  mosdepth_targets:
     $ref: "#/definitions/rule_io"
   sv_summary:
     $ref: "#/definitions/rule_io"

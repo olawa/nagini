@@ -1,19 +1,14 @@
 # Verktyg och Hydra-regler i nagini
 
 `nagini` använder i första hand Hydra-Genetics-regler och wrappers. Lokala
-regler finns för inputbranching, en wrapper-kompatibel mosdepth-kedja,
-VEP, SV-sammanfattning och Excelrapportering.
+regler finns för inputbranching, VEP, SV-sammanfattning och Excelrapportering.
 
 ## Lokala regler
 
 | Regel | Verktyg/funktion | Varför lokal? |
 | --- | --- | --- |
 | `stage_aligned_bam` | samtools sort/index | Kräver uttrycklig no-realign-väg för alignad BAM. |
-| `minimap2_fastq_align` | minimap2 + samtools | Input är FASTQ och behöver ett annat query-flöde än Hydra-modulens BAM-kolumn. |
-| `minimap2_unmapped_bam_align` | samtools fastq + minimap2 + samtools | Oalignerad BAM konverteras innan mapping. |
-| `samtools_merge_bam` | samtools merge/index | Slår ihop flera ONT units till sample/type. |
-| `mosdepth_genome` | mosdepth via Hydra/Snakemake-wrapper | Hydra qc v0.8.0 deklarerar inkompatibla outputnamn med den pinnade wrappern; regeln producerar windowed whole-genome coverage. |
-| `mosdepth_targets` | mosdepth via Hydra/Snakemake-wrapper | Producerar target-regioner och per-base BED med wrapperns `per_base`-output. |
+| `minimap2_unmapped_bam_align` | samtools fastq + minimap2 + samtools | Oalignerad BAM konverteras med `-T MM,ML`. Hydras `minimap2_align` konverterar med `-T "*"` (alla taggar), vilket ändrar BAM-innehållet. |
 | `sv_summary` | Python/VCF-parser | Hydra har ingen generell Sniffles2→translocations-tabell; regeln räknar SVTYPE/BND och kan överlappa BED. |
 | `vep_annotate_{mutect2,clairs_to,deepvariant}`, `amplicon_vep_annotate` | Ensembl VEP | Valfri offline-annotering mot en referenskompatibel cache. Lokal eftersom Hydras `vep` kör med `--no_stats` och inte kan skriva den levererade `*.vep.summary.html`. |
 | `nagini_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
@@ -27,9 +22,9 @@ wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
 
 | Modul | Tag i nagini | Användning |
 | --- | --- | --- |
-| alignment | `v0.9.0` | minimap2-index |
+| alignment | `v0.9.0` | minimap2-index, `minimap2_align` (FASTQ-units), `minimap2_merge` (sammanslagning av units), `samtools_index` (mergad BAM) |
 | cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
-| qc | `v0.8.0` | cramino, mosdepth, target-BED mosdepth, MultiQC |
+| qc | `v0.8.0` | cramino, mosdepth (`mosdepth`, `mosdepth_bed`), MultiQC |
 | snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO, DeepVariant och amplikon), ClairS-TO, DeepVariant, bgzip, tabix |
 | annotation | `v1.5.0` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
 

@@ -73,7 +73,7 @@ git -C "${wrapper_root}" checkout --detach "${wrapper_commit}" >/dev/null
 # GATK Mutect2).  Fetch those tags explicitly; fetching only the pinned
 # commit leaves the wrapper files present but makes git show <tag>:<path>
 # fail during execution.
-for wrapper_tag in 0.80.2 v1.3.1 v1.5.0 v1.7.0 v1.25.0; do
+for wrapper_tag in 0.80.2 0.85.0 v1.1.0 v1.3.1 v1.5.0 v1.7.0 v1.25.0 v3.9.0 v4.3.0; do
   git -C "${wrapper_root}" fetch --depth 1 origin \
     "refs/tags/${wrapper_tag}:refs/tags/${wrapper_tag}" >/dev/null
 done

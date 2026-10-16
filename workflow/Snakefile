@@ -10,14 +10,10 @@ include: "rules/stage_aligned_bam.smk"
 include: "rules/dorado.smk"
 include: "rules/align_dorado_bam.smk"
 include: "rules/read_filter.smk"
-include: "rules/minimap2_fastq_align.smk"
 
 include: "rules/minimap2_unmapped_bam_align.smk"
-include: "rules/samtools.smk"
 include: "rules/merged_fastq.smk"
 include: "rules/target_bam.smk"
-include: "rules/mosdepth_genome.smk"
-include: "rules/mosdepth_targets.smk"
 include: "rules/sv_summary.smk"
 include: "rules/cnv.smk"
 include: "rules/cnvkit.smk"
@@ -51,14 +47,100 @@ module alignment:
         config
 
 
-# Reuse Hydra's minimap2 index rule.  The actual per-unit alignments are
-# local rules because the current Hydra minimap2 rule expects a FASTQ-like
-# query in the units.tsv bam column and cannot branch on aligned/unmapped BAM.
+# Hydra's minimap2 index rule.  FASTQ units are aligned and all units merged
+# with Hydra rules below; unmapped-BAM units, already-aligned BAMs and Dorado
+# output are handled by local rules.
 use rule minimap2_index from alignment as alignment_minimap2_index with:
     input:
         target=config["reference"]["fasta"],
     output:
         mmi=get_reference_index(),
+
+
+# FASTQ units go through Hydra's minimap2_align.  Its wrapper reads a FASTQ as
+# is, so the -y that copies the MM/ML tags from the read header, the read group
+# and the per-unit preset all travel in params.extra.  The unmapped-BAM units
+# stay on minimap2_unmapped_bam_align: the wrapper converts a BAM with
+# `samtools fastq -T "*"`, which carries every tag, and nagini deliberately
+# carries MM and ML only.
+use rule minimap2_align from alignment as alignment_minimap2_fastq_align with:
+    input:
+        query=lambda wildcards: get_fastq_for_alignment(wildcards),
+        target=lambda wildcards: get_reference_target_for_unit(wildcards),
+    output:
+        bam="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_fastq.bam",
+    params:
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                config.get("minimap2_align", {}).get("extra", ""),
+                "-R '{}'".format(get_minimap2_read_group(wildcards)),
+                "-x {}".format(get_minimap2_preset_for_unit(wildcards)),
+            )
+            if part
+        ),
+        sorting="coordinate",
+        sort_extra="",
+    log:
+        "logs/minimap2_fastq_align/{sample}_{type}_{processing_unit}_{barcode}.log",
+    benchmark:
+        repeat(
+            "benchmarks/minimap2_fastq_align/{sample}_{type}_{processing_unit}_{barcode}.tsv",
+            config.get("minimap2_fastq_align", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("minimap2_fastq_align", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("minimap2_fastq_align", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("minimap2_fastq_align", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("minimap2_fastq_align", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("minimap2_fastq_align", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("minimap2_fastq_align", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("minimap2_fastq_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
+
+
+# One merged BAM per sample/type from the per-unit alignments, whatever route
+# each unit took.
+use rule minimap2_merge from alignment as alignment_merge_unit_bams with:
+    input:
+        bams=get_unit_alignment_bams,
+    output:
+        bam="alignment/merged/{sample}_{type}.bam",
+    params:
+        extra=config.get("samtools_merge_bam", {}).get("extra", ""),
+    log:
+        "logs/samtools_merge_bam/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/samtools_merge_bam/{sample}_{type}.tsv",
+            config.get("samtools_merge_bam", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("samtools_merge_bam", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("samtools_merge_bam", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("samtools_merge_bam", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("samtools_merge_bam", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("samtools_merge_bam", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("samtools_merge_bam", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("samtools_merge_bam", {}).get("container", config["default_container"])
+
+
+# Hydra marks the index temp and matches any BAM.  The merged BAM's index is a
+# deliverable that every caller reads, and the other BAMs are indexed by the
+# rules that write them, so keep the index and match only the merged BAMs.
+use rule samtools_index from alignment as alignment_samtools_index_merged with:
+    output:
+        bai="{file}.bam.bai",
+    log:
+        "logs/samtools_index/{file}.log",
+    benchmark:
+        repeat(
+            "benchmarks/samtools_index/{file}.tsv",
+            config.get("samtools_index", {}).get("benchmark_repeats", 1),
+        )
+    wildcard_constraints:
+        file=r"alignment/merged/[^/]+",
 
 
 # ===========================================================================
@@ -828,10 +910,55 @@ def get_multiqc_input_files(wildcards):
     return sorted(set(resolved))
 
 
-# Hydra's qc module still supplies cramino and MultiQC. The two mosdepth
-# rules are local because qc v0.8.0 declares output names that do not match
-# the pinned Snakemake wrapper; the local rules below use that same wrapper
-# with its supported output names.
+# Hydra's qc module supplies cramino, mosdepth and MultiQC.  The mosdepth rules
+# keep nagini's output paths, and keep the outputs (Hydra marks them temp)
+# because the QC report and the deliverables read them.
+use rule mosdepth from qc as qc_mosdepth_genome with:
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+    output:
+        bed="qc/mosdepth/{sample}_{type}.regions.bed.gz",
+        csi=temp("qc/mosdepth/{sample}_{type}.regions.bed.gz.csi"),
+        glob="qc/mosdepth/{sample}_{type}.mosdepth.global.dist.txt",
+        region="qc/mosdepth/{sample}_{type}.mosdepth.region.dist.txt",
+        summary="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
+    params:
+        by=config.get("mosdepth", {}).get("by", 1000),
+        extra=config.get("mosdepth", {}).get("extra", ""),
+    log:
+        "logs/mosdepth_genome/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/mosdepth_genome/{sample}_{type}.tsv",
+            config.get("mosdepth", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule mosdepth_bed from qc as qc_mosdepth_targets with:
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        bed=lambda wildcards: get_resolved_design_bed(),
+    output:
+        bed="qc/mosdepth_bed/{sample}_{type}.regions.bed.gz",
+        bed_csi=temp("qc/mosdepth_bed/{sample}_{type}.regions.bed.gz.csi"),
+        coverage="qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz",
+        coverage_csi=temp("qc/mosdepth_bed/{sample}_{type}.per-base.bed.gz.csi"),
+        glob="qc/mosdepth_bed/{sample}_{type}.mosdepth.global.dist.txt",
+        region="qc/mosdepth_bed/{sample}_{type}.mosdepth.region.dist.txt",
+        summary="qc/mosdepth_bed/{sample}_{type}.mosdepth.summary.txt",
+    params:
+        extra=config.get("mosdepth_bed", {}).get("extra", ""),
+    log:
+        "logs/mosdepth_targets/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/mosdepth_targets/{sample}_{type}.tsv",
+            config.get("mosdepth_bed", {}).get("benchmark_repeats", 1),
+        )
+
+
 use rule multiqc_longread from qc as qc_multiqc_longread with:
     input:
         files=get_multiqc_input_files,
