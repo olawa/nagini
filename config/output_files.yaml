@@ -178,10 +178,6 @@ files:
     input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     when: clairs_to_vep_enabled
-  - name: ClairS-TO VEP statistics
-    input: "snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
-    output: "results/snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
-    when: clairs_to_vep_enabled
   - name: DeepVariant concatenated VCF
     input: "snv_indels/deepvariant/{sample}_{type}.vcf.gz"
     output: "results/snv_indels/deepvariant/{sample}_{type}.vcf.gz"
@@ -205,10 +201,6 @@ files:
   - name: DeepVariant VEP annotation index
     input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
-    when: deepvariant_vep_enabled
-  - name: DeepVariant VEP statistics
-    input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
-    output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: deepvariant_vep_enabled
   - name: Mutect2 merged unfiltered VCF
     input: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
@@ -245,10 +237,6 @@ files:
   - name: Mutect2 VEP annotation index
     input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
-    when: mutect2_vep_enabled
-  - name: Mutect2 VEP statistics
-    input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
-    output: "results/snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.summary.html"
     when: mutect2_vep_enabled
   - name: Mutect2 SnpEff annotation
     input: "snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.snpeff_annotated.vcf.gz"

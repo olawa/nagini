@@ -1,7 +1,7 @@
 # Verktyg och Hydra-regler i nagini
 
 `nagini` använder i första hand Hydra-Genetics-regler och wrappers. Lokala
-regler finns för inputbranching, VEP, SV-sammanfattning och Excelrapportering.
+regler finns för inputbranching, SV-sammanfattning och Excelrapportering.
 
 ## Lokala regler
 
@@ -10,13 +10,11 @@ regler finns för inputbranching, VEP, SV-sammanfattning och Excelrapportering.
 | `stage_aligned_bam` | samtools sort/index | Kräver uttrycklig no-realign-väg för alignad BAM. |
 | `minimap2_unmapped_bam_align` | samtools fastq + minimap2 + samtools | Oalignerad BAM konverteras med `-T MM,ML`. Hydras `minimap2_align` konverterar med `-T "*"` (alla taggar), vilket ändrar BAM-innehållet. |
 | `sv_summary` | Python/VCF-parser | Hydra har ingen generell Sniffles2→translocations-tabell; regeln räknar SVTYPE/BND och kan överlappa BED. |
-| `vep_annotate_{mutect2,clairs_to,deepvariant}`, `amplicon_vep_annotate` | Ensembl VEP | Valfri offline-annotering mot en referenskompatibel cache. Lokal eftersom Hydras `vep` kör med `--no_stats` och inte kan skriva den levererade `*.vep.summary.html`. |
 | `nagini_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
 
 Shell-/script-reglerna har `container`, `conda`, logg, benchmark och de fem
-standardresurserna. Mosdepth-reglerna använder i stället den pinnade Hydra-
-wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
-`envs/gatk.yaml` och `envs/vep.yaml`.
+standardresurserna. Conda-fallback finns i `envs/nagini.yaml`. Regler från
+Hydra-moduler använder sina containrar eller wrapperns egen miljödefinition.
 
 ## Hydra-moduler
 
@@ -26,7 +24,7 @@ wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
 | cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth (`mosdepth`, `mosdepth_bed`), MultiQC |
 | snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO, DeepVariant och amplikon), ClairS-TO, DeepVariant, bgzip, tabix |
-| annotation | `v1.5.0` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
+| annotation | `v1.5.0` | SnpEff, simple SV annotation och VEP (`vep`, för Mutect2, ClairS-TO, DeepVariant och amplikon). VEP körs med `--no_stats`, så ingen `*.vep.summary.html` skrivs (D16). |
 
 `v2.1.0-nagini` är en lokal kompatibilitetstagg från Hydra
 `snv_indels v2.1.0`; patchen tar bort en oanvänd DeepTrio-include som annars

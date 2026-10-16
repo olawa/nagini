@@ -376,55 +376,6 @@ def _amplicon_run_id(sample, sample_type):
     return ""
 
 
-rule amplicon_vep_annotate:
-    """Annotate the amplicon calls with neville's VEP settings."""
-    input:
-        vcf="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz",
-        tbi="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz.tbi",
-        fasta=config["reference"]["fasta"],
-        cache=lambda wildcards: config["vep"]["vep_cache"],
-    output:
-        vcf=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vep.vcf"),
-        stats="reports/neville_compat/{sample}_{type}.vep.summary.html",
-    params:
-        mode=config.get("amplicon_vep", {}).get("mode", config.get("vep", {}).get("mode", "--offline --cache --merged")),
-        extra=config.get("amplicon_vep", {}).get(
-            "extra",
-            "--format vcf --assembly GRCh38 --check_existing --pick --variant_class --everything "
-            "--pick_order mane_select,mane_plus_clinical,canonical,biotype,rank,appris,tsl,ccds,length,ensembl,refseq",
-        ),
-    log:
-        "logs/amplicon_vep_annotate/{sample}_{type}.log",
-    threads: config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4))
-    resources:
-        mem_mb=config.get("amplicon_vep", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("amplicon_vep", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("amplicon_vep", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4)),
-        time=config.get("amplicon_vep", {}).get("time", config["default_resources"]["time"]),
-    container:
-        config.get("amplicon_vep", {}).get("container", config.get("vep", {}).get("container", config["default_container"]))
-    conda:
-        "../../envs/vep.yaml"
-    message:
-        "{rule}: VEP annotate amplicon calls for {wildcards.sample}_{wildcards.type}"
-    shell:
-        """
-        vep \
-            --input_file {input.vcf} \
-            --output_file {output.vcf} \
-            --vcf \
-            --force_overwrite \
-            --no_progress \
-            --stats_file {output.stats} \
-            --dir_cache {input.cache} \
-            --fasta {input.fasta} \
-            --fork {threads} \
-            {params.mode} \
-            {params.extra} &> {log}
-        """
-
-
 rule amplicon_vep_bgzip:
     """Compress and index the VEP-annotated amplicon calls."""
     input:

@@ -1032,3 +1032,128 @@ use rule simple_sv_annotation from annotation as annotation_simple_sv with:
             "benchmarks/simple_sv_annotation/{sample}_{type}.tsv",
             config.get("simple_sv_annotation", {}).get("benchmark_repeats", 1),
         )
+
+
+# VEP: Hydra's `vep` rule.  It runs with --no_stats, so the *.vep.summary.html
+# statistics report is no longer produced or delivered (D16, option 3).
+use rule vep from annotation as annotation_vep_mutect2 with:
+    input:
+        cache=config.get("vep", {}).get("vep_cache", ""),
+        fasta=config["reference"]["fasta"],
+        tabix="snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+        vcf="snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    output:
+        vcf=temp("snv_indels/mutect2_postprocess/{sample}_{type}.filtered.norm.vep.vcf"),
+    params:
+        # Hydra's shell has no slot for custom annotations, so ClinVar rides in
+        # extra.  Hydra also leaves out --force_overwrite and --no_progress,
+        # which do not change the annotation.
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                get_vep_custom_annotations(wildcards),
+                config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
+            )
+            if part
+        ),
+        mode=config.get("vep", {}).get("mode", "--offline --cache"),
+    log:
+        "logs/vep_annotate_mutect2/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/vep_annotate_mutect2/{sample}_{type}.tsv",
+            config.get("vep", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule vep from annotation as annotation_vep_clairs_to with:
+    input:
+        cache=config.get("vep", {}).get("vep_cache", ""),
+        fasta=config["reference"]["fasta"],
+        tabix="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+        vcf="snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    output:
+        vcf=temp("snv_indels/clairs_to_postprocess/{sample}_{type}.filtered.norm.vep.vcf"),
+    params:
+        # Hydra's shell has no slot for custom annotations, so ClinVar rides in
+        # extra.  Hydra also leaves out --force_overwrite and --no_progress,
+        # which do not change the annotation.
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                get_vep_custom_annotations(wildcards),
+                config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
+            )
+            if part
+        ),
+        mode=config.get("vep", {}).get("mode", "--offline --cache"),
+    log:
+        "logs/vep_annotate_clairs_to/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/vep_annotate_clairs_to/{sample}_{type}.tsv",
+            config.get("vep", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule vep from annotation as annotation_vep_deepvariant with:
+    input:
+        cache=config.get("vep", {}).get("vep_cache", ""),
+        fasta=config["reference"]["fasta"],
+        tabix="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+        vcf="snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    output:
+        vcf=temp("snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf"),
+    params:
+        # Hydra's shell has no slot for custom annotations, so ClinVar rides in
+        # extra.  Hydra also leaves out --force_overwrite and --no_progress,
+        # which do not change the annotation.
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                get_vep_custom_annotations(wildcards),
+                config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
+            )
+            if part
+        ),
+        mode=config.get("vep", {}).get("mode", "--offline --cache"),
+    log:
+        "logs/vep_annotate_deepvariant/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/vep_annotate_deepvariant/{sample}_{type}.tsv",
+            config.get("vep", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule vep from annotation as annotation_vep_amplicon with:
+    input:
+        cache=config.get("vep", {}).get("vep_cache", ""),
+        fasta=config["reference"]["fasta"],
+        tabix="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz.tbi",
+        vcf="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz",
+    output:
+        vcf=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vep.vcf"),
+    params:
+        mode=config.get("amplicon_vep", {}).get("mode", config.get("vep", {}).get("mode", "--offline --cache --merged")),
+        extra=config.get("amplicon_vep", {}).get(
+            "extra",
+            "--format vcf --assembly GRCh38 --check_existing --pick --variant_class --everything "
+            "--pick_order mane_select,mane_plus_clinical,canonical,biotype,rank,appris,tsl,ccds,length,ensembl,refseq",
+        ),
+    log:
+        "logs/amplicon_vep_annotate/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/amplicon_vep_annotate/{sample}_{type}.tsv",
+            config.get("amplicon_vep", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4))
+    resources:
+        mem_mb=config.get("amplicon_vep", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("amplicon_vep", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("amplicon_vep", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4)),
+        time=config.get("amplicon_vep", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("amplicon_vep", {}).get("container", config.get("vep", {}).get("container", config["default_container"]))
