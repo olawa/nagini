@@ -42,8 +42,6 @@ pipeline-specifik logik:
 ```bash
 hydra-genetics create-rule -c stage_aligned_bam -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
-hydra-genetics create-rule -c minimap2_unmapped_bam_align -m nagini \
-  -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
 hydra-genetics create-rule -c sv_summary -m nagini \
   -a "Ola Wallerman" -e "ola.wallerman@scilifelab.uu.se"
 ```

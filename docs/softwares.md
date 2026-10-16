@@ -8,7 +8,6 @@ regler finns för inputbranching, SV-sammanfattning och Excelrapportering.
 | Regel | Verktyg/funktion | Varför lokal? |
 | --- | --- | --- |
 | `stage_aligned_bam` | samtools sort/index | Kräver uttrycklig no-realign-väg för alignad BAM. |
-| `minimap2_unmapped_bam_align` | samtools fastq + minimap2 + samtools | Oalignerad BAM konverteras med `-T MM,ML`. Hydras `minimap2_align` konverterar med `-T "*"` (alla taggar), vilket ändrar BAM-innehållet. |
 | `sv_summary` | Python/VCF-parser | Hydra har ingen generell Sniffles2→translocations-tabell; regeln räknar SVTYPE/BND och kan överlappa BED. |
 | `nagini_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
 
@@ -20,7 +19,7 @@ Hydra-moduler använder sina containrar eller wrapperns egen miljödefinition.
 
 | Modul | Tag i nagini | Användning |
 | --- | --- | --- |
-| alignment | `v0.9.0` | minimap2-index, `minimap2_align` (FASTQ-units), `minimap2_merge` (sammanslagning av units), `samtools_index` (mergad BAM) |
+| alignment | `v0.9.0` | minimap2-index, `minimap2_align` (FASTQ- och uBAM-units), `minimap2_merge` (sammanslagning av units), `samtools_index` (mergad BAM) |
 | cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth (`mosdepth`, `mosdepth_bed`), MultiQC |
 | snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO, DeepVariant och amplikon), ClairS-TO, DeepVariant, bgzip, tabix |

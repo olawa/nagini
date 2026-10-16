@@ -16,8 +16,6 @@ properties:
     $ref: "#/definitions/rule_io"
   finalize_dorado_bam_alignment:
     $ref: "#/definitions/rule_io"
-  minimap2_unmapped_bam_align:
-    $ref: "#/definitions/rule_io"
   sv_summary:
     $ref: "#/definitions/rule_io"
   gatk_merge_mutect_stats:

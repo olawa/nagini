@@ -11,7 +11,6 @@ include: "rules/dorado.smk"
 include: "rules/align_dorado_bam.smk"
 include: "rules/read_filter.smk"
 
-include: "rules/minimap2_unmapped_bam_align.smk"
 include: "rules/merged_fastq.smk"
 include: "rules/target_bam.smk"
 include: "rules/sv_summary.smk"
@@ -57,12 +56,10 @@ use rule minimap2_index from alignment as alignment_minimap2_index with:
         mmi=get_reference_index(),
 
 
-# FASTQ units go through Hydra's minimap2_align.  Its wrapper reads a FASTQ as
-# is, so the -y that copies the MM/ML tags from the read header, the read group
-# and the per-unit preset all travel in params.extra.  The unmapped-BAM units
-# stay on minimap2_unmapped_bam_align: the wrapper converts a BAM with
-# `samtools fastq -T "*"`, which carries every tag, and nagini deliberately
-# carries MM and ML only.
+# FASTQ and unmapped-BAM units go through Hydra's minimap2_align.  The wrapper
+# reads a FASTQ as is, so the -y that copies the MM/ML tags from the read header,
+# the read group and the per-unit preset all travel in params.extra.  For a BAM
+# the wrapper converts with `samtools fastq -T "*"` and adds -y itself.
 use rule minimap2_align from alignment as alignment_minimap2_fastq_align with:
     input:
         query=lambda wildcards: get_fastq_for_alignment(wildcards),
@@ -97,6 +94,45 @@ use rule minimap2_align from alignment as alignment_minimap2_fastq_align with:
         time=config.get("minimap2_fastq_align", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("minimap2_fastq_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
+
+
+# Unmapped-BAM units.  The wrapper's `samtools fastq -T "*"` carries every tag of
+# the uBAM (instrument tags such as qs and ts as well as MM and ML) into the
+# aligned BAM; the old local rule carried MM and ML only (D17).
+use rule minimap2_align from alignment as alignment_minimap2_ubam_align with:
+    input:
+        query=lambda wildcards: get_unmapped_bam_for_alignment(wildcards),
+        target=lambda wildcards: get_reference_target_for_unit(wildcards),
+    output:
+        bam="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_ubam.bam",
+    params:
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                config.get("minimap2_align", {}).get("extra", ""),
+                "-R '{}'".format(get_minimap2_read_group(wildcards)),
+                "-x {}".format(get_minimap2_preset_for_unit(wildcards)),
+            )
+            if part
+        ),
+        sorting="coordinate",
+        sort_extra="",
+    log:
+        "logs/minimap2_unmapped_bam_align/{sample}_{type}_{processing_unit}_{barcode}.log",
+    benchmark:
+        repeat(
+            "benchmarks/minimap2_unmapped_bam_align/{sample}_{type}_{processing_unit}_{barcode}.tsv",
+            config.get("minimap2_unmapped_bam_align", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("minimap2_unmapped_bam_align", {}).get("threads", config["default_resources"]["threads"])
+    resources:
+        mem_mb=config.get("minimap2_unmapped_bam_align", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("minimap2_unmapped_bam_align", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("minimap2_unmapped_bam_align", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("minimap2_unmapped_bam_align", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("minimap2_unmapped_bam_align", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("minimap2_unmapped_bam_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
 
 
 # One merged BAM per sample/type from the per-unit alignments, whatever route
