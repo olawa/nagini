@@ -376,48 +376,6 @@ def _amplicon_run_id(sample, sample_type):
     return ""
 
 
-rule amplicon_norm_rindels:
-    """Left-align and split the amplicon calls before annotation.
-
-    neville normalises with vt before VEP. Without the same step an indel can
-    sit at a different position in the two reports and look like a discrepancy.
-    """
-    input:
-        vcf="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz",
-        tbi="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz.tbi",
-        ref=config["reference"]["fasta"],
-    output:
-        vcf=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz"),
-        tbi=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz.tbi"),
-    params:
-        extra=config.get("amplicon_norm_rindels", {}).get("extra", "--multiallelics -both --check-ref w"),
-    log:
-        "logs/amplicon_norm_rindels/{sample}_{type}.log",
-    threads: 1
-    resources:
-        mem_mb=config.get("amplicon", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("amplicon", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
-        threads=1,
-        time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
-    container:
-        config.get("amplicon", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
-    message:
-        "{rule}: normalize amplicon calls for {wildcards.sample}_{wildcards.type}"
-    shell:
-        """
-        bcftools norm \
-            --fasta-ref {input.ref} \
-            {params.extra} \
-            --output-type z \
-            --output {output.vcf} \
-            {input.vcf} &> {log}
-        bcftools index --force --tbi {output.vcf} >> {log} 2>&1
-        """
-
-
 rule amplicon_vep_annotate:
     """Annotate the amplicon calls with neville's VEP settings."""
     input:

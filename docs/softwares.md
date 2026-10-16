@@ -2,7 +2,7 @@
 
 `nagini` använder i första hand Hydra-Genetics-regler och wrappers. Lokala
 regler finns för inputbranching, en wrapper-kompatibel mosdepth-kedja,
-Mutect2-efterbehandling, VEP, SV-sammanfattning och Excelrapportering.
+VEP, SV-sammanfattning och Excelrapportering.
 
 ## Lokala regler
 
@@ -15,10 +15,7 @@ Mutect2-efterbehandling, VEP, SV-sammanfattning och Excelrapportering.
 | `mosdepth_genome` | mosdepth via Hydra/Snakemake-wrapper | Hydra qc v0.8.0 deklarerar inkompatibla outputnamn med den pinnade wrappern; regeln producerar windowed whole-genome coverage. |
 | `mosdepth_targets` | mosdepth via Hydra/Snakemake-wrapper | Producerar target-regioner och per-base BED med wrapperns `per_base`-output. |
 | `sv_summary` | Python/VCF-parser | Hydra har ingen generell Sniffles2→translocations-tabell; regeln räknar SVTYPE/BND och kan överlappa BED. |
-| `gatk_merge_mutect_stats` | GATK MergeMutectStats | Slår ihop statistik från den kromosomindelade Mutect2-körningen. |
-| `gatk_filter_mutect_calls` | GATK FilterMutectCalls | Filtrerar den sammanfogade Mutect2-VCF:en med den sammanslagna statistiken. |
-| `bcftools_norm_mutect2` | bcftools norm/index | Vänsterjusterar, normaliserar och delar multialleliska varianter. |
-| `vep_annotate_mutect2` | Ensembl VEP | Valfri offline-annotering mot en referenskompatibel cache. |
+| `vep_annotate_{mutect2,clairs_to,deepvariant}`, `amplicon_vep_annotate` | Ensembl VEP | Valfri offline-annotering mot en referenskompatibel cache. Lokal eftersom Hydras `vep` kör med `--no_stats` och inte kan skriva den levererade `*.vep.summary.html`. |
 | `nagini_excel_report` | Python XLSX-writer | Samlar QC, coverage, SNV/indel och SV/BND utan externa Python-paket. |
 
 Shell-/script-reglerna har `container`, `conda`, logg, benchmark och de fem
@@ -33,7 +30,7 @@ wrapperns egna miljödefinition. Conda-fallback finns i `envs/nagini.yaml`,
 | alignment | `v0.9.0` | minimap2-index |
 | cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth, target-BED mosdepth, MultiQC |
-| snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, bcftools concat, tabix |
+| snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO, DeepVariant och amplikon), ClairS-TO, DeepVariant, bgzip, tabix |
 | annotation | `v1.5.0` | SnpEff och simple SV annotation; VEP-kedjan är lokal |
 
 `v2.1.0-nagini` är en lokal kompatibilitetstagg från Hydra
