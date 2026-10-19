@@ -78,6 +78,7 @@ def load_all_sites(path: Path) -> Tuple[Optional[str], List[Dict[str, str]]]:
     sample_name = None
     rows = []
     with path.open() as handle:
+        first_line = ""
         for line in handle:
             line_str = line.strip()
             if not line_str:
@@ -86,12 +87,29 @@ def load_all_sites(path: Path) -> Tuple[Optional[str], List[Dict[str, str]]]:
                 if "sample=" in line_str and not sample_name:
                     sample_name = line_str.split("sample=")[1].split()[0]
                 continue
+            first_line = line_str
             break
-        reader = csv.DictReader(handle, fieldnames=line_str.split("\t"), delimiter="\t")
+
+        if not first_line:
+            return sample_name, rows
+
+        fieldnames = first_line.split("\t")
+        reader = csv.DictReader(handle, fieldnames=fieldnames, delimiter="\t")
+        is_rindels = "filtered_depth" in fieldnames or ("A" in fieldnames and "A_fwd" in fieldnames)
+
         for r in reader:
-            if r.get("record_type") != "SITE_AUDIT":
+            if not is_rindels and r.get("record_type") != "SITE_AUDIT":
                 continue
             rows.append(r)
+
+    if not sample_name:
+        stem = path.name
+        for suffix in [".branford_all_sites.tsv", ".pileup_counts.tsv", ".target_raw_counts.tsv", ".tsv"]:
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+                break
+        sample_name = stem
+
     return sample_name, rows
 
 
@@ -125,9 +143,9 @@ def generate_plot(
 
     for r in rows:
         mut = r.get("mutation") or r.get("name", "Unknown")
-        ref = r.get("ref", "").upper()
-        alt = r.get("alt", "").upper()
-        depth = float(r.get("depth", 0) or 0)
+        ref = (r.get("ref") or r.get("ref_base") or "").upper()
+        alt = (r.get("alt") or r.get("alt_base") or "").upper()
+        depth = float(r.get("depth") or r.get("filtered_depth") or r.get("raw_depth") or 0)
         depths.append(depth)
         labels.append(f"{mut}\n({ref}>{alt})")
 
@@ -137,12 +155,13 @@ def generate_plot(
         pct_g = float(r.get("pct_G", 0) or 0)
         pct_t = float(r.get("pct_T", 0) or 0)
 
+        c_a = float(r.get("count_A") or r.get("A") or 0)
+        c_c = float(r.get("count_C") or r.get("C") or 0)
+        c_g = float(r.get("count_G") or r.get("G") or 0)
+        c_t = float(r.get("count_T") or r.get("T") or 0)
+
         # Fallback if pct_A wasn't populated
         if pct_a == 0 and pct_c == 0 and pct_g == 0 and pct_t == 0 and depth > 0:
-            c_a = float(r.get("count_A", 0) or 0)
-            c_c = float(r.get("count_C", 0) or 0)
-            c_g = float(r.get("count_G", 0) or 0)
-            c_t = float(r.get("count_T", 0) or 0)
             pct_a = c_a / depth * 100.0
             pct_c = c_c / depth * 100.0
             pct_g = c_g / depth * 100.0
@@ -153,8 +172,22 @@ def generate_plot(
         data_g.append(pct_g)
         data_t.append(pct_t)
 
-        pct_ref = float(r.get("ad_ref", 0) or 0) / depth * 100.0 if depth > 0 else 0.0
-        pct_alt = float(r.get("ad_alt", 0) or 0) / depth * 100.0 if depth > 0 else 0.0
+        if "ad_ref" in r:
+            c_ref = float(r.get("ad_ref") or 0)
+        elif ref in ("A", "C", "G", "T"):
+            c_ref = float(r.get(f"count_{ref}") or r.get(ref) or 0)
+        else:
+            c_ref = float(r.get("ref_count") or 0)
+
+        if "ad_alt" in r:
+            c_alt = float(r.get("ad_alt") or 0)
+        elif alt in ("A", "C", "G", "T"):
+            c_alt = float(r.get(f"count_{alt}") or r.get(alt) or 0)
+        else:
+            c_alt = float(r.get("alt_count") or 0)
+
+        pct_ref = c_ref / depth * 100.0 if depth > 0 else 0.0
+        pct_alt = c_alt / depth * 100.0 if depth > 0 else 0.0
         pct_other = max(0.0, 100.0 - pct_ref - pct_alt) if depth > 0 else 0.0
 
         data_ref.append(pct_ref)
@@ -182,10 +215,10 @@ def generate_plot(
 
         # Bottom panel: zoom in on non-ref bases
         # For each site, compute non-ref base percentages
-        non_ref_a = [pa if r.get("ref") != "A" else 0.0 for pa, r in zip(data_a, rows)]
-        non_ref_c = [pc if r.get("ref") != "C" else 0.0 for pc, r in zip(data_c, rows)]
-        non_ref_g = [pg if r.get("ref") != "G" else 0.0 for pg, r in zip(data_g, rows)]
-        non_ref_t = [pt if r.get("ref") != "T" else 0.0 for pt, r in zip(data_t, rows)]
+        non_ref_a = [pa if (r.get("ref") or r.get("ref_base", "")).upper() != "A" else 0.0 for pa, r in zip(data_a, rows)]
+        non_ref_c = [pc if (r.get("ref") or r.get("ref_base", "")).upper() != "C" else 0.0 for pc, r in zip(data_c, rows)]
+        non_ref_g = [pg if (r.get("ref") or r.get("ref_base", "")).upper() != "G" else 0.0 for pg, r in zip(data_g, rows)]
+        non_ref_t = [pt if (r.get("ref") or r.get("ref_base", "")).upper() != "T" else 0.0 for pt, r in zip(data_t, rows)]
 
         bottom_bot = np.zeros(len(labels))
         for base, values in [("A", non_ref_a), ("C", non_ref_c), ("G", non_ref_g), ("T", non_ref_t)]:
@@ -243,27 +276,63 @@ def write_summary_tsv(rows: List[Dict[str, str]], output_tsv: Path, sample: str)
     with output_tsv.open("w") as handle:
         handle.write("\t".join(headers) + "\n")
         for r in rows:
+            depth = float(r.get("depth") or r.get("filtered_depth") or r.get("raw_depth") or 0)
+            c_a = float(r.get("count_A") or r.get("A") or 0)
+            c_c = float(r.get("count_C") or r.get("C") or 0)
+            c_g = float(r.get("count_G") or r.get("G") or 0)
+            c_t = float(r.get("count_T") or r.get("T") or 0)
+            ref = (r.get("ref") or r.get("ref_base") or "").upper()
+            alt = (r.get("alt") or r.get("alt_base") or "").upper()
+
+            pct_a = float(r.get("pct_A") or (c_a / depth * 100.0 if depth > 0 else 0.0))
+            pct_c = float(r.get("pct_C") or (c_c / depth * 100.0 if depth > 0 else 0.0))
+            pct_g = float(r.get("pct_G") or (c_g / depth * 100.0 if depth > 0 else 0.0))
+            pct_t = float(r.get("pct_T") or (c_t / depth * 100.0 if depth > 0 else 0.0))
+
+            if "ad_ref" in r:
+                ad_ref = r.get("ad_ref", "")
+            elif ref in ("A", "C", "G", "T"):
+                ad_ref = int(r.get(f"count_{ref}") or r.get(ref) or 0)
+            else:
+                ad_ref = int(r.get("ref_count") or 0)
+
+            if "ad_alt" in r:
+                ad_alt = r.get("ad_alt", "")
+            elif alt in ("A", "C", "G", "T"):
+                ad_alt = int(r.get(f"count_{alt}") or r.get(alt) or 0)
+            else:
+                ad_alt = int(r.get("alt_count") or 0)
+
+            if "vaf_percent" in r:
+                vaf_pct = r.get("vaf_percent", "")
+            elif "vaf" in r:
+                vaf_pct = f"{float(r.get('vaf', 0)) * 100.0:.2f}"
+            elif depth > 0:
+                vaf_pct = f"{float(ad_alt) / depth * 100.0:.2f}"
+            else:
+                vaf_pct = "0.0"
+
             line = [
                 sample or r.get("sample", ""),
-                r.get("mutation", ""),
+                r.get("mutation") or r.get("name", ""),
                 r.get("aa_change", ""),
                 r.get("chrom", ""),
                 r.get("pos", ""),
-                r.get("ref", ""),
-                r.get("alt", ""),
-                r.get("depth", ""),
-                r.get("count_A", ""),
-                r.get("count_C", ""),
-                r.get("count_G", ""),
-                r.get("count_T", ""),
-                r.get("pct_A", ""),
-                r.get("pct_C", ""),
-                r.get("pct_G", ""),
-                r.get("pct_T", ""),
-                r.get("ad_ref", ""),
-                r.get("ad_alt", ""),
-                r.get("vaf_percent", ""),
-                r.get("status", ""),
+                ref,
+                alt,
+                int(depth),
+                int(c_a),
+                int(c_c),
+                int(c_g),
+                int(c_t),
+                f"{pct_a:.2f}",
+                f"{pct_c:.2f}",
+                f"{pct_g:.2f}",
+                f"{pct_t:.2f}",
+                ad_ref,
+                ad_alt,
+                vaf_pct,
+                r.get("status") or r.get("vcf_filter", ""),
                 r.get("filter_reason", ""),
             ]
             handle.write("\t".join(str(val) for val in line) + "\n")

@@ -64,6 +64,37 @@ class TestPlotBranfordBackground(unittest.TestCase):
             self.assertTrue(out_png_rel.is_file())
             self.assertGreater(out_png_rel.stat().st_size, 1000)
 
+    def test_load_rindels_pileup_counts_and_plot(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pileup_path = tmp / "sample_test_T.pileup_counts.tsv"
+            out_png = tmp / "test_rindels_plot.png"
+            out_tsv = tmp / "test_rindels_counts.tsv"
+
+            header = (
+                "name\tchrom\tpos\tref\talt\traw_depth\tfiltered_depth\t"
+                "A\tC\tG\tT\tA_fwd\tA_rev\tC_fwd\tC_rev\tG_fwd\tG_rev\tT_fwd\tT_rev\t"
+                "INS\tINS_fwd\tINS_rev\tDEL\tDEL_fwd\tDEL_rev\tDEL_span\tS\tinsertions\tdeletions\tis_capped\tcap_value\n"
+            )
+            row1 = "p.Glu255Lys\tchr9\t130862976\tG\tA\t1000\t1000\t15\t3\t980\t2\t8\t7\t2\t1\t490\t490\t1\t1\t0\t0\t0\t0\t0\t0\t0\t0\t\t\tfalse\t0\n"
+            row2 = "p.Thr315Ile\tchr9\t130872896\tC\tT\t2000\t2000\t8\t1900\t12\t80\t4\t4\t950\t950\t6\t6\t40\t40\t0\t0\t0\t0\t0\t0\t0\t0\t\t\tfalse\t0\n"
+            pileup_path.write_text(header + row1 + row2)
+
+            sample_name, rows = PBB.load_all_sites(pileup_path)
+            self.assertEqual(sample_name, "sample_test_T")
+            self.assertEqual(len(rows), 2)
+
+            PBB.write_summary_tsv(rows, out_tsv, sample_name)
+            self.assertTrue(out_tsv.is_file())
+            lines = out_tsv.read_text().splitlines()
+            self.assertEqual(len(lines), 3)
+            self.assertIn("p.Glu255Lys", lines[1])
+            self.assertIn("1000", lines[1])
+
+            PBB.generate_plot(rows, out_png, sample=sample_name)
+            self.assertTrue(out_png.is_file())
+            self.assertGreater(out_png.stat().st_size, 1000)
+
 
 if __name__ == "__main__":
     unittest.main()
