@@ -52,28 +52,6 @@ def _bcr_abl_gtf():
     return _bcr_abl_resource(gtf_name)
 
 
-def _find_rindels_binary():
-    """Locate the Rindels binary from config, PATH, ~/bin, or dev checkout."""
-    override = config.get("rindels", {}).get("binary", "") or config.get("bcr_abl", {}).get("rindels_binary", "")
-    if override and (os.path.isfile(override) or shutil.which(override)):
-        return override
-    candidates = [
-        os.path.expanduser("~/bin/rindels"),
-        "/home/cgu-lab/bin/rindels",
-        os.path.expanduser("~/tmp/tools/rindels/target/release/rindels"),
-        "/home/cgu-lab/tmp/tools/rindels/target/release/rindels",
-        os.path.expanduser("~/.cargo/bin/rindels"),
-    ]
-
-    for c in candidates:
-        if os.path.isfile(c) and os.access(c, os.X_OK):
-            return c
-    which_r = shutil.which("rindels")
-    if which_r:
-        return which_r
-    return "rindels"
-
-
 
 
 rule bcr_abl_fusion_counts:
@@ -404,24 +382,15 @@ rule bcr_abl_rindels:
         time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
     shell:
         """
-        exec > {log} 2>&1
-        RINDELS_BIN="{params.binary}"
-        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
-            echo "Error: Rindels binary not found at $RINDELS_BIN"
-            exit 1
-        fi
-
-        "$RINDELS_BIN" -b {input.bam} -r {input.ref} -o {output.vcf} \
-            {params.extra} --bcr-abl-genome {params.genome} \
-            --write-haplotypes {output.haplotypes} -t {threads}
-
-        if [ -s "{output.vcf}" ]; then
-            if command -v bcftools >/dev/null 2>&1; then
-                bcftools index -t {output.vcf} || true
-            elif command -v tabix >/dev/null 2>&1; then
-                tabix -p vcf {output.vcf} || true
-            fi
-        fi
+        python3 {workflow.basedir}/scripts/run_rindels.py bcr-abl \
+            --binary={params.binary:q} \
+            --bam {input.bam} \
+            --ref {input.ref} \
+            --vcf {output.vcf} \
+            --haplotypes {output.haplotypes} \
+            --genome {params.genome} \
+            --extra={params.extra:q} \
+            --threads {threads} > {log} 2>&1
         """
 
 

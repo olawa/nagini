@@ -46,11 +46,7 @@ rule cnv_rindels:
         # says as much ("hg38 only supported for ideogram gaps currently").
         # The report is therefore switchable, so a T2T run can drop a figure
         # drawn on the wrong coordinates instead of publishing it.
-        report=lambda wildcards, output: (
-            f"--report --report-path {output.pdf}"
-            if config.get("rindels", {}).get("report", True)
-            else ""
-        ),
+        report=lambda wildcards: "--report" if config.get("rindels", {}).get("report", True) else "",
     log:
         "logs/cnv_rindels/{sample}_{type}.log",
     benchmark:
@@ -69,42 +65,19 @@ rule cnv_rindels:
         "{rule}: call whole-genome copy number variations with Rindels for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        exec > {log} 2>&1
-        RINDELS_BIN="{params.binary}"
-        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
-            echo "Error: Rindels binary not found at $RINDELS_BIN"
-            exit 1
-        fi
-
-        "$RINDELS_BIN" \
-            -b {input.bam} \
-            -r {input.ref} \
-            --cnv-output {output.bins} \
-            --cnv-bin-size {params.bin_size} \
-            -o {output.vcf} \
+        python3 {workflow.basedir}/scripts/run_rindels.py cnv \
+            --binary={params.binary:q} \
+            --bam {input.bam} \
+            --ref {input.ref} \
+            --bins {output.bins} \
+            --bin-size {params.bin_size} \
+            --vcf {output.vcf} \
+            --ascat {output.ascat} \
+            --pdf {output.pdf} \
             {params.report} \
-            -t {threads} \
-            {params.annotation} \
-            {params.extra}
-
-        # Rindels skips the ASCAT segmentation when it finds fewer than 100
-        # heterozygous sites, which is a legitimate outcome for a shallow or
-        # genomically quiet sample. Leave a header-only file so the run
-        # reports no segments instead of dying on a missing output;
-        # cnv_summary already treats an empty file as zero segments.
-        if [ ! -f "{output.ascat}" ]; then
-            echo "ASCAT segmentation skipped by Rindels (too few heterozygous sites); see the log."
-            printf '%s\n' \
-                "# ASCAT-style Heuristic Copy Number Segments" \
-                "# NOTE: Rindels skipped segmentation for this sample (too few heterozygous sites)" \
-                "# Columns: chrom, start, end, CN_A, CN_B, BAF, logR, n_sites, state, n_het, n_hom, n_total" \
-                > "{output.ascat}"
-        fi
-
-        if [ ! -f "{output.pdf}" ]; then
-            echo "Rindels unified PDF report not produced or switched off; leaving a placeholder."
-            touch "{output.pdf}"
-        fi
+            --annotation={params.annotation:q} \
+            --extra={params.extra:q} \
+            --threads {threads} > {log} 2>&1
         """
 
 
@@ -222,54 +195,16 @@ rule cnv_rindels_ideogram:
         "{rule}: draw the whole-genome ideogram for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        exec > {log} 2>&1
-        RINDELS_BIN="{params.binary}"
-        if ! command -v "$RINDELS_BIN" >/dev/null 2>&1 && [ ! -x "$RINDELS_BIN" ]; then
-            echo "Error: Rindels binary not found at $RINDELS_BIN"
-            exit 1
-        fi
-
-        mkdir -p "$(dirname {output.png})"
-
-        # Prefer the table the PDF report renders from; fall back to the BED.
-        if [ -s "{params.parquet}" ]; then
-            CNV_ARG="--cnv {params.parquet}"
-        else
-            echo "No CNV Parquet at {params.parquet}; falling back to the binned BED."
-            CNV_ARG="--bed {input.bins}"
-        fi
-
-        BAF_ARG=""
-        if [ -s "{params.baf}" ]; then
-            BAF_ARG="--baf-bed {params.baf}"
-        else
-            echo "No BAF track at {params.baf}; drawing density only."
-        fi
-
-        CENTROMERE_ARG=""
-        if [ -s "{input.centromeres}" ]; then
-            CENTROMERE_ARG="--centromeres {input.centromeres}"
-        else
-            echo "No centromere BED; Rindels decides from the data's own lengths."
-        fi
-
-        # Gaps are registered per build and usually absent: a gapless assembly
-        # such as chm13 has none to draw, and Rindels no longer substitutes
-        # GRCh38's when the lengths say the assembly is something else.
-        GAPS_ARG=""
-        if [ -n "{input.gaps}" ] && [ -s "{input.gaps}" ]; then
-            GAPS_ARG="--gaps {input.gaps}"
-        fi
-
-        "$RINDELS_BIN" ideogram \
-            $CNV_ARG \
-            $BAF_ARG \
-            $CENTROMERE_ARG \
-            $GAPS_ARG \
+        python3 {workflow.basedir}/scripts/run_rindels.py ideogram \
+            --binary={params.binary:q} \
+            --bins {input.bins} \
+            --parquet={params.parquet:q} \
+            --baf={params.baf:q} \
+            --centromeres={input.centromeres:q} \
+            --gaps={input.gaps:q} \
             --bin-size {params.bin_size} \
-            --res $(( {params.bin_size} / 1000 )) \
             --width {params.width} \
             --height {params.height} \
-            {params.extra} \
-            -o {output.png}
+            --extra={params.extra:q} \
+            --output {output.png} > {log} 2>&1
         """
