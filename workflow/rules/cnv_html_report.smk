@@ -90,11 +90,11 @@ rule cnvkit_json:
         annotations=config.get("merge_cnv_json", {}).get("annotations", []),
     output:
         json=temp("reports/cnv_html_report/{sample}_{type}.{caller}.json"),
-    wildcard_constraints:
-        caller="cnvkit",
     params:
         skip_chromosomes=config["references"][config.get("reference_build", "hg38")].get("skip_chrs"),
         csv_field_size_limit=config.get("cnv_json", {}).get("csv_field_size_limit", 100000000),
+    wildcard_constraints:
+        caller="cnvkit",
     log:
         "reports/cnv_html_report/{sample}_{type}.{caller}.json.log",
     benchmark:

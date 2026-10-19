@@ -3,104 +3,834 @@ description: Resource definitions used by nagini and its Hydra modules.
 type: object
 properties:
   default_resources:
-    $ref: '#/definitions/resources'
-  _copy:
-    $ref: '#/definitions/resources'
-  arriba:
-    $ref: '#/definitions/resources'
-  bcftools_norm_clairs_to:
-    $ref: '#/definitions/resources'
-  bcftools_norm_deepvariant:
-    $ref: '#/definitions/resources'
-  bcftools_norm_mutect2:
-    $ref: '#/definitions/resources'
-  bcr_abl:
-    $ref: '#/definitions/resources'
-  bcr_abl_rindels:
-    $ref: '#/definitions/resources'
-  cnv_html_report:
-    $ref: '#/definitions/resources'
-  cnv_json:
-    $ref: '#/definitions/resources'
-  cnv_rindels:
-    $ref: '#/definitions/resources'
-  cnv_summary:
-    $ref: '#/definitions/resources'
-  cnvkit_batch:
-    $ref: '#/definitions/resources'
-  create_genome_contigs_bed:
-    $ref: '#/definitions/resources'
-  cytoband_centromeres:
-    $ref: '#/definitions/resources'
-  decompress_cytoband:
-    $ref: '#/definitions/resources'
-  dorado:
-    $ref: '#/definitions/resources'
-  dorado_alignment:
-    $ref: '#/definitions/resources'
-  dorado_demux_bam:
-    $ref: '#/definitions/resources'
-  dorado_demux_qc:
-    $ref: '#/definitions/resources'
-  dorado_demux_summary:
-    $ref: '#/definitions/resources'
-  dorado_fastq:
-    $ref: '#/definitions/resources'
-  extract_target_bam:
-    $ref: '#/definitions/resources'
-  finalize_dorado_alignment:
-    $ref: '#/definitions/resources'
-  gatk_filter_mutect_calls:
-    $ref: '#/definitions/resources'
-  gatk_merge_mutect_stats:
-    $ref: '#/definitions/resources'
-  merge_cnv_json:
-    $ref: '#/definitions/resources'
-  minimap2_fastq_align:
-    $ref: '#/definitions/resources'
-  minimap2_unmapped_bam_align:
-    $ref: '#/definitions/resources'
-  mosdepth:
-    $ref: '#/definitions/resources'
-  mosdepth_bed:
-    $ref: '#/definitions/resources'
-  nagini_excel_report:
-    $ref: '#/definitions/resources'
-  pad_target_bed:
-    $ref: '#/definitions/resources'
-  read_filter:
-    $ref: '#/definitions/resources'
-  rindels_ideogram:
-    $ref: '#/definitions/resources'
-  samtools_fastq:
-    $ref: '#/definitions/resources'
-  samtools_merge_bam:
-    $ref: '#/definitions/resources'
-  savana_ont_to:
-    $ref: '#/definitions/resources'
-  stage_aligned_bam:
-    $ref: '#/definitions/resources'
-  sv_summary:
-    $ref: '#/definitions/resources'
-  vep:
-    $ref: '#/definitions/resources'
-additionalProperties: true
-required:
-- default_resources
-definitions:
-  resources:
     type: object
+    description: resource settings for default_resources
     properties:
       mem_mb:
         type: integer
+        description: memory in MB
       mem_per_cpu:
         type: integer
+        description: memory per CPU in MB
       partition:
         type: string
+        description: scheduler partition
       threads:
         type: integer
+        description: number of threads
       time:
         type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  _copy:
+    type: object
+    description: resource settings for _copy
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  arriba:
+    type: object
+    description: resource settings for arriba
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  bcftools_norm_clairs_to:
+    type: object
+    description: resource settings for bcftools_norm_clairs_to
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  bcftools_norm_deepvariant:
+    type: object
+    description: resource settings for bcftools_norm_deepvariant
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  bcftools_norm_mutect2:
+    type: object
+    description: resource settings for bcftools_norm_mutect2
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  bcr_abl:
+    type: object
+    description: resource settings for bcr_abl
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  bcr_abl_rindels:
+    type: object
+    description: resource settings for bcr_abl_rindels
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cnv_html_report:
+    type: object
+    description: resource settings for cnv_html_report
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cnv_json:
+    type: object
+    description: resource settings for cnv_json
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cnv_rindels:
+    type: object
+    description: resource settings for cnv_rindels
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cnv_summary:
+    type: object
+    description: resource settings for cnv_summary
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cnvkit_batch:
+    type: object
+    description: resource settings for cnvkit_batch
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  create_genome_contigs_bed:
+    type: object
+    description: resource settings for create_genome_contigs_bed
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  cytoband_centromeres:
+    type: object
+    description: resource settings for cytoband_centromeres
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  decompress_cytoband:
+    type: object
+    description: resource settings for decompress_cytoband
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  dorado:
+    type: object
+    description: resource settings for dorado
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
       gres:
         type: string
+        description: generic resources, for example a GPU request
     additionalProperties: true
+  dorado_alignment:
+    type: object
+    description: resource settings for dorado_alignment
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+      gres:
+        type: string
+        description: generic resources, for example a GPU request
+    additionalProperties: true
+  dorado_demux_bam:
+    type: object
+    description: resource settings for dorado_demux_bam
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+      gres:
+        type: string
+        description: generic resources, for example a GPU request
+    additionalProperties: true
+  dorado_demux_qc:
+    type: object
+    description: resource settings for dorado_demux_qc
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  dorado_demux_summary:
+    type: object
+    description: resource settings for dorado_demux_summary
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  dorado_fastq:
+    type: object
+    description: resource settings for dorado_fastq
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  extract_target_bam:
+    type: object
+    description: resource settings for extract_target_bam
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  finalize_dorado_alignment:
+    type: object
+    description: resource settings for finalize_dorado_alignment
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  gatk_filter_mutect_calls:
+    type: object
+    description: resource settings for gatk_filter_mutect_calls
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  gatk_merge_mutect_stats:
+    type: object
+    description: resource settings for gatk_merge_mutect_stats
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  merge_cnv_json:
+    type: object
+    description: resource settings for merge_cnv_json
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  minimap2_fastq_align:
+    type: object
+    description: resource settings for minimap2_fastq_align
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  minimap2_unmapped_bam_align:
+    type: object
+    description: resource settings for minimap2_unmapped_bam_align
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  mosdepth:
+    type: object
+    description: resource settings for mosdepth
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  mosdepth_bed:
+    type: object
+    description: resource settings for mosdepth_bed
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  nagini_excel_report:
+    type: object
+    description: resource settings for nagini_excel_report
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  pad_target_bed:
+    type: object
+    description: resource settings for pad_target_bed
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  read_filter:
+    type: object
+    description: resource settings for read_filter
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  rindels_ideogram:
+    type: object
+    description: resource settings for rindels_ideogram
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  samtools_fastq:
+    type: object
+    description: resource settings for samtools_fastq
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  samtools_merge_bam:
+    type: object
+    description: resource settings for samtools_merge_bam
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  savana_ont_to:
+    type: object
+    description: resource settings for savana_ont_to
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  stage_aligned_bam:
+    type: object
+    description: resource settings for stage_aligned_bam
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  sv_summary:
+    type: object
+    description: resource settings for sv_summary
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+  vep:
+    type: object
+    description: resource settings for vep
+    properties:
+      mem_mb:
+        type: integer
+        description: memory in MB
+      mem_per_cpu:
+        type: integer
+        description: memory per CPU in MB
+      partition:
+        type: string
+        description: scheduler partition
+      threads:
+        type: integer
+        description: number of threads
+      time:
+        type: string
+        description: maximum run time, d-hh:mm:ss
+    additionalProperties: true
+additionalProperties: true
+required:
+- default_resources

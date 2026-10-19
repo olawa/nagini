@@ -23,15 +23,15 @@ rule, and mem_mb was emitted as a string. One generic rule needs none of it.
 rule copy_to_results:
     """Copy one deliverable into results/, leaving the in-place file alone."""
     input:
-        # results/<path> comes from <path>; the constraint stops results/
-        # from being its own source.
-        lambda wildcards: wildcards.path,
+        src=lambda wildcards: wildcards.path,
     output:
-        "results/{path}",
-    wildcard_constraints:
-        path=r"(?!results/).+",
+        dst="results/{path}",
     params:
         extra=config.get("_copy", {}).get("extra", ""),
+    wildcard_constraints:
+        # results/<path> comes from <path>; the constraint stops results/
+        # from being its own source.
+        path=r"(?!results/).+",
     log:
         "logs/copy_to_results/{path}.log",
     benchmark:

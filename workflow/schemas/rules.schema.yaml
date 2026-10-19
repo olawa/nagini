@@ -9,9 +9,11 @@ properties:
       input:
         type: object
         description: input files
+        properties: {}
       output:
         type: object
         description: output files
+        properties: {}
   bcr_abl_bcftools_pileup:
     type: object
     description: input and output parameters for bcr_abl_bcftools_pileup
@@ -424,9 +426,11 @@ properties:
       input:
         type: object
         description: input files (resolved per sample)
+        properties: {}
       output:
         type: object
         description: output files (resolved per sample)
+        properties: {}
   create_genome_contigs_bed:
     type: object
     description: input and output parameters for create_genome_contigs_bed
@@ -791,6 +795,7 @@ properties:
       input:
         type: object
         description: input files (resolved per sample)
+        properties: {}
       output:
         type: object
         description: output files

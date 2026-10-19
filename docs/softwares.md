@@ -71,12 +71,9 @@ Rindels är en värdbinär.
 
 ## Regelreferens
 
-### align_dorado_bam_raw
-Align the exported per-barcode FASTQ with minimap2.
-
-#SNAKEMAKE_RULE_SOURCE__align_dorado_bam__align_dorado_bam_raw#
-
-#SNAKEMAKE_RULE_TABLE__align_dorado_bam__align_dorado_bam_raw#
+Tre regler saknar referensavsnitt eftersom dokumentationspluginet inte kan läsa dem:
+`align_dorado_bam_raw` (definieras villkorligt), `copy_to_results` och
+`nagini_summary_excel_report` (flerradiga och `unpack`-baserade indata). De finns i tabellen ovan.
 
 ### finalize_dorado_bam_alignment
 Add sample metadata, coordinate-sort, and index an aligned Dorado unit.
@@ -276,17 +273,6 @@ Run CNVkit in WGS mode on a tumor-only ONT BAM.
 
 #RESOURCESSCHEMA__cnvkit_batch#
 
-### copy_to_results
-Copy one deliverable into results/, leaving the in-place file alone.
-
-#SNAKEMAKE_RULE_SOURCE__copy_results__copy_to_results#
-
-#SNAKEMAKE_RULE_TABLE__copy_results__copy_to_results#
-
-#CONFIGSCHEMA___copy#
-
-#RESOURCESSCHEMA___copy#
-
 ### dorado_basecaller
 Basecall a MinKNOW/POD5 directory and retain barcode sequence context.
 
@@ -359,17 +345,6 @@ Build a portable multi-sheet workbook from final QC and variant outputs.
 #SNAKEMAKE_RULE_SOURCE__excel_report__nagini_excel_report#
 
 #SNAKEMAKE_RULE_TABLE__excel_report__nagini_excel_report#
-
-#CONFIGSCHEMA__nagini_excel_report#
-
-#RESOURCESSCHEMA__nagini_excel_report#
-
-### nagini_summary_excel_report
-Build a multi-sample summary Excel workbook across all samples in the run.
-
-#SNAKEMAKE_RULE_SOURCE__excel_report__nagini_summary_excel_report#
-
-#SNAKEMAKE_RULE_TABLE__excel_report__nagini_summary_excel_report#
 
 #CONFIGSCHEMA__nagini_excel_report#
 

@@ -23,6 +23,7 @@ properties:
     description: Annotate normalized filtered small variants with an offline VEP cache.
   annotate_svs:
     type: boolean
+    description: annotate structural variants with SnpEff (needs snpeff.db)
   arriba:
     type: object
     description: settings for arriba
@@ -119,6 +120,8 @@ properties:
         type: string
         description: extra command-line arguments
   bcftools_norm_mutect2:
+    type: object
+    description: settings for bcftools_norm_mutect2
     $ref: '#/definitions/tool_config'
     properties:
       benchmark_repeats:
@@ -168,7 +171,8 @@ properties:
         type: integer
         description: 'kmer window (default: 3)'
       known_variants:
-        description: known variants
+        type: string
+        description: optional VCF of known variants to force-call, in addition to the panel
       max_depth:
         type: integer
         description: 'max depth (default: 1000000)'
@@ -400,6 +404,7 @@ properties:
     description: Default Docker/Singularity/Apptainer image.
   default_resources:
     type: object
+    description: default resources for every rule that has no entry of its own
   dorado:
     type: object
     properties:
@@ -407,34 +412,47 @@ properties:
         type:
         - string
         - 'null'
+        description: Dorado container image, or none/local to run a local binary
       binary:
         type: string
+        description: path to a local Dorado binary, used when no container is set
       input:
         type: string
+        description: MinKNOW/POD5 directory to basecall
       model:
         type: string
+        description: Dorado basecalling model (hac, sup or a model path)
       kit:
         type: string
+        description: barcoding kit name passed to dorado demux
       device:
         type: string
+        description: device passed to Dorado, for example cuda:all
       models_directory:
         type: string
+        description: directory with downloaded Dorado models
       basecaller_extra:
         type: string
+        description: extra arguments for dorado basecaller
       demux_extra:
         type: string
+        description: extra arguments for dorado demux
       demux_output_format:
         type: string
         enum:
         - bam
         - fastq
         - both
+        description: 'what to keep from demultiplexing: bam, fastq or both'
       allow_empty_barcodes:
         type: boolean
+        description: write a header-only BAM for a barcode without reads instead of failing
       benchmark_repeats:
         type: integer
         minimum: 1
+        description: number of times the benchmark should be repeated
     additionalProperties: true
+    description: settings for Dorado basecalling and demultiplexing
   dorado_alignment:
     type: object
     properties:
@@ -443,14 +461,19 @@ properties:
         enum:
         - minimap2
         - dorado
+        description: 'aligner for demultiplexed Dorado BAMs: minimap2 or dorado'
       container:
         type: string
+        description: container image for the Dorado aligner
       extra:
         type: string
+        description: extra arguments for the aligner
       benchmark_repeats:
         type: integer
         minimum: 1
+        description: number of times the benchmark should be repeated
     additionalProperties: true
+    description: settings for aligning Dorado output
   dorado_demux_bam:
     type: object
     description: settings for dorado_demux_bam
@@ -512,6 +535,8 @@ properties:
         type: string
         description: extra command-line arguments
   gatk_filter_mutect_calls:
+    type: object
+    description: settings for gatk_filter_mutect_calls
     $ref: '#/definitions/tool_config'
     properties:
       benchmark_repeats:
@@ -521,6 +546,8 @@ properties:
         type: string
         description: name or path to docker/singularity container
   gatk_merge_mutect_stats:
+    type: object
+    description: settings for gatk_merge_mutect_stats
     $ref: '#/definitions/tool_config'
     properties:
       benchmark_repeats:
@@ -537,6 +564,7 @@ properties:
     description: Local root containing hydra-genetics/<module> checkouts for offline execution.
   library_root:
     type: string
+    description: physical library root recorded in the run metadata
   merge_cnv_json:
     type: object
     description: settings for merge_cnv_json
@@ -567,12 +595,17 @@ properties:
     properties:
       preset:
         type: string
+        description: minimap2 preset for units without a spliced library
       extra:
         type: string
+        description: extra arguments for minimap2
       read_group:
         type: string
+        description: read group template with {sample}, {type}, {processing_unit} and {barcode}
       index_preset:
-        description: index preset
+        type: string
+        description: the minimap2 preset a site-provided reference index was built with
+    description: minimap2 settings shared by the alignment rules
   minimap2_fastq_align:
     type: object
     description: settings for minimap2_fastq_align
@@ -629,7 +662,10 @@ properties:
       reports:
         type: object
         description: reports
+    description: MultiQC settings and the files each report collects
   nagini_excel_report:
+    type: object
+    description: settings for nagini_excel_report
     $ref: '#/definitions/tool_config'
     properties:
       benchmark_repeats:
@@ -643,6 +679,7 @@ properties:
     description: YAML/JSON output specification.
   output_directory:
     type: string
+    description: directory the run writes into
   pad_target_bed:
     type: object
     description: settings for pad_target_bed
@@ -680,6 +717,7 @@ properties:
         description: 'min qv (default: 20)'
   reference:
     type: object
+    description: the reference selected by reference_build, filled in at start
   reference_build:
     description: 'Which entry of `references` to use. Validated against the keys actually present there
       rather than a fixed list, so a site can add a build (hg19 for the BCR-ABL1 panel, for instance)
@@ -690,6 +728,7 @@ properties:
     minLength: 1
   reference_files_path:
     type: string
+    description: reference registry file the launcher read
   references:
     type: object
     description: Reference paths keyed by reference_build.
@@ -701,6 +740,7 @@ properties:
     description: Resource configuration file.
   resources_config:
     type: object
+    description: resources file the launcher selected
   rindels:
     type: object
     description: settings for rindels
@@ -738,6 +778,7 @@ properties:
         description: 'width (default: 2000)'
   samples:
     type: string
+    description: path to samples.tsv
   samtools_fastq:
     type: object
     description: settings for samtools_fastq
@@ -807,6 +848,7 @@ properties:
     description: Runtime site selected by the launcher, for example local or marvin.
   site_config_path:
     type: string
+    description: site config the launcher merged in
   snpeff:
     type: object
     description: settings for snpeff
@@ -859,23 +901,31 @@ properties:
         description: 'padding bp (default: 25000)'
   units:
     type: string
+    description: path to units.tsv
   vep:
     type: object
     properties:
       container:
         type: string
+        description: VEP container image
       vep_cache:
         type: string
+        description: path to the offline VEP cache
       skip:
         type: boolean
+        description: skip VEP annotation while the cache is being built
       mode:
         type: string
+        description: VEP cache mode arguments
       extra:
         type: string
+        description: extra arguments for VEP
       benchmark_repeats:
         type: integer
         minimum: 1
+        description: number of times the benchmark should be repeated
     additionalProperties: true
+    description: settings for VEP annotation
 additionalProperties: true
 definitions:
   tool_config:

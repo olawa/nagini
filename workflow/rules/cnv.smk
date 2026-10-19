@@ -5,28 +5,31 @@ __license__ = "GPL-3"
 
 
 rule cnv_rindels:
-    """Run Rindels in CNV-only mode to produce whole-genome binned read counts and ASCAT segments."""
+    """Run Rindels in CNV-only mode to produce whole-genome binned read counts and ASCAT segments.
+
+    Output naming:
+    Rindels names its sidecars after the -o base, so -o must be
+    {sample}_{type}.vcf for the segmentation to land on
+    {sample}_{type}.ascat.bed. Passing -o *.vcf.gz would let rindels
+    write BGZF and its own .tbi, but it also changes how it names the
+    sidecars -- with a .gz suffix it keeps the full name for some
+    (X.vcf.gz.report_baf.parquet) and strips it for others (X.baf.bed) --
+    and .ascat.bed is the one file cnv_summary cannot do without.  The
+    plain VCF is compressed by cnv_rindels_bgzip instead, which runs in
+    a container that has htslib; this rule runs on the host, because the
+    rindels binary is a host binary, so it must not depend on bgzip or
+    tabix being installed there. The parquet sidecars stay undeclared:
+    which ones appear depends on the mode and the data, as
+    sv_added_snpengine_del.tsv appearing for only three of five samples
+    shows, and declaring an output that may not appear is what made this
+    rule fail in the first place.
+    """
     input:
         bam="alignment/merged/{sample}_{type}.bam",
         bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
         gtf=lambda wildcards: get_gene_annotation() or [],
     output:
-        # Rindels names its sidecars after the -o base, so -o must be
-        # {sample}_{type}.vcf for the segmentation to land on
-        # {sample}_{type}.ascat.bed. Passing -o *.vcf.gz would let rindels
-        # write BGZF and its own .tbi, but it also changes how it names the
-        # sidecars -- with a .gz suffix it keeps the full name for some
-        # (X.vcf.gz.report_baf.parquet) and strips it for others (X.baf.bed) --
-        # and .ascat.bed is the one file cnv_summary cannot do without.  The
-        # plain VCF is compressed by cnv_rindels_bgzip instead, which runs in
-        # a container that has htslib; this rule runs on the host, because the
-        # rindels binary is a host binary, so it must not depend on bgzip or
-        # tabix being installed there. The parquet sidecars stay undeclared:
-        # which ones appear depends on the mode and the data, as
-        # sv_added_snpengine_del.tsv appearing for only three of five samples
-        # shows, and declaring an output that may not appear is what made this
-        # rule fail in the first place.
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
         ascat="cnv/rindels/{sample}_{type}.ascat.bed",
         pdf="cnv/rindels/{sample}_{type}_report.pdf",
