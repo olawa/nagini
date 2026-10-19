@@ -275,7 +275,19 @@ snakemake --dry-run \
 
 Inputväxeln testas separat med `--config units=.tests/integration/units_aligned.tsv`
 respektive `units_unmapped.tsv`. För granskning av hela beroendegrafen finns
-`workflow/rulegraph.dot`.
+`workflow/rulegraph.dot`. Grafen täcker adaptiv sampling, BCR-ABL1 och Dorado-vägen med
+Mutect2, DeepVariant och VEP påslagna. Den görs om med
+
+```bash
+snakemake --rulegraph -s workflow/Snakefile \
+  --configfile .tests/integration/config/config.yaml \
+  --config units=<units med assay adaptive, bcr_abl och en dorado_bam-unit> \
+           samples=<samples.tsv> small_variant_caller=both \
+           annotate_small_variants_with_vep=True "vep={vep_cache: <dir>}" \
+           "dorado={input: <dir>, model: hac}" \
+  --wrapper-prefix "git+file://$(pwd)/vendor/snakemake-wrappers" > workflow/rulegraph.dot
+dot -Tsvg workflow/rulegraph.dot > images/rulegraph.svg   # kräver Graphviz
+```
 
 ## Startscript och Hydra-input
 
