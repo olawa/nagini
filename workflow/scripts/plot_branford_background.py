@@ -71,6 +71,14 @@ def parse_args(argv=None):
         help="Color bars by absolute nucleotide ('bases': A=green, C=blue, G=orange, T=red) "
              "or relative allele ('relative': Ref=light blue, Alt=red, Others=orange/purple)"
     )
+    parser.add_argument(
+        "--no-depth-panel", action="store_true", default=False,
+        help="Disable the total used depth / coverage subplot panel"
+    )
+    parser.add_argument(
+        "--depth-position", choices=["top", "bottom"], default="top",
+        help="Position of the depth panel ('top' or 'bottom', default: 'top')"
+    )
     return parser.parse_args(argv)
 
 
@@ -120,6 +128,8 @@ def generate_plot(
     title: Optional[str] = None,
     zoom_max: float = 5.0,
     color_mode: str = "bases",
+    include_depth: bool = True,
+    depth_position: str = "top",
 ):
     if plt is None:
         sys.exit("Error: matplotlib and numpy are required to generate the plot.")
@@ -197,14 +207,58 @@ def generate_plot(
     x = np.arange(len(labels))
     width = 0.75
 
-    fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, figsize=(max(14, len(labels) * 0.28), 9),
-        gridspec_kw={"height_ratios": [1, 1.4]}
-    )
+    if include_depth:
+        fig_height = 12
+        if depth_position == "bottom":
+            fig, (ax_top, ax_bot, ax_cov) = plt.subplots(
+                3, 1, figsize=(max(14, len(labels) * 0.28), fig_height),
+                gridspec_kw={"height_ratios": [1.0, 1.4, 0.8]},
+                sharex=True
+            )
+            labels_ax = ax_cov
+        else:
+            fig, (ax_cov, ax_top, ax_bot) = plt.subplots(
+                3, 1, figsize=(max(14, len(labels) * 0.28), fig_height),
+                gridspec_kw={"height_ratios": [0.8, 1.0, 1.4]},
+                sharex=True
+            )
+            labels_ax = ax_bot
+    else:
+        fig, (ax_top, ax_bot) = plt.subplots(
+            2, 1, figsize=(max(14, len(labels) * 0.28), 9),
+            gridspec_kw={"height_ratios": [1, 1.4]},
+            sharex=True
+        )
+        ax_cov = None
+        labels_ax = ax_bot
 
     plot_title = title or f"BCR-ABL1 Kinase Domain Base Composition & Background ({sample or 'Sample'})"
     fig.suptitle(plot_title, fontsize=14, fontweight="bold", y=0.98)
 
+    # 1. Total Depth Plot (if enabled)
+    if ax_cov is not None:
+        ax_cov.bar(x, depths, width, color="#3470a3", edgecolor="none", alpha=0.9)
+        ax_cov.set_ylabel("Used Depth", fontsize=11, fontweight="bold")
+        ax_cov.grid(axis="y", linestyle="--", alpha=0.5)
+
+        import matplotlib.ticker as ticker
+        ax_cov.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{int(y):,}"))
+
+        max_d = max(depths) if depths else 0
+        if max_d > 0:
+            ax_cov.set_ylim(0, max_d * 1.15)
+            med_d = float(np.median(depths))
+            ax_cov.axhline(
+                med_d, color="#d95f02", linestyle="--", linewidth=1.2,
+                label=f"Median Depth ({int(med_d):,}x)"
+            )
+            ax_cov.legend(loc="upper right", framealpha=0.9, fontsize=9)
+        else:
+            ax_cov.set_ylim(0, 1)
+
+        ax_cov.set_title("Total Used Sequencing Depth per Site", fontsize=11, loc="left", fontweight="semibold")
+
+    # 2. Composition and Zoom Plots
     if color_mode == "bases":
         # Stacked A, C, G, T
         bottom_top = np.zeros(len(labels))
@@ -214,7 +268,6 @@ def generate_plot(
             bottom_top += v
 
         # Bottom panel: zoom in on non-ref bases
-        # For each site, compute non-ref base percentages
         non_ref_a = [pa if (r.get("ref") or r.get("ref_base", "")).upper() != "A" else 0.0 for pa, r in zip(data_a, rows)]
         non_ref_c = [pc if (r.get("ref") or r.get("ref_base", "")).upper() != "C" else 0.0 for pc, r in zip(data_c, rows)]
         non_ref_g = [pg if (r.get("ref") or r.get("ref_base", "")).upper() != "G" else 0.0 for pg, r in zip(data_g, rows)]
@@ -236,27 +289,30 @@ def generate_plot(
         ax_bot.bar(x, data_alt, width, label="Candidate Alt Base", color=STATUS_COLORS["ALT"])
         ax_bot.bar(x, data_other, width, bottom=data_alt, label="Other Noise Bases", color=STATUS_COLORS["OTHER_1"])
 
-    # Configure top panel
+    # Configure top composition panel
     ax_top.set_ylabel("Allele Fraction (%)", fontsize=11, fontweight="bold")
     ax_top.set_ylim(0, 100)
-    ax_top.set_xlim(-0.8, len(labels) - 0.2)
-    ax_top.set_xticks(x)
-    ax_top.set_xticklabels([])
     ax_top.grid(axis="y", linestyle="--", alpha=0.5)
     ax_top.legend(loc="upper right", framealpha=0.9, fontsize=9)
     ax_top.set_title("Full Composition (0 - 100%)", fontsize=11, loc="left", fontweight="semibold")
 
-    # Configure bottom panel (Background zoom)
+    # Configure bottom background zoom panel
     ax_bot.set_ylabel("Background / Alt AF (%)", fontsize=11, fontweight="bold")
     ax_bot.set_ylim(0, zoom_max)
-    ax_bot.set_xlim(-0.8, len(labels) - 0.2)
-    ax_bot.set_xticks(x)
-    ax_bot.set_xticklabels(labels, rotation=90, fontsize=8, ha="center")
     ax_bot.grid(axis="y", linestyle="--", alpha=0.5)
     ax_bot.axhline(1.0, color="gray", linestyle=":", linewidth=1, label="1.0% Threshold")
     ax_bot.axhline(0.2, color="lightgray", linestyle=":", linewidth=0.8, label="0.2% Subclonal")
     ax_bot.legend(loc="upper right", framealpha=0.9, fontsize=9)
     ax_bot.set_title(f"Background Error & Alternate Allele Zoom (0 - {zoom_max:g}%)", fontsize=11, loc="left", fontweight="semibold")
+
+    # Set x-ticks and tick labels only on the bottom-most axis
+    for ax in [ax_cov, ax_top, ax_bot]:
+        if ax is not None and ax is not labels_ax:
+            ax.tick_params(labelbottom=False)
+
+    labels_ax.set_xticks(x)
+    labels_ax.set_xticklabels(labels, rotation=90, fontsize=8, ha="center")
+    labels_ax.set_xlim(-0.8, len(labels) - 0.2)
 
     plt.tight_layout()
     output_png.parent.mkdir(parents=True, exist_ok=True)
@@ -351,6 +407,8 @@ def main():
         title=args.title,
         zoom_max=args.zoom_max,
         color_mode=args.color_mode,
+        include_depth=not args.no_depth_panel,
+        depth_position=args.depth_position,
     )
 
     if args.output_tsv:

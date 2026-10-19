@@ -91,9 +91,21 @@ class TestPlotBranfordBackground(unittest.TestCase):
             self.assertIn("p.Glu255Lys", lines[1])
             self.assertIn("1000", lines[1])
 
-            PBB.generate_plot(rows, out_png, sample=sample_name)
+            PBB.generate_plot(rows, out_png, sample=sample_name, include_depth=True, depth_position="top")
             self.assertTrue(out_png.is_file())
             self.assertGreater(out_png.stat().st_size, 1000)
+
+            # Test bottom position
+            out_png_bot = tmp / "test_rindels_bot.png"
+            PBB.generate_plot(rows, out_png_bot, sample=sample_name, include_depth=True, depth_position="bottom")
+            self.assertTrue(out_png_bot.is_file())
+            self.assertGreater(out_png_bot.stat().st_size, 1000)
+
+            # Test no depth panel
+            out_png_no_depth = tmp / "test_rindels_no_depth.png"
+            PBB.generate_plot(rows, out_png_no_depth, sample=sample_name, include_depth=False)
+            self.assertTrue(out_png_no_depth.is_file())
+            self.assertGreater(out_png_no_depth.stat().st_size, 1000)
 
 
 if __name__ == "__main__":
