@@ -113,6 +113,18 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
             self.assertIn("DETECTED", records[1])
             self.assertIn("20.0", records[1])  # 20% VAF
 
+            all_lines = [line for line in all_sites_tsv.read_text().splitlines() if not line.startswith("#") and line.strip()]
+            hdr = all_lines[0].split("\t")
+            self.assertIn("count_A", hdr)
+            self.assertIn("count_T", hdr)
+            rows_by_mut = {row["mutation"]: row for row in [dict(zip(hdr, l.split("\t"))) for l in all_lines[1:]]}
+            self.assertIn("T315I", rows_by_mut)
+            t315i_row = rows_by_mut["T315I"]
+            self.assertEqual(t315i_row["count_T"], "20")
+            self.assertEqual(t315i_row["count_C"], "80")
+            self.assertEqual(t315i_row["pct_T"], "20.0")
+            self.assertEqual(t315i_row["pct_C"], "80.0")
+
     def test_noise_filtering_snr_and_strand_bias(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

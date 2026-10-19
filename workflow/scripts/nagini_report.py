@@ -1241,6 +1241,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             mut_action, mut_action_style = "INCOMPLETE", 6
         elif not det_muts and not subcl_muts and assessment["state"] == "COMPLETENESS_UNVERIFIED":
             mut_summary, mut_action, mut_action_style = "No resistance-associated variants detected; panel completeness unverified", "REVIEW", 6
+        elif assessment["state"] == "INCOMPLETE":
+            mut_summary += f"; panel incomplete ({assessment['callable_positions']}/{assessment['positions']} sites callable)"
         if unclassified:
             names = ", ".join(r.get("mutation", "?") for r in unclassified)
             mut_summary += f" (Unclassified for review: {names})"
