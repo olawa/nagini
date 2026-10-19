@@ -121,22 +121,21 @@ def load_all_sites(path: Path) -> Tuple[Optional[str], List[Dict[str, str]]]:
     return sample_name, rows
 
 
-def generate_plot(
+def build_plot_figure(
     rows: List[Dict[str, str]],
-    output_png: Path,
     sample: str = "",
     title: Optional[str] = None,
     zoom_max: float = 5.0,
     color_mode: str = "bases",
     include_depth: bool = True,
     depth_position: str = "top",
-):
+) -> Optional[Any]:
     if plt is None:
         sys.exit("Error: matplotlib and numpy are required to generate the plot.")
 
     if not rows:
         sys.stderr.write("Warning: no SITE_AUDIT rows to plot.\n")
-        return
+        return None
 
     # Extract variant names and per-base percentages
     labels = []
@@ -315,9 +314,33 @@ def generate_plot(
     labels_ax.set_xlim(-0.8, len(labels) - 0.2)
 
     plt.tight_layout()
+    return fig
+
+
+def generate_plot(
+    rows: List[Dict[str, str]],
+    output_png: Path,
+    sample: str = "",
+    title: Optional[str] = None,
+    zoom_max: float = 5.0,
+    color_mode: str = "bases",
+    include_depth: bool = True,
+    depth_position: str = "top",
+):
+    fig = build_plot_figure(
+        rows=rows,
+        sample=sample,
+        title=title,
+        zoom_max=zoom_max,
+        color_mode=color_mode,
+        include_depth=include_depth,
+        depth_position=depth_position,
+    )
+    if fig is None:
+        return
     output_png.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_png, dpi=300)
-    plt.close()
+    fig.savefig(output_png, dpi=300)
+    plt.close(fig)
     print(f"[Plot] Saved background base frequency plot: {output_png}", file=sys.stderr)
 
 
