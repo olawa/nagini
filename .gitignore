@@ -9,7 +9,7 @@ snv_indels
 reports
 logs
 benchmarks
-vendor/
+vendor
 config.nagini.yaml
 run_metadata.yaml
 site_config.yaml
