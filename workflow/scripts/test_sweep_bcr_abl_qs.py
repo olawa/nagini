@@ -139,6 +139,30 @@ class TestSweepBcrAblQs(unittest.TestCase):
             self.assertGreater(len(tsv_lines), 5)
             self.assertIn("qs_bin", tsv_lines[0])
 
+    def test_detect_genome_build_and_find_bed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            # Create BAM with hg19 chr9 length
+            bam19 = tmp / "hg19.bam"
+            header19 = {"HD": {"VN": "1.0"}, "SQ": [{"LN": 141213431, "SN": "chr9"}]}
+            with pysam.AlignmentFile(str(bam19), "wb", header=header19) as f:
+                pass
+            self.assertEqual(QS.detect_genome_build_from_bam(bam19), "hg19")
+
+            # Create BAM with hg38 chr9 length
+            bam38 = tmp / "hg38.bam"
+            header38 = {"HD": {"VN": "1.0"}, "SQ": [{"LN": 138394717, "SN": "chr9"}]}
+            with pysam.AlignmentFile(str(bam38), "wb", header=header38) as f:
+                pass
+            self.assertEqual(QS.detect_genome_build_from_bam(bam38), "hg38")
+
+            # Check find_bed_file resolves standard beds
+            bed19 = QS.find_bed_file("hg19")
+            self.assertIsNotNone(bed19)
+            self.assertTrue(bed19.is_file())
+            self.assertIn("hg19", bed19.name)
+
 
 if __name__ == "__main__":
     unittest.main()
+

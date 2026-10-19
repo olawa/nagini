@@ -80,6 +80,34 @@ def load_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
     return sites
 
 
+def detect_genome_build_from_bam(bam_path: Path) -> str:
+    """Auto-detect whether BAM was aligned to hg19 or hg38 from reference contig lengths."""
+    try:
+        with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+            for c in ("chr9", "9"):
+                if c in bam.references:
+                    length = bam.get_reference_length(c)
+                    if length == 141213431 or length > 140000000:
+                        return "hg19"
+                    elif length == 138394717 or (135000000 < length < 140000000):
+                        return "hg38"
+    except Exception as exc:
+        sys.stderr.write(f"Warning: could not detect build from BAM: {exc}\n")
+    return "hg19"
+
+
+def find_bed_file(build: str) -> Optional[Path]:
+    """Find branford BED file for the given build in standard nagini locations."""
+    candidates = [
+        Path(f"workflow/resources/bcr_abl/branford_positions_{build}.bed"),
+        Path(__file__).resolve().parent.parent / "resources" / "bcr_abl" / f"branford_positions_{build}.bed",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
 def collect_qs_pileup(
     bam_path: Path,
     sites: List[Dict[str, Any]],
@@ -110,6 +138,9 @@ def collect_qs_pileup(
         max_pos = max(target_pos) + 1
 
         print(f"[Pileup] Scanning BAM {bam_path.name} across {chrom}:{min_pos:,}-{max_pos:,}...", file=sys.stderr)
+        total_reads_seen = 0
+        qs_values: List[int] = []
+
         for col in bam.pileup(
             chrom, min_pos, max_pos, truncate=True,
             stepper="nofilter", max_depth=2000000,
@@ -145,16 +176,45 @@ def collect_qs_pileup(
 
             for _, aln, base in best_by_read.values():
                 qs_int: Optional[int] = None
-                if aln.has_tag("qs"):
+                for tag_name in ("qs", "QS"):
+                    if aln.has_tag(tag_name):
+                        try:
+                            qs_val = float(aln.get_tag(tag_name))
+                            qs_int = int(qs_val)
+                            break
+                        except (ValueError, TypeError):
+                            pass
+
+                # Fallback: recompute mean read quality from base qualities if tag missing
+                if qs_int is None and aln.query_qualities is not None and len(aln.query_qualities) > 0:
                     try:
-                        qs_val = float(aln.get_tag("qs"))
-                        qs_int = int(qs_val)
-                    except (ValueError, TypeError):
-                        qs_int = None
+                        mean_err = sum(10.0 ** (-q / 10.0) for q in aln.query_qualities) / len(aln.query_qualities)
+                        mean_q = -10.0 * math.log10(mean_err) if mean_err > 0 else float(max(aln.query_qualities))
+                        qs_int = int(mean_q)
+                    except Exception:
+                        pass
 
                 counts = by_pos[pos0][qs_int]
                 counts[base] += 1
                 counts["total"] += 1
+                total_reads_seen += 1
+                if qs_int is not None:
+                    qs_values.append(qs_int)
+
+        if total_reads_seen > 0:
+            min_q = min(qs_values) if qs_values else "N/A"
+            max_q = max(qs_values) if qs_values else "N/A"
+            med_q = int(np.median(qs_values)) if qs_values else "N/A"
+            print(
+                f"[Pileup] Collected {total_reads_seen:,} base calls across target sites. "
+                f"Read QS range: {min_q} to {max_q} (median: {med_q}).",
+                file=sys.stderr
+            )
+        else:
+            sys.stderr.write(
+                f"[Warning] 0 reads observed across {chrom}:{min_pos:,}-{max_pos:,}! "
+                f"Check BAM contig names and reference genome build (hg19 vs hg38).\n"
+            )
 
     return ref_chrom, by_pos
 
@@ -322,9 +382,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", "-b", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument(
-        "--bed", type=Path,
-        default=Path("workflow/resources/bcr_abl/branford_positions_hg38.bed"),
-        help="Branford positions BED file (default: hg38 BED)"
+        "--bed", type=Path, default=None,
+        help="Branford positions BED file (default: auto-detected hg19 or hg38 matching BAM)"
     )
     parser.add_argument("--output-pdf", "-o", required=True, type=Path, help="Path to output multi-page PDF")
     parser.add_argument("--output-tsv", type=Path, default=None, help="Optional path to output tidy summary TSV")
@@ -347,15 +406,49 @@ def main():
     args = parse_args()
     if not args.bam.is_file():
         sys.exit(f"Error: BAM file not found: {args.bam}")
-    if not args.bed.is_file():
-        sys.exit(f"Error: BED file not found: {args.bed}")
 
-    sample = args.sample or args.bam.stem.replace("_T", "").replace(".bam", "")
-    sites = load_branford_bed(args.bed)
+    detected_build = detect_genome_build_from_bam(args.bam)
+    print(f"[BAM] Detected reference genome build: {detected_build}", file=sys.stderr)
+
+    bed_file = args.bed
+    if bed_file is None:
+        bed_file = find_bed_file(detected_build)
+        if bed_file is None or not bed_file.is_file():
+            sys.exit(f"Error: could not find branford_positions_{detected_build}.bed. Please specify --bed.")
+        print(f"[BED] Using auto-detected BED file: {bed_file}", file=sys.stderr)
+    else:
+        if not bed_file.is_file():
+            sys.exit(f"Error: BED file not found: {bed_file}")
+        sites_test = load_branford_bed(bed_file)
+        if sites_test:
+            first_pos = sites_test[0]["pos0"]
+            is_hg38_coords = (130000000 < first_pos < 131500000)
+            is_hg19_coords = (133000000 < first_pos < 134500000)
+            if detected_build == "hg19" and is_hg38_coords:
+                auto_bed = find_bed_file("hg19")
+                if auto_bed and auto_bed.is_file():
+                    print(
+                        f"[Warning] BAM is hg19 (chr9 ~141.2Mb), but provided BED '{bed_file}' has hg38 coordinates (~130.8Mb). "
+                        f"Automatically switching to {auto_bed}!",
+                        file=sys.stderr
+                    )
+                    bed_file = auto_bed
+            elif detected_build == "hg38" and is_hg19_coords:
+                auto_bed = find_bed_file("hg38")
+                if auto_bed and auto_bed.is_file():
+                    print(
+                        f"[Warning] BAM is hg38 (chr9 ~138.4Mb), but provided BED '{bed_file}' has hg19 coordinates (~133.7Mb). "
+                        f"Automatically switching to {auto_bed}!",
+                        file=sys.stderr
+                    )
+                    bed_file = auto_bed
+
+    sample = args.sample or args.bam.stem.replace("_T", "").replace(".target", "").replace(".bam", "")
+    sites = load_branford_bed(bed_file)
     if not sites:
-        sys.exit(f"Error: no valid sites loaded from BED {args.bed}")
+        sys.exit(f"Error: no valid sites loaded from BED {bed_file}")
 
-    print(f"[Init] Loaded {len(sites)} Branford resistance positions.", file=sys.stderr)
+    print(f"[Init] Loaded {len(sites)} Branford resistance positions from {bed_file.name}.", file=sys.stderr)
     chrom, by_pos = collect_qs_pileup(
         bam_path=args.bam,
         sites=sites,
