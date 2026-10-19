@@ -1,3 +1,16 @@
+diff --git a/.github/workflows/ci.yaml b/.github/workflows/ci.yaml
+index 1169497..7f0d022 100644
+--- a/.github/workflows/ci.yaml
++++ b/.github/workflows/ci.yaml
+@@ -145,8 +145,6 @@ jobs:
+           cache-dependency-path: |
+             requirements.txt
+             requirements.test.txt
+-      - name: Add conda to system path
+-        run: echo $CONDA/bin >> $GITHUB_PATH
+       - name: Install dependencies
+         run: |
+           pip install -r requirements.txt
 diff --git a/workflow/rules/arriba.smk b/workflow/rules/arriba.smk
 index adf78ec..0bd3e02 100644
 --- a/workflow/rules/arriba.smk
@@ -19,23 +32,31 @@ index adf78ec..0bd3e02 100644
 +        "--proteinDomains={input.protein_domains} "
 +        "{params.extra}) &> {log}"
 diff --git a/workflow/rules/common.smk b/workflow/rules/common.smk
-index 15517a7..b8753ca 100644
+index 15517a7..578b507 100644
 --- a/workflow/rules/common.smk
 +++ b/workflow/rules/common.smk
-@@ -31,7 +31,11 @@ validate(samples, schema="../schemas/samples.schema.yaml")
+@@ -31,14 +31,27 @@ validate(samples, schema="../schemas/samples.schema.yaml")
  
  ### Read and validate units file
  
 -units = pandas.read_table(config["units"], dtype=str).set_index(["sample", "type", "flowcell", "lane"], drop=False)
 +units = pandas.read_table(config["units"], dtype=str)
-+if "platform" in units.columns and units.platform.iloc[0] in ["PACBIO", "ONT"]:
++# Validate before indexing, so that a missing column is reported as a schema
++# error and not as a KeyError from set_index.
+ validate(units, schema="../schemas/units.schema.yaml")
++if "platform" in units.columns:
++    long_read = units["platform"].isin(["PACBIO", "ONT"])
++else:
++    long_read = pandas.Series(False, index=units.index)
++if long_read.any() and not long_read.all():
++    raise ValueError("units.tsv must contain either only long-read (ONT, PACBIO) or only short-read units")
++if long_read.any():
 +    units = units.set_index(["sample", "type", "processing_unit", "barcode"], drop=False).sort_index()
 +else:  # Illumina data, with flowcell and lane columns
 +    units = units.set_index(["sample", "type", "flowcell", "lane"], drop=False)
- validate(units, schema="../schemas/units.schema.yaml")
  
  ### Set wildcard constraints
-@@ -39,6 +43,7 @@ validate(units, schema="../schemas/units.schema.yaml")
+ 
  
  wildcard_constraints:
      sample="|".join(samples.index),
@@ -58,7 +79,7 @@ index ca716b3..61595ff 100644
          type: string
          description: path to gtf file containing annotations
 diff --git a/workflow/schemas/units.schema.yaml b/workflow/schemas/units.schema.yaml
-index 1d33998..c531c25 100644
+index 1d33998..4807280 100644
 --- a/workflow/schemas/units.schema.yaml
 +++ b/workflow/schemas/units.schema.yaml
 @@ -1,4 +1,4 @@
@@ -67,7 +88,7 @@ index 1d33998..c531c25 100644
  description: row represents one dataset
  properties:
    sample:
-@@ -22,11 +22,38 @@ properties:
+@@ -22,11 +22,39 @@ properties:
    adapter:
      type: string
      description: one or more sequence, separated by ","
@@ -95,6 +116,7 @@ index 1d33998..c531c25 100644
 +    then:
 +      required:
 +        - processing_unit
++        - barcode
 +        - bam
 +    else:
 +      required:
