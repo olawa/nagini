@@ -18,6 +18,16 @@ from datetime import datetime, timezone
 import sys
 
 try:
+    from bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+except ImportError:
+    from .bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+
+try:
+    from bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+except ImportError:
+    from .bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+
+try:
     import xlsxwriter
 except ImportError:
     xlsxwriter = None
@@ -692,7 +702,7 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
-def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None):
+def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None):
     layout = [
         [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
@@ -730,7 +740,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
         ("Imatinib", 1), ("Dasatinib", 1), ("Nilotinib", 1), ("Bosutinib", 1), ("Ponatinib", 1), ("Asciminib", 1)
     ])
     if not mutation_rows:
-        layout.append([("No candidate resistance mutations called", 0)] + [("", 0)] * 17)
+        layout.append([("No candidate variants called", 0)] + [("", 0)] * 17)
     else:
         for r in mutation_rows:
             mut_status = str(r.get("status", "")).upper()
@@ -774,6 +784,15 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (r.get("ponatinib", "Unknown"), _style_tki_response(r.get("ponatinib", ""))),
                 (r.get("asciminib", "Unknown"), _style_tki_response(r.get("asciminib", ""))),
             ])
+
+    non_resistance_rows = [r for r in mutation_rows if not is_resistance_associated(r)]
+    if non_resistance_rows:
+        layout.append([("Audit: variants not classified as resistance-associated", 3)] + [("", 3)] * 5)
+        layout.append([("Variant", 1), ("Consequence", 1), ("Resistance class", 1), ("Status", 1), ("VAF (%)", 1), ("Filter", 1)])
+        for r in non_resistance_rows:
+            layout.append([(r.get("mutation", ""), 0), (r.get("consequence", ""), 0),
+                           (r.get("resistance_class", "UNCLASSIFIED"), 0), (r.get("status", ""), 0),
+                           (float(r.get("vaf_percent", 0) or 0), 0), (r.get("filter_reason", ""), 0)])
 
     layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
     layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
@@ -831,6 +850,13 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (float(r.get("pct_gte_1000x", 0.0)), 0),
                 (int(r.get("spanning_reads", 0)), 0),
             ])
+
+    if all_sites_rows:
+        layout.append([("5. ALL-SITES VARIANT AUDIT", 3)] + [("", 3)] * 7)
+        cols = ["mutation", "chrom", "pos", "ref", "alt", "depth", "ad_alt", "vaf_percent", "status", "filter_reason"]
+        layout.append([(c.replace("_", " ").title(), 1) for c in cols])
+        for r in all_sites_rows:
+            layout.append([(r.get(c, ""), 0) for c in cols])
 
     if plot_png and os.path.isfile(plot_png) and os.path.getsize(plot_png) > 0:
         layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
@@ -1104,7 +1130,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     cytoband="", caller="", design_bed="", platform="",
                     target_dist="", demux_summary="", barcode="",
                     bcr_abl_fusion="", bcr_abl_mutations="", bcr_abl_phasing="",
-                    bcr_abl_exon_coverage="", bcr_abl_plot_png="", cnv_tsv="",
+                    bcr_abl_exon_coverage="", bcr_abl_all_sites="", bcr_abl_plot_png="", cnv_tsv="",
                     rindels_sv_tsv="", rindels_translocations_tsv="",
                     savana_sv_tsv="", savana_translocations_tsv="",
                     target_cramino="",
@@ -1166,7 +1192,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     bcr_abl_mutation_rows = parse_bcr_abl_tsv(bcr_abl_mutations)
     bcr_abl_phasing_rows = parse_bcr_abl_tsv(bcr_abl_phasing)
     bcr_abl_exon_rows = parse_bcr_abl_tsv(bcr_abl_exon_coverage)
-    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows)
+    bcr_abl_all_sites_rows = parse_bcr_abl_tsv(bcr_abl_all_sites)
+    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows or bcr_abl_all_sites_rows or any(os.path.exists(p) for p in (bcr_abl_fusion, bcr_abl_mutations, bcr_abl_phasing, bcr_abl_exon_coverage, bcr_abl_all_sites) if p))
 
     amplicon_stats_rows = parse_amplicon_stats_tsv(amplicon_stats)
     amplicon_itd_rows = parse_flt3_itd_tsv(amplicon_itd)
@@ -1369,20 +1396,31 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         target_enrich_str = "N/A"
         enrich_status, enrich_style = ("INFO", 0)
 
-    if bcr_abl_exon_rows:
-        total_exon_len = sum(int(r.get("length", 0)) for r in bcr_abl_exon_rows)
+    kd_depth_label = "Mean depth at unique ABL1 resistance panel sites"
+    if bcr_abl_all_sites_rows:
+        depths = {}
+        for row in bcr_abl_all_sites_rows:
+            pos = str(row.get("pos", row.get("position", "")))
+            if pos:
+                try:
+                    depths.setdefault(f"{row.get('chrom', '')}:{pos}", float(row.get("depth", row.get("dp", 0)) or 0))
+                except (TypeError, ValueError):
+                    pass
+        kd_val = sum(depths.values()) / len(depths) if depths else 0
+        kd_depth_str = f"{kd_val:.1f}x" if depths else "N/A"
+        kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4)) if depths else ("INFO", 0)
+    elif bcr_abl_exon_rows:
+        abl_exon_rows = [r for r in bcr_abl_exon_rows if "ABL1" in str(r.get("exon", "")).upper()]
+        kd_depth_label = "Mean depth across ABL1 exons (panel-site depth unavailable)"
+        total_exon_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in abl_exon_rows)
         if total_exon_len > 0:
-            avg_exon_cov = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length", 0)) for r in bcr_abl_exon_rows) / total_exon_len
+            avg_exon_cov = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exon_rows) / total_exon_len
             kd_depth_str = f"{avg_exon_cov:.1f}x"
             kd_val = avg_exon_cov
             kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
         else:
             kd_depth_str = "N/A"
             kd_status, kd_style = ("INFO", 0)
-    elif bcr_abl_mutation_rows:
-        kd_val = sum(int(r.get("depth", 0)) for r in bcr_abl_mutation_rows) / len(bcr_abl_mutation_rows)
-        kd_depth_str = f"{kd_val:.1f}x"
-        kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
     else:
         kd_depth_str = "N/A"
         kd_status, kd_style = ("INFO", 0)
@@ -1506,7 +1544,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
             [("BCR-ABL1 Fusion Reads", 7), ("Total fusion-spanning reads (deduplicated)", 0), (total_fusion_reads, 0), ("PASS" if total_fusion_reads > 0 else "INFO", 5 if total_fusion_reads > 0 else 0)],
             [("BCR-ABL1 Target Enrichment", 7), ("Fusion reads / total sequenced reads", 0), (target_enrich_str, 0), (enrich_status, enrich_style)],
-            [("Kinase Domain Mean Depth", 7), ("Mean depth across ABL1 resistance sites", 0), (kd_depth_str, 0), (kd_status, kd_style)],
+            [("Kinase Domain Mean Depth", 7), (kd_depth_label, 0), (kd_depth_str, 0), (kd_status, kd_style)],
         ])
     elif has_amplicon:
         total_amp_reads = sum(int(r.get("read_count", 0)) for r in amplicon_stats_rows)
@@ -1567,8 +1605,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     # Add BCR-ABL summary block to overview if BCR-ABL data present
     if has_bcr_abl:
         prim_iso = next((r["fusion_isoform"] for r in bcr_abl_fusion_rows if r.get("status") == "PRIMARY"), "None detected")
-        det_muts = [r["mutation"] for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() == "DETECTED"]
-        subcl_muts = [r["mutation"] for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() == "SUBCLONAL"]
+        active_muts = active_resistance_mutations(bcr_abl_mutation_rows)
+        det_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "DETECTED"]
+        subcl_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "SUBCLONAL"]
+        unclassified = [r for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)]
+        assessment = panel_assessment(bcr_abl_all_sites_rows)
 
         if det_muts:
             mut_summary = ", ".join(det_muts)
@@ -1581,53 +1622,39 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             mut_action = "SUBCLONAL"
             mut_action_style = 6
         else:
-            mut_summary = "None detected"
-            mut_action = "NONE"
-            mut_action_style = 5
+            mut_summary = "Resistance panel not assessed"
+            mut_action = "NOT ASSESSED"
+            mut_action_style = 0
 
-        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "CIS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
-        coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "COEXISTING" in r.get("phase_state", "").upper()]
-        trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in bcr_abl_phasing_rows if "TRANS" in r.get("phase_state", "").upper() and "COEXISTING" not in r.get("phase_state", "").upper()]
+        if not det_muts and not subcl_muts and assessment["state"] == "ASSESSED":
+            mut_summary, mut_action, mut_action_style = "No resistance-associated variants detected", "PANEL ASSESSED", 5
+        elif not det_muts and not subcl_muts and assessment["state"] == "INCOMPLETE":
+            mut_summary = f"No resistance-associated variants detected; panel incomplete ({assessment['callable_positions']}/{assessment['positions']} sites callable)"
+            mut_action, mut_action_style = "INCOMPLETE", 6
+        elif not det_muts and not subcl_muts and assessment["state"] == "COMPLETENESS_UNVERIFIED":
+            mut_summary, mut_action, mut_action_style = "No resistance-associated variants detected; panel completeness unverified", "REVIEW", 6
+        if unclassified:
+            names = ", ".join(r.get("mutation", "?") for r in unclassified)
+            mut_summary += f" (Unclassified for review: {names})"
 
-        cis_details = []
-        for r in bcr_abl_phasing_rows:
-            ps = r.get("phase_state", "").upper()
-            if "CIS" in ps:
-                c_rds = int(r.get("cis_reads_11", 0))
-                c_span = int(r.get("total_spanning_reads", 0))
-                c_af = float(r.get("cis_vaf_percent", (c_rds / c_span * 100.0) if c_span > 0 else 0.0))
-                p_name = f"{r.get('mutation_1')}+{r.get('mutation_2')}"
-                if "COEXISTING" in ps:
-                    cis_details.append(f"{p_name} (coexist, {c_af:.1f}% AF, {c_rds:,} rds)")
-                else:
-                    cis_details.append(f"{p_name} ({c_af:.1f}% AF, {c_rds:,} rds)")
-
-        if cis_pairs:
-            phase_summary = f"CIS ({', '.join(cis_details if cis_details else cis_pairs)})"
+        phase_summary = summarize_phasing(bcr_abl_phasing_rows)
+        phase_flag = "REVIEW PHASING" if bcr_abl_phasing_rows else "NOT ASSESSED"
+        phase_flag_style = 6 if bcr_abl_phasing_rows else 0
+        if any(str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)" for r in bcr_abl_phasing_rows):
             phase_flag = "COMPOUND MUTATION (CIS)"
             phase_flag_style = 4
-        elif coexist_pairs:
-            phase_summary = f"COEXISTING ({', '.join(cis_details if cis_details else coexist_pairs)})"
-            phase_flag = "COEXISTING (CIS + TRANS)"
+        elif any(str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)" for r in bcr_abl_phasing_rows):
+            phase_flag = "COEXISTING PHASE EVIDENCE"
             phase_flag_style = 4
-        elif trans_pairs:
-            phase_summary = f"TRANS ({', '.join(trans_pairs)})"
-            phase_flag = "POLYCLONAL (TRANS)"
-            phase_flag_style = 5
-        elif bcr_abl_phasing_rows:
-            phase_summary = "TRANS"
-            phase_flag = "POLYCLONAL (TRANS)"
-            phase_flag_style = 5
-        else:
-            phase_summary = "N/A (<2 muts)"
-            phase_flag = "PASS"
-            phase_flag_style = 5
+        elif any(str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)" for r in bcr_abl_phasing_rows):
+            phase_flag = "TRANS PHASE EVIDENCE"
+            phase_flag_style = 6
 
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
         overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
-        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts else 0)), (mut_action, mut_action_style)])
-        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, phase_flag_style if (cis_pairs or coexist_pairs) else 0), (phase_flag, phase_flag_style)])
+        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts or unclassified or assessment["state"] != "ASSESSED" else 5)), (mut_action, mut_action_style)])
+        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, phase_flag_style), (phase_flag, phase_flag_style)])
 
     if has_amplicon:
         assessed_itd = [r for r in amplicon_itd_rows if itd_is_assessed(r)]
@@ -1797,7 +1824,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     ]
     if has_bcr_abl:
         bcr_layout = build_bcr_abl_sheet(
-            sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows, bcr_abl_exon_rows, plot_png=bcr_abl_plot_png
+            sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows,
+            bcr_abl_exon_rows, plot_png=bcr_abl_plot_png, all_sites_rows=bcr_abl_all_sites_rows
         )
         sheets.append(("BCR-ABL1", bcr_layout, LAYOUT))
 
@@ -1887,6 +1915,7 @@ def run_from_snakemake(snakemake):
         bcr_abl_mutations=_first_or_str(getattr(snakemake.input, "bcr_abl_mutations", "")),
         bcr_abl_phasing=_first_or_str(getattr(snakemake.input, "bcr_abl_phasing", "")),
         bcr_abl_exon_coverage=_first_or_str(getattr(snakemake.input, "bcr_abl_exon_coverage", "")),
+        bcr_abl_all_sites=_first_or_str(getattr(snakemake.input, "bcr_abl_all_sites", "")),
         bcr_abl_plot_png=_first_or_str(getattr(snakemake.input, "bcr_abl_plot_png", "")),
         cnv_tsv=_first_or_str(getattr(snakemake.input, "cnv", "")),
         amplicon_stats=_first_or_str(getattr(snakemake.input, "amplicon_stats", "")),
@@ -1925,6 +1954,7 @@ def main():
     parser.add_argument("--bcr-abl-mutations", default="")
     parser.add_argument("--bcr-abl-phasing", default="")
     parser.add_argument("--bcr-abl-exon-coverage", default="")
+    parser.add_argument("--bcr-abl-all-sites", default="")
     parser.add_argument("--bcr-abl-plot-png", default="")
     parser.add_argument("--cnv-tsv", default="")
     parser.add_argument("--amplicon-stats", default="")
@@ -1945,6 +1975,7 @@ def main():
         bcr_abl_mutations=args.bcr_abl_mutations,
         bcr_abl_phasing=args.bcr_abl_phasing,
         bcr_abl_exon_coverage=args.bcr_abl_exon_coverage,
+        bcr_abl_all_sites=args.bcr_abl_all_sites,
         bcr_abl_plot_png=args.bcr_abl_plot_png,
         cnv_tsv=args.cnv_tsv,
         rindels_sv_tsv=args.rindels_sv_tsv,

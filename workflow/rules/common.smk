@@ -1293,6 +1293,14 @@ def get_report_bcr_abl_mutations(wildcards):
     return []
 
 
+def get_report_bcr_abl_all_sites(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl"):
+        return get_sample_type_path(
+            wildcards, "reports/bcr_abl", ".branford_all_sites.tsv"
+        )
+    return []
+
+
 def get_report_bcr_abl_phasing(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
         return get_sample_type_path(wildcards, "reports/bcr_abl", ".phasing.tsv")

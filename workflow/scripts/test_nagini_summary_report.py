@@ -71,7 +71,7 @@ class SummaryReportTest(unittest.TestCase):
             # A bcr_abl run keeps the columns an adaptive run drops.
             text = _shared_strings(out_xlsx)
             self.assertIn("BCR-ABL1 Fusion Reads", text)
-            self.assertIn("Mean Target / KD Depth", text)
+            self.assertIn("Mean ABL1 Panel-site Depth", text)
 
 
     def test_a_run_without_small_variant_calling_says_so(self):

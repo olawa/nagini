@@ -1,0 +1,49 @@
+"""Exercise resource selection and report dependencies from the actual rules."""
+
+import os
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class WorkflowContractTest(unittest.TestCase):
+    def test_reference_aliases_never_silently_select_wrong_bundled_build(self):
+        source = (ROOT / "workflow/rules/bcr_abl.smk").read_text().split("rule bcr_abl_fusion_counts:")[0]
+        for configured, expected in (("hg19", "hg19"), ("GRCh37", "hg19"),
+                                     ("b37", "hg19"), ("hg38", "hg38"), ("GRCh38", "hg38")):
+            scope = {"os": os, "config": {"reference_build": configured},
+                     "WorkflowError": ValueError, "workflow": SimpleNamespace(basedir="workflow")}
+            exec(compile(source, "bcr_abl.smk", "exec"), scope)
+            self.assertTrue(scope["_branford_bed"]().endswith(f"branford_positions_{expected}.bed"))
+            self.assertTrue(scope["_bcr_abl_exons_bed"]().endswith(f"bcr_abl1_exons_{expected}.bed"))
+            self.assertTrue(scope["_bcr_abl_gtf"]().endswith(f"bcr_abl_{expected}.gtf"))
+        scope["config"]["reference_build"] = "hs1"
+        with self.assertRaisesRegex(ValueError, "No bundled BCR-ABL1 resources"):
+            scope["_branford_bed"]()
+
+    def test_all_sites_inputs_stay_aligned_in_a_mixed_assay_run(self):
+        source = (ROOT / "workflow/rules/excel_report.smk").read_text()
+        source = source[source.index("_SUMMARY_OPTIONAL_KEYS ="):source.index("rule nagini_summary_excel_report:")]
+        scope = {
+            "samples": ["wgs_sample", "bcr_sample"],
+            "get_samples": lambda samples: samples,
+            "get_unit_types_for_sample": lambda sample: ["T"],
+            "clean_report_path": lambda value: str(value).strip(),
+            "sample_needs_dna_variant_calling": lambda sample: False,
+            "sample_has_assay_module": lambda sample, module: sample == "bcr_sample" and module == "bcr_abl",
+        }
+        for name in ("sample_has_target_metrics", "sniffles2_enabled", "sample_has_rindels_sv",
+                     "savana_enabled", "sample_needs_cnv_calling"):
+            scope[name] = lambda sample: False
+        exec(compile(source, "excel_report.smk", "exec"), scope)
+        expected = "reports/bcr_abl/bcr_sample_T.branford_all_sites.tsv"
+        self.assertEqual(scope["get_summary_report_paths"]("bcr_abl_all_sites"), ["", expected])
+        self.assertEqual(scope["get_summary_report_inputs"](None)["bcr_abl_all_sites"], [expected])
+        self.assertIn("bcr_abl_all_sites", scope["_SUMMARY_OPTIONAL_KEYS"])
+
+
+if __name__ == "__main__":
+    unittest.main()
