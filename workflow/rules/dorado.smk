@@ -137,6 +137,11 @@ rule dorado_demux_summary:
         summary="basecalling/dorado_demux/demux_summary.tsv",
     log:
         "logs/dorado/demux_summary.log",
+    benchmark:
+        repeat(
+            "benchmarks/dorado_demux_summary/dorado_demux_summary.tsv",
+            config.get("dorado_demux_summary", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
         mem_mb=config.get("dorado_demux_summary", {}).get("mem_mb", config["default_resources"]["mem_mb"]),

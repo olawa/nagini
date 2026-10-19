@@ -73,6 +73,11 @@ rule bcr_abl_fusion_counts:
         genome_build=lambda wildcards: _bcr_abl_build(),
     log:
         "logs/bcr_abl_fusion_counts/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_fusion_counts/{sample}_{type}.tsv",
+            config.get("bcr_abl", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -84,6 +89,8 @@ rule bcr_abl_fusion_counts:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: count BCR-ABL1 fusion-spanning reads for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/bcr_abl_fusion_counter.py"
 
@@ -124,6 +131,11 @@ rule bcr_abl_branford_calling:
         extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_branford_calling/{sample}_{type}.tsv",
+            config.get("bcr_abl", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -135,6 +147,8 @@ rule bcr_abl_branford_calling:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: force-call BCR-ABL1 kinase domain mutations for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/bcr_abl_branford_caller.py"
 
@@ -155,6 +169,11 @@ rule bcr_abl_phasing:
         min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
     log:
         "logs/bcr_abl_phasing/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_phasing/{sample}_{type}.tsv",
+            config.get("bcr_abl", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -166,6 +185,8 @@ rule bcr_abl_phasing:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: phase BCR-ABL1 resistance mutations for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/bcr_abl_phaser.py"
 
@@ -183,6 +204,11 @@ rule bcr_abl_exon_coverage:
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
     log:
         "logs/bcr_abl_exon_coverage/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_exon_coverage/{sample}_{type}.tsv",
+            config.get("bcr_abl", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -194,6 +220,8 @@ rule bcr_abl_exon_coverage:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: measure coverage across BCR and ABL1 exons for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/bcr_abl_exon_coverage.py"
 
@@ -220,6 +248,11 @@ rule bcr_abl_draw_fusions:
         extra=config.get("arriba", {}).get("extra", ""),
     log:
         "logs/bcr_abl_draw_fusions/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_draw_fusions/{sample}_{type}.tsv",
+            config.get("arriba", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("arriba", {}).get("threads", 1)
     resources:
         mem_mb=config.get("arriba", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -271,6 +304,11 @@ rule bcr_abl_bcftools_pileup:
         extra=lambda wildcards: config.get("bcr_abl", {}).get("bcftools_mpileup_extra", ""),
     log:
         "logs/bcr_abl_bcftools_pileup/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_bcftools_pileup/{sample}_{type}.tsv",
+            config.get("bcr_abl", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl", {}).get("threads", 2)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -282,6 +320,8 @@ rule bcr_abl_bcftools_pileup:
         config.get("bcftools", {}).get("container", "docker://hydragenetics/common:3.1.1")
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: call BCR-ABL1 target exons with bcftools for {wildcards.sample}_{wildcards.type}"
     shell:
         """
         exec > {log} 2>&1
@@ -309,6 +349,11 @@ rule bcr_abl_rindels:
         extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --bcr-abl"),
     log:
         "logs/bcr_abl_rindels/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_rindels/{sample}_{type}.tsv",
+            config.get("bcr_abl_rindels", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4))
     resources:
         mem_mb=config.get("bcr_abl_rindels", {}).get("mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])),
@@ -316,6 +361,8 @@ rule bcr_abl_rindels:
         partition=config.get("bcr_abl_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
         threads=config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
         time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
+    message:
+        "{rule}: run Rindels in BCR-ABL1 mode for {wildcards.sample}_{wildcards.type}"
     shell:
         """
         python3 {workflow.basedir}/scripts/run_rindels.py bcr-abl \

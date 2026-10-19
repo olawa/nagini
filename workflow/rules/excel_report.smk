@@ -252,10 +252,18 @@ rule nagini_summary_excel_report:
         bcr_abl_plot_paths=lambda wildcards: get_summary_report_paths("bcr_abl_plots"),
     log:
         "logs/nagini_summary_excel_report/summary.log",
+    benchmark:
+        repeat(
+            "benchmarks/nagini_summary_excel_report/nagini_summary_excel_report.tsv",
+            config.get("nagini_excel_report", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
         mem_mb=config.get("nagini_excel_report", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("nagini_excel_report", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("nagini_excel_report", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
+        time=config.get("nagini_excel_report", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("nagini_excel_report", {}).get("container", config["default_container"])
     conda:

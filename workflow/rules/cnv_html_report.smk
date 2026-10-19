@@ -53,21 +53,28 @@ rule decompress_cytoband:
         gz=lambda wildcards: config["references"][wildcards.build]["cytoband"],
     output:
         txt=temp("reports/cnv_html_report/cytobands_{build}.txt"),
+    params:
+        extra=config.get("decompress_cytoband", {}).get("extra", ""),
     log:
         "reports/cnv_html_report/cytobands_{build}.log",
+    benchmark:
+        repeat(
+            "benchmarks/decompress_cytoband/{build}.tsv",
+            config.get("decompress_cytoband", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
-        mem_mb=config.get("_copy", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("_copy", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("_copy", {}).get("partition", config["default_resources"]["partition"]),
+        mem_mb=config.get("decompress_cytoband", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("decompress_cytoband", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("decompress_cytoband", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
-        time="00:15:00",
+        time=config.get("decompress_cytoband", {}).get("time", "00:15:00"),
     container:
-        config.get("merge_cnv_json", {}).get("container", config["default_container"])
+        config.get("decompress_cytoband", {}).get("container", config.get("merge_cnv_json", {}).get("container", config["default_container"]))
     message:
         "{rule}: Decompressing cytoband reference for {wildcards.build}"
     shell:
-        "gzip -dc {input.gz} > {output.txt} 2> {log}"
+        "gzip -dc {params.extra} {input.gz} > {output.txt} 2> {log}"
 
 
 rule cnvkit_json:

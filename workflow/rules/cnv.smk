@@ -122,21 +122,28 @@ rule cytoband_centromeres:
     Rindels falls back to a built-in hg38 set when it is given none, which on
     T2T puts the centromeres in the wrong places.
     """
+    input:
+        cytoband=lambda wildcards: get_cytoband_file() or [],
     output:
         bed="references/centromeres_{build}.bed",
     params:
-        cytoband=lambda wildcards: get_cytoband_file() or "",
+        cytoband=lambda wildcards, input: input.cytoband or "",
     log:
         "logs/cytoband_centromeres/centromeres_{build}.log",
+    benchmark:
+        repeat(
+            "benchmarks/cytoband_centromeres/{build}.tsv",
+            config.get("cytoband_centromeres", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
-        mem_mb=config["default_resources"]["mem_mb"],
-        mem_per_cpu=config["default_resources"]["mem_per_cpu"],
-        partition=config["default_resources"]["partition"],
+        mem_mb=config.get("cytoband_centromeres", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("cytoband_centromeres", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("cytoband_centromeres", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
-        time=config["default_resources"]["time"],
+        time=config.get("cytoband_centromeres", {}).get("time", config["default_resources"]["time"]),
     container:
-        config["default_container"]
+        config.get("cytoband_centromeres", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     wildcard_constraints:

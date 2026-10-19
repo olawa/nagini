@@ -37,6 +37,11 @@ rule cnvkit_targets:
         avg_size=config.get("cnvkit_batch", {}).get("target_avg_size", 50000),
     log:
         "logs/cnvkit_targets/cnvkit_targets_{build}.log",
+    benchmark:
+        repeat(
+            "benchmarks/cnvkit_targets/{build}.tsv",
+            config.get("cnvkit_batch", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
         mem_mb=config.get("cnvkit_batch", {}).get("mem_mb", config["default_resources"]["mem_mb"]),

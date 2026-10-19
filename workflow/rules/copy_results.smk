@@ -30,8 +30,15 @@ rule copy_to_results:
         "results/{path}",
     wildcard_constraints:
         path=r"(?!results/).+",
+    params:
+        extra=config.get("_copy", {}).get("extra", ""),
     log:
         "logs/copy_to_results/{path}.log",
+    benchmark:
+        repeat(
+            "benchmarks/copy_to_results/{path}.tsv",
+            config.get("_copy", {}).get("benchmark_repeats", 1),
+        )
     threads: 1
     resources:
         mem_mb=config.get("_copy", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -44,4 +51,4 @@ rule copy_to_results:
     message:
         "{rule}: deliver {input} to {output}"
     shell:
-        "(cp --preserve=timestamps {input} {output}) &> {log}"
+        "(cp --preserve=timestamps {params.extra} {input} {output}) &> {log}"

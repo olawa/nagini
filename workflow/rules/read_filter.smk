@@ -98,6 +98,11 @@ rule read_filter_fastq:
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
     log:
         "logs/read_filter/{sample}_{type}_{processing_unit}_{barcode}.fastq.log",
+    benchmark:
+        repeat(
+            "benchmarks/read_filter_fastq/{sample}_{type}_{processing_unit}_{barcode}.tsv",
+            config.get("read_filter", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("read_filter", {}).get("threads", 4)
     resources:
         mem_mb=config.get("read_filter", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -113,6 +118,8 @@ rule read_filter_fastq:
         config.get("read_filter", {}).get("container", None)
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: filter {input.fastq1} by quality and length"
     shell:
         """
         {params.binary} filter {input.fastq1} -o {output.fastq1} \
@@ -135,6 +142,11 @@ rule read_filter_unmapped_bam:
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
     log:
         "logs/read_filter/{sample}_{type}_{processing_unit}_{barcode}.bam.log",
+    benchmark:
+        repeat(
+            "benchmarks/read_filter_unmapped_bam/{sample}_{type}_{processing_unit}_{barcode}.tsv",
+            config.get("read_filter", {}).get("benchmark_repeats", 1),
+        )
     threads: config.get("read_filter", {}).get("threads", 4)
     resources:
         mem_mb=config.get("read_filter", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
@@ -150,6 +162,8 @@ rule read_filter_unmapped_bam:
         config.get("read_filter", {}).get("container", None)
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: filter {input.bam} by quality and length"
     shell:
         """
         {params.binary} filter {input.bam} -o {output.bam} \
