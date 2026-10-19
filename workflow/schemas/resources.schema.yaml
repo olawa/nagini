@@ -1,52 +1,92 @@
-$schema: "http://json-schema.org/draft-07/schema#"
+$schema: http://json-schema.org/draft-07/schema#
 description: Resource definitions used by nagini and its Hydra modules.
 type: object
 properties:
   default_resources:
-    $ref: "#/definitions/resources"
-  stage_aligned_bam:
-    $ref: "#/definitions/resources"
-  dorado:
-    $ref: "#/definitions/resources"
-  dorado_demux_bam:
-    $ref: "#/definitions/resources"
-  dorado_fastq:
-    $ref: "#/definitions/resources"
-  dorado_alignment:
-    $ref: "#/definitions/resources"
-  finalize_dorado_alignment:
-    $ref: "#/definitions/resources"
-  minimap2_fastq_align:
-    $ref: "#/definitions/resources"
-  minimap2_unmapped_bam_align:
-    $ref: "#/definitions/resources"
-  samtools_merge_bam:
-    $ref: "#/definitions/resources"
-  mosdepth:
-    $ref: "#/definitions/resources"
-  mosdepth_bed:
-    $ref: "#/definitions/resources"
-  sv_summary:
-    $ref: "#/definitions/resources"
-  gatk_merge_mutect_stats:
-    $ref: "#/definitions/resources"
-  gatk_filter_mutect_calls:
-    $ref: "#/definitions/resources"
+    $ref: '#/definitions/resources'
+  _copy:
+    $ref: '#/definitions/resources'
+  arriba:
+    $ref: '#/definitions/resources'
+  bcftools_norm_clairs_to:
+    $ref: '#/definitions/resources'
+  bcftools_norm_deepvariant:
+    $ref: '#/definitions/resources'
   bcftools_norm_mutect2:
-    $ref: "#/definitions/resources"
-  vep:
-    $ref: "#/definitions/resources"
-  nagini_excel_report:
-    $ref: "#/definitions/resources"
-  cnv_rindels:
-    $ref: "#/definitions/resources"
+    $ref: '#/definitions/resources'
+  bcr_abl:
+    $ref: '#/definitions/resources'
   bcr_abl_rindels:
-    $ref: "#/definitions/resources"
+    $ref: '#/definitions/resources'
+  cnv_html_report:
+    $ref: '#/definitions/resources'
+  cnv_json:
+    $ref: '#/definitions/resources'
+  cnv_rindels:
+    $ref: '#/definitions/resources'
+  cnv_summary:
+    $ref: '#/definitions/resources'
+  cnvkit_batch:
+    $ref: '#/definitions/resources'
+  create_genome_contigs_bed:
+    $ref: '#/definitions/resources'
+  cytoband_centromeres:
+    $ref: '#/definitions/resources'
+  decompress_cytoband:
+    $ref: '#/definitions/resources'
+  dorado:
+    $ref: '#/definitions/resources'
+  dorado_alignment:
+    $ref: '#/definitions/resources'
+  dorado_demux_bam:
+    $ref: '#/definitions/resources'
+  dorado_demux_qc:
+    $ref: '#/definitions/resources'
+  dorado_demux_summary:
+    $ref: '#/definitions/resources'
+  dorado_fastq:
+    $ref: '#/definitions/resources'
+  extract_target_bam:
+    $ref: '#/definitions/resources'
+  finalize_dorado_alignment:
+    $ref: '#/definitions/resources'
+  gatk_filter_mutect_calls:
+    $ref: '#/definitions/resources'
+  gatk_merge_mutect_stats:
+    $ref: '#/definitions/resources'
+  merge_cnv_json:
+    $ref: '#/definitions/resources'
+  minimap2_fastq_align:
+    $ref: '#/definitions/resources'
+  minimap2_unmapped_bam_align:
+    $ref: '#/definitions/resources'
+  mosdepth:
+    $ref: '#/definitions/resources'
+  mosdepth_bed:
+    $ref: '#/definitions/resources'
+  nagini_excel_report:
+    $ref: '#/definitions/resources'
+  pad_target_bed:
+    $ref: '#/definitions/resources'
+  read_filter:
+    $ref: '#/definitions/resources'
+  rindels_ideogram:
+    $ref: '#/definitions/resources'
+  samtools_fastq:
+    $ref: '#/definitions/resources'
+  samtools_merge_bam:
+    $ref: '#/definitions/resources'
   savana_ont_to:
-    $ref: "#/definitions/resources"
+    $ref: '#/definitions/resources'
+  stage_aligned_bam:
+    $ref: '#/definitions/resources'
+  sv_summary:
+    $ref: '#/definitions/resources'
+  vep:
+    $ref: '#/definitions/resources'
 additionalProperties: true
-
-required: [default_resources]
+required:
+- default_resources
 definitions:
   resources:
     type: object

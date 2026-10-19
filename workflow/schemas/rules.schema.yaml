@@ -1,52 +1,975 @@
-$schema: "http://json-schema.org/draft-07/schema#"
-description: Input/output descriptions for nagini-specific rules.
+$schema: http://json-schema.org/draft-07/schema#
+description: Input and output descriptions for the rules defined in nagini.
 type: object
 properties:
-  stage_aligned_bam:
-    $ref: "#/definitions/rule_io"
-  dorado_basecaller:
-    $ref: "#/definitions/rule_io"
-  dorado_demux:
-    $ref: "#/definitions/rule_io"
-  dorado_demux_summary:
-    $ref: "#/definitions/rule_io"
-  dorado_demux_barcode_bam:
-    $ref: "#/definitions/rule_io"
-  dorado_demux_fastq:
-    $ref: "#/definitions/rule_io"
   align_dorado_bam_raw:
-    $ref: "#/definitions/rule_io"
-  finalize_dorado_bam_alignment:
-    $ref: "#/definitions/rule_io"
-  sv_summary:
-    $ref: "#/definitions/rule_io"
-  gatk_merge_mutect_stats:
-    $ref: "#/definitions/rule_io"
-  gatk_filter_mutect_calls:
-    $ref: "#/definitions/rule_io"
-  bcftools_norm_mutect2:
-    $ref: "#/definitions/rule_io"
-  vep_annotate_mutect2:
-    $ref: "#/definitions/rule_io"
-  nagini_excel_report:
-    $ref: "#/definitions/rule_io"
-additionalProperties: true
-definitions:
-  rule_io:
     type: object
+    description: input and output parameters for align_dorado_bam_raw
     properties:
       input:
         type: object
-        description: Named input files for the rule.
-        additionalProperties:
-          type: string
+        description: input files
       output:
         type: object
-        description: Named output files for the rule.
-        additionalProperties:
-          type: string
-      params:
+        description: output files
+  bcr_abl_bcftools_pileup:
+    type: object
+    description: input and output parameters for bcr_abl_bcftools_pileup
+    properties:
+      input:
         type: object
-        description: Configurable command parameters.
-        additionalProperties: true
-    additionalProperties: true
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          ref:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          vcf:
+            type: string
+            description: snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz
+          tbi:
+            type: string
+            description: snv_indels/bcftools_mpileup/{sample}_{type}.bcr_abl.vcf.gz.tbi
+  bcr_abl_branford_calling:
+    type: object
+    description: input and output parameters for bcr_abl_branford_calling
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          features:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          ref_fasta:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          known_variants:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          all_sites:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv
+          mutations:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.branford_mutations.tsv
+          vcf:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.branford_mutations.vcf
+  bcr_abl_draw_fusions:
+    type: object
+    description: input and output parameters for bcr_abl_draw_fusions
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          fusions:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv
+          fusion_summary:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.fusion_summary.tsv
+          mutations:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.branford_mutations.tsv
+          phasing:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.phasing.tsv
+          exon_coverage:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.exon_coverage.tsv
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+      output:
+        type: object
+        description: output files
+        properties:
+          pdf:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.fusion_plot.pdf
+          png:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.fusion_plot.png
+  bcr_abl_exon_coverage:
+    type: object
+    description: input and output parameters for bcr_abl_exon_coverage
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.exon_coverage.tsv
+  bcr_abl_fusion_counts:
+    type: object
+    description: input and output parameters for bcr_abl_fusion_counts
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          features:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.fusion_summary.tsv
+          json:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.fusion_summary.json
+          arriba:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.arriba_fusions.tsv
+  bcr_abl_phasing:
+    type: object
+    description: input and output parameters for bcr_abl_phasing
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          mutations:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.branford_mutations.tsv
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.phasing.tsv
+          json:
+            type: string
+            description: reports/bcr_abl/{sample}_{type}.phasing.json
+  bcr_abl_rindels:
+    type: object
+    description: input and output parameters for bcr_abl_rindels
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          ref:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          vcf:
+            type: string
+            description: snv_indels/rindels/{sample}_{type}.rindels.vcf.gz
+          haplotypes:
+            type: string
+            description: snv_indels/rindels/{sample}_{type}.haplotypes.tsv
+  cnv_rindels:
+    type: object
+    description: input and output parameters for cnv_rindels
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          ref:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          gtf:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bins:
+            type: string
+            description: cnv/rindels/{sample}_{type}.cnv_bins.bed
+          ascat:
+            type: string
+            description: cnv/rindels/{sample}_{type}.ascat.bed
+          pdf:
+            type: string
+            description: cnv/rindels/{sample}_{type}_report.pdf
+          vcf:
+            type: string
+            description: cnv/rindels/{sample}_{type}.vcf
+  cnv_rindels_ideogram:
+    type: object
+    description: input and output parameters for cnv_rindels_ideogram
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bins:
+            type: string
+            description: cnv/rindels/{sample}_{type}.cnv_bins.bed
+          centromeres:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          gaps:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          png:
+            type: string
+            description: reports/cnv_ideogram/{sample}_{type}.ideogram.png
+  cnv_summary:
+    type: object
+    description: input and output parameters for cnv_summary
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          ascat:
+            type: string
+            description: cnv/rindels/{sample}_{type}.ascat.bed
+          target_bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cytoband:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/cnv_summary/{sample}_{type}.cnv.tsv
+          json:
+            type: string
+            description: reports/cnv_summary/{sample}_{type}.cnv.json
+  cnvkit_batch:
+    type: object
+    description: input and output parameters for cnvkit_batch
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          fasta:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          targets:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          cnr:
+            type: string
+            description: cnv/cnvkit/{sample}_{type}.cnr
+          cns:
+            type: string
+            description: cnv/cnvkit/{sample}_{type}.cns
+  cnvkit_json:
+    type: object
+    description: input and output parameters for cnvkit_json
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          ratios:
+            type: string
+            description: cnv/cnvkit/{sample}_{type}.cnr
+          segments:
+            type: string
+            description: cnv/cnvkit/{sample}_{type}.cns
+          annotations:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          json:
+            type: string
+            description: reports/cnv_html_report/{sample}_{type}.{caller}.json
+  cnvkit_targets:
+    type: object
+    description: input and output parameters for cnvkit_targets
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          fasta:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          access:
+            type: string
+            description: references/cnvkit_access_{build}.bed
+          targets:
+            type: string
+            description: references/cnvkit_targets_{build}.bed
+  compile_cnv_html_report:
+    type: object
+    description: input and output parameters for compile_cnv_html_report
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          json:
+            type: string
+            description: reports/cnv_html_report/{sample}_{type}.merged.json
+          html_template:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          js_files:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          css_files:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          html:
+            type: string
+            description: reports/cnv_html_report/{sample}_{type}.cnv_report.html
+  copy_to_results:
+    type: object
+    description: input and output parameters for copy_to_results
+    properties:
+      input:
+        type: object
+        description: input files (resolved per sample)
+      output:
+        type: object
+        description: output files (resolved per sample)
+  create_genome_contigs_bed:
+    type: object
+    description: input and output parameters for create_genome_contigs_bed
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          fai:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bed:
+            type: string
+            description: references/genome_contigs.bed
+  cytoband_centromeres:
+    type: object
+    description: input and output parameters for cytoband_centromeres
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          cytoband:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bed:
+            type: string
+            description: references/centromeres_{build}.bed
+  decompress_cytoband:
+    type: object
+    description: input and output parameters for decompress_cytoband
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          gz:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          txt:
+            type: string
+            description: reports/cnv_html_report/cytobands_{build}.txt
+  dorado_basecaller:
+    type: object
+    description: input and output parameters for dorado_basecaller
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          reads:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: basecalling/dorado/basecalled.bam
+  dorado_demux:
+    type: object
+    description: input and output parameters for dorado_demux
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: basecalling/dorado/basecalled.bam
+      output:
+        type: object
+        description: output files
+        properties:
+          raw_dir:
+            type: string
+            description: resolved from the configuration or the sample sheet
+  dorado_demux_barcode_bam:
+    type: object
+    description: input and output parameters for dorado_demux_barcode_bam
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          raw_dir:
+            type: string
+            description: basecalling/dorado_demux_raw
+          basecalled:
+            type: string
+            description: basecalling/dorado/basecalled.bam
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: resolved from the configuration or the sample sheet
+  dorado_demux_fastq:
+    type: object
+    description: input and output parameters for dorado_demux_fastq
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: basecalling/dorado_demux/{dorado_barcode}.bam
+      output:
+        type: object
+        description: output files
+        properties:
+          fastq:
+            type: string
+            description: resolved from the configuration or the sample sheet
+  dorado_demux_qc:
+    type: object
+    description: input and output parameters for dorado_demux_qc
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          summary:
+            type: string
+            description: basecalling/dorado_demux/demux_summary.tsv
+          units:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          mqc:
+            type: string
+            description: qc/dorado_demux/dorado_demux_mqc.tsv
+  dorado_demux_summary:
+    type: object
+    description: input and output parameters for dorado_demux_summary
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          raw_dir:
+            type: string
+            description: basecalling/dorado_demux_raw
+      output:
+        type: object
+        description: output files
+        properties:
+          summary:
+            type: string
+            description: basecalling/dorado_demux/demux_summary.tsv
+  extract_target_bam:
+    type: object
+    description: input and output parameters for extract_target_bam
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam
+          bai:
+            type: string
+            description: alignment/merged/{sample}_{type}.bam.bai
+          bed:
+            type: string
+            description: alignment/target/targets_padded_25kb.bed
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: alignment/target/{sample}_{type}.target.bam
+          bai:
+            type: string
+            description: alignment/target/{sample}_{type}.target.bam.bai
+  finalize_dorado_bam_alignment:
+    type: object
+    description: input and output parameters for finalize_dorado_bam_alignment
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bai:
+            type: string
+            description: resolved from the configuration or the sample sheet
+  merge_cnvkit_json:
+    type: object
+    description: input and output parameters for merge_cnvkit_json
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          json:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          fai:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cytobands:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          annotation_bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          germline_vcf:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          filtered_cnv_vcfs:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cnv_vcfs:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          ref_genes:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cancer_genes:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          json:
+            type: string
+            description: reports/cnv_html_report/{sample}_{type}.merged.json
+  merged_fastq:
+    type: object
+    description: input and output parameters for merged_fastq
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bams:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          fastq:
+            type: string
+            description: reads/merged/{sample}_{type}.fastq.gz
+  nagini_excel_report:
+    type: object
+    description: input and output parameters for nagini_excel_report
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          snv_vcf:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          snv_tbi:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          sv:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          translocations:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cnv_ideogram:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          rindels_sv:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          rindels_translocations:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          savana_sv:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          savana_translocations:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cnv:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          wgs_coverage:
+            type: string
+            description: qc/mosdepth/{sample}_{type}.mosdepth.summary.txt
+          target_coverage:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          target_dist:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          demux_summary:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cramino:
+            type: string
+            description: qc/cramino/{sample}_{type}.txt
+          target_cramino:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_fusion:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_mutations:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_all_sites:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_phasing:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_exon_coverage:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          bcr_abl_plot_png:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          xlsx:
+            type: string
+            description: reports/{sample}_{type}.nagini_report.xlsx
+  nagini_summary_excel_report:
+    type: object
+    description: input and output parameters for nagini_summary_excel_report
+    properties:
+      input:
+        type: object
+        description: input files (resolved per sample)
+      output:
+        type: object
+        description: output files
+        properties:
+          xlsx:
+            type: string
+            description: reports/nagini_summary_report.xlsx
+  pad_target_bed:
+    type: object
+    description: input and output parameters for pad_target_bed
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bed:
+            type: string
+            description: alignment/target/targets_padded_25kb.bed
+  read_filter_fastq:
+    type: object
+    description: input and output parameters for read_filter_fastq
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          fastq1:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          fastq1:
+            type: string
+            description: reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.fastq.gz
+  read_filter_unmapped_bam:
+    type: object
+    description: input and output parameters for read_filter_unmapped_bam
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.unmapped.bam
+  stage_aligned_bam:
+    type: object
+    description: input and output parameters for stage_aligned_bam
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          bam:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          bam:
+            type: string
+            description: alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam
+          bai:
+            type: string
+            description: alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam.bai
+  sv_summary:
+    type: object
+    description: input and output parameters for sv_summary
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          vcf:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          tbi:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          annotation_bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cytoband:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/sv_summary/{sample}_{type}.tsv
+          translocations:
+            type: string
+            description: reports/sv_summary/{sample}_{type}.translocations.tsv
+          json:
+            type: string
+            description: reports/sv_summary/{sample}_{type}.json
+  sv_summary_rindels:
+    type: object
+    description: input and output parameters for sv_summary_rindels
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          vcf:
+            type: string
+            description: cnv/rindels/{sample}_{type}.vcf.gz
+          tbi:
+            type: string
+            description: cnv/rindels/{sample}_{type}.vcf.gz.tbi
+          annotation_bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cytoband:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/sv_summary_rindels/{sample}_{type}.tsv
+          translocations:
+            type: string
+            description: reports/sv_summary_rindels/{sample}_{type}.translocations.tsv
+          json:
+            type: string
+            description: reports/sv_summary_rindels/{sample}_{type}.json
+  sv_summary_savana:
+    type: object
+    description: input and output parameters for sv_summary_savana
+    properties:
+      input:
+        type: object
+        description: input files
+        properties:
+          vcf:
+            type: string
+            description: cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz
+          tbi:
+            type: string
+            description: cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi
+          annotation_bed:
+            type: string
+            description: resolved from the configuration or the sample sheet
+          cytoband:
+            type: string
+            description: resolved from the configuration or the sample sheet
+      output:
+        type: object
+        description: output files
+        properties:
+          tsv:
+            type: string
+            description: reports/sv_summary_savana/{sample}_{type}.tsv
+          translocations:
+            type: string
+            description: reports/sv_summary_savana/{sample}_{type}.translocations.tsv
+          json:
+            type: string
+            description: reports/sv_summary_savana/{sample}_{type}.json
+additionalProperties: true
