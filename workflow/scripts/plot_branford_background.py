@@ -9,11 +9,13 @@ Reads `*.branford_all_sites.tsv` produced by `bcr_abl_branford_caller.py` and cr
 2. An optional clean TSV summary with per-base counts and percentages for each Branford site.
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import matplotlib
