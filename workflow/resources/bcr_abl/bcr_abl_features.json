@@ -1,6 +1,6 @@
 {
   "description": "BCR-ABL1 Fusion, Breakpoint, and Kinase Domain Resistance Database",
-  "version": "1.1",
+  "version": "1.2",
   "build": "hg38",
   "breakpoint_clusters": [
     {
@@ -211,7 +211,7 @@
       "Nilotinib": "Resistant",
       "Bosutinib": "Sensitive",
       "Ponatinib": "Sensitive",
-      "Asciminib": "Sensitive"
+      "Asciminib": "Resistant"
     },
     "F359I": {
       "Imatinib": "Resistant",
@@ -283,7 +283,7 @@
       "Nilotinib": "Sensitive",
       "Bosutinib": "Sensitive",
       "Ponatinib": "Sensitive",
-      "Asciminib": "Sensitive"
+      "Asciminib": "Resistant"
     },
     "L248V": {
       "Imatinib": "Resistant",
@@ -299,7 +299,7 @@
       "Nilotinib": "Sensitive",
       "Bosutinib": "Sensitive",
       "Ponatinib": "Sensitive",
-      "Asciminib": "Sensitive"
+      "Asciminib": "Resistant"
     },
     "Q252R": {
       "Imatinib": "Intermediate",
@@ -420,6 +420,36 @@
       "Bosutinib": "Sensitive",
       "Ponatinib": "Sensitive",
       "Asciminib": "Sensitive"
+    }
+  },
+  "tki_profile_review": {
+    "reviewed_on": "2026-10-16",
+    "scope": "Targeted correction of asciminib profiles for M244V, Q252H and F359V. Other inherited drug-response entries have not been revalidated in this review. Profiles describe individual protein variants, not compound haplotypes or treatment recommendations."
+  },
+  "tki_profile_evidence": {
+    "M244V": {
+      "Asciminib": {
+        "source": "https://doi.org/10.1038/s41375-025-02664-w",
+        "citation": "Apperley et al., European LeukemiaNet recommendations, Leukemia 2025;39:1797–1813, p.1802",
+        "basis": "Guideline explicitly describes asciminib resistance for this variant.",
+        "reviewed_on": "2026-10-16"
+      }
+    },
+    "Q252H": {
+      "Asciminib": {
+        "source": "https://doi.org/10.1038/s41375-025-02664-w",
+        "citation": "Apperley et al., European LeukemiaNet recommendations, Leukemia 2025;39:1797–1813, p.1802",
+        "basis": "Guideline explicitly describes asciminib resistance for this variant.",
+        "reviewed_on": "2026-10-16"
+      }
+    },
+    "F359V": {
+      "Asciminib": {
+        "source": "https://doi.org/10.1038/s41375-025-02664-w",
+        "citation": "Apperley et al., European LeukemiaNet recommendations, Leukemia 2025;39:1797–1813, p.1802",
+        "basis": "Guideline explicitly describes asciminib resistance for this variant.",
+        "reviewed_on": "2026-10-16"
+      }
     }
   }
 }

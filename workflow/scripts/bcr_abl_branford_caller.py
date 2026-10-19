@@ -17,8 +17,10 @@ that, but they are not a substitute for a per-position error baseline built
 from negative samples.
 
 SNR (--min-snr)
-    ad_alt divided by the largest of the two *other* non-reference bases.
-    Catches noise that spreads evenly across all three substitutions.
+    ad_alt divided by the largest observed non-candidate base count. Other
+    panel substitutions count as background only when they are below the
+    independent minimum-support/frequency screen for a candidate allele.
+    Catches noise that spreads evenly across the remaining substitutions.
     It is blind to the opposite and more common case: a context-specific
     Nanopore error produces the same substitution every time, leaving the other
     two bases clean, which yields a *high* SNR. At 46 000x a recurrent 1.4 %
@@ -52,59 +54,37 @@ data. Calibrate them against the per-position background once it exists.
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import pysam
 
-BASES = ("A", "C", "G", "T")
+from bcr_abl_annotations import load_features, load_tki_profiles
 
-# Built-in TKI resistance lookup table
-DEFAULT_TKI_PROFILES = {
-    "T315I": {"Imatinib": "Resistant", "Dasatinib": "Resistant", "Nilotinib": "Resistant", "Bosutinib": "Resistant", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "T315A": {"Imatinib": "Resistant", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Resistant", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "Y253H": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Resistant", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "Y253F": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Resistant", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E255K": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Resistant", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E255V": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Resistant", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F359V": {"Imatinib": "Resistant", "Dasatinib": "Sensitive", "Nilotinib": "Resistant", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F359I": {"Imatinib": "Resistant", "Dasatinib": "Sensitive", "Nilotinib": "Resistant", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F359C": {"Imatinib": "Resistant", "Dasatinib": "Sensitive", "Nilotinib": "Resistant", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "G250E": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Intermediate", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F317L": {"Imatinib": "Intermediate", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F317V": {"Imatinib": "Intermediate", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F317I": {"Imatinib": "Intermediate", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F317C": {"Imatinib": "Intermediate", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "V299L": {"Imatinib": "Sensitive", "Dasatinib": "Resistant", "Nilotinib": "Sensitive", "Bosutinib": "Resistant", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "M244V": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "L248V": {"Imatinib": "Resistant", "Dasatinib": "Intermediate", "Nilotinib": "Intermediate", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "Q252H": {"Imatinib": "Intermediate", "Dasatinib": "Intermediate", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "Q252R": {"Imatinib": "Intermediate", "Dasatinib": "Intermediate", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "D276G": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E279K": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F311I": {"Imatinib": "Intermediate", "Dasatinib": "Intermediate", "Nilotinib": "Intermediate", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "F311L": {"Imatinib": "Intermediate", "Dasatinib": "Intermediate", "Nilotinib": "Intermediate", "Bosutinib": "Intermediate", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "M351T": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E355G": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "V379I": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "L387M": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Intermediate", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "L387F": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Intermediate", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "H396R": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "H396P": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E450K": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E450G": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-    "E459K": {"Imatinib": "Intermediate", "Dasatinib": "Sensitive", "Nilotinib": "Sensitive", "Bosutinib": "Sensitive", "Ponatinib": "Sensitive", "Asciminib": "Sensitive"},
-}
+BASES = ("A", "C", "G", "T")
 
 AA3_TO_AA1 = {
     "Ala": "A", "Arg": "R", "Asn": "N", "Asp": "D", "Cys": "C", "Gln": "Q", "Glu": "E",
     "Gly": "G", "His": "H", "Ile": "I", "Leu": "L", "Lys": "K", "Met": "M", "Phe": "F",
     "Pro": "P", "Ser": "S", "Thr": "T", "Trp": "W", "Tyr": "Y", "Val": "V", "Ter": "*",
 }
+
+CODON_TABLE = {
+    "TTT":"F", "TTC":"F", "TTA":"L", "TTG":"L", "TCT":"S", "TCC":"S", "TCA":"S", "TCG":"S",
+    "TAT":"Y", "TAC":"Y", "TAA":"*", "TAG":"*", "TGT":"C", "TGC":"C", "TGA":"*", "TGG":"W",
+    "CTT":"L", "CTC":"L", "CTA":"L", "CTG":"L", "CCT":"P", "CCC":"P", "CCA":"P", "CCG":"P",
+    "CAT":"H", "CAC":"H", "CAA":"Q", "CAG":"Q", "CGT":"R", "CGC":"R", "CGA":"R", "CGG":"R",
+    "ATT":"I", "ATC":"I", "ATA":"I", "ATG":"M", "ACT":"T", "ACC":"T", "ACA":"T", "ACG":"T",
+    "AAT":"N", "AAC":"N", "AAA":"K", "AAG":"K", "AGT":"S", "AGC":"S", "AGA":"R", "AGG":"R",
+    "GTT":"V", "GTC":"V", "GTA":"V", "GTG":"V", "GCT":"A", "GCC":"A", "GCA":"A", "GCG":"A",
+    "GAT":"D", "GAC":"D", "GAA":"E", "GAG":"E", "GGT":"G", "GGC":"G", "GGA":"G", "GGG":"G",
+}
+
+CDNA_RE = re.compile(r"c\.\((\d+)([ACGT])>([ACGT])\)")
 
 
 def short_aa_notation(aa_change: str) -> str:
@@ -134,7 +114,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
-    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio, ad_alt / largest other non-reference base. Blind to context-specific errors that favour one substitution; see the module docstring (default 3.0)")
+    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio against other non-candidate bases. Credible panel alleles at the same position are modeled as candidates, not noise (default 3.0)")
     parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
     parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
     parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
@@ -158,10 +138,18 @@ def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
             if len(fields) < 7:
                 fields = text.split()
             if len(fields) < 7:
-                continue
+                raise ValueError(f"Malformed BED row {bed_path}:{line_idx}: expected at least 7 columns")
 
             chrom, start, end, name, ref, alt, aa_change = fields[:7]
-            start_pos = int(start)
+            try:
+                start_pos = int(start)
+                end_pos = int(end)
+            except ValueError as exc:
+                raise ValueError(f"Invalid BED coordinate at {bed_path}:{line_idx}") from exc
+            if start_pos < 0 or end_pos != start_pos + 1:
+                raise ValueError(f"Expected one-base BED interval at {bed_path}:{line_idx}")
+            if ref.upper() not in BASES or alt.upper() not in BASES or ref.upper() == alt.upper():
+                raise ValueError(f"Invalid SNV REF/ALT at {bed_path}:{line_idx}")
             pos_1based = start_pos + 1
             short_name = short_aa_notation(aa_change)
 
@@ -174,6 +162,7 @@ def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
                 "alt": alt.upper(),
                 "aa_change": aa_change,
                 "short_mutation": short_name,
+                "cdna_pos": int(CDNA_RE.search(name).group(1)) if CDNA_RE.search(name) else None,
             })
     return rows
 
@@ -234,6 +223,86 @@ def context_is_clean(
             continue
         return False
     return True
+
+
+def variant_classification(aa_change: str, profile: Dict[str, str]) -> Tuple[str, str]:
+    """Separate sequence consequence from curated resistance significance."""
+    aa = short_aa_notation(aa_change)
+    match = re.fullmatch(r"([A-Z*])(\d+)([A-Z*])", aa)
+    consequence = "SYNONYMOUS" if match and match.group(1) == match.group(3) else (
+        "MISSENSE" if match else "OTHER"
+    )
+    if consequence == "SYNONYMOUS":
+        return consequence, "SYNONYMOUS"
+    if any(value in ("Resistant", "Intermediate") for value in profile.values()):
+        return consequence, "CURATED_RESISTANCE"
+    return consequence, "UNCLASSIFIED"
+
+
+def codon_groups(sites: List[Dict[str, Any]]) -> Dict[Tuple[str, int], List[Dict[str, Any]]]:
+    """Group panel substitutions by transcript codon (cDNA coordinates)."""
+    grouped: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+    for site in sites:
+        cpos = site.get("cdna_pos")
+        if cpos is not None:
+            grouped.setdefault((site["chrom"], (cpos - 1) // 3), []).append(site)
+    return grouped
+
+
+def infer_codon_genomic_positions(group: List[Dict[str, Any]]) -> Optional[Tuple[str, List[int]]]:
+    """Infer a complete contiguous genomic codon only from adjacent BED anchors."""
+    c_to_g = {site["cdna_pos"]: site["pos"] - 1 for site in group if site.get("cdna_pos") is not None}
+    if len(c_to_g) < 2:
+        return None
+    offsets = {g - c for c, g in c_to_g.items()}
+    if len(offsets) != 1:
+        return None
+    codon_start = (group[0]["cdna_pos"] - 1) // 3 * 3 + 1
+    return group[0]["chrom"], [c_to_g.get(c, c + next(iter(offsets))) for c in range(codon_start, codon_start + 3)]
+
+
+def collect_codon_haplotypes(
+    bam: pysam.AlignmentFile,
+    chrom: str,
+    positions: List[int],
+    min_baseq: int,
+    min_mapq: int,
+) -> Dict[Tuple[str, bool], Dict[str, Any]]:
+    """Count full codons once per read, retaining supplementary-only ABL signal."""
+    target = set(positions)
+    by_read: Dict[Tuple[str, bool, bool], Tuple[Tuple[int, int, int], Dict[int, Tuple[str, int, bool]]]] = {}
+    if not target:
+        return {}
+    for aln in bam.fetch(chrom, min(target), max(target) + 1):
+        if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary:
+            continue
+        if (aln.mapping_quality or 0) < min_mapq:
+            continue
+        qname_key = (aln.query_name, aln.is_read1, aln.is_read2)
+        rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0), aln.reference_start)
+        bases: Dict[int, Tuple[str, int, bool]] = {}
+        qualities = aln.query_qualities
+        for qpos, rpos in aln.get_aligned_pairs(matches_only=False):
+            if qpos is None or rpos not in target:
+                continue
+            bq = qualities[qpos] if qualities is not None else 30
+            base = aln.query_sequence[qpos].upper()
+            if base in BASES and bq >= min_baseq:
+                bases[rpos] = (base, bq, aln.is_reverse)
+        old = by_read.get(qname_key)
+        if old is None or rank < old[0]:
+            by_read[qname_key] = (rank, bases)
+    out: Dict[Tuple[str, bool], Dict[str, Any]] = {}
+    for _, bases in by_read.values():
+        # Codon positions are passed in transcript order and can be genomic +1.
+        if not all(pos in bases for pos in positions):
+            continue
+        codon = "".join(bases[pos][0] for pos in positions)
+        reverse = bases[positions[0]][2]
+        item = out.setdefault((codon, reverse), {"count": 0, "bq_sum": 0})
+        item["count"] += 1
+        item["bq_sum"] += sum(bases[pos][1] for pos in positions) / 3
+    return out
 
 
 def count_positions_batch(
@@ -297,7 +366,21 @@ def count_positions_batch(
         else:
             ref_left, ref_right, k_len = "", "", 0
 
+        best_by_read: Dict[Tuple[str, bool, bool], Any] = {}
         for read in column.pileups:
+            aln = read.alignment
+            if (
+                aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary
+                or (aln.mapping_quality or 0) < min_mapq
+            ):
+                continue
+            key = (aln.query_name, aln.is_read1, aln.is_read2)
+            rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0))
+            previous = best_by_read.get(key)
+            if previous is None or rank < previous[0]:
+                best_by_read[key] = (rank, read)
+
+        for _, read in best_by_read.values():
             aln = read.alignment
             if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail:
                 continue
@@ -369,16 +452,10 @@ def main() -> None:
     if not sites:
         sys.exit(f"No sites parsed from {args.bed}")
 
-    # Load custom TKI profile if provided
-    tki_profiles = dict(DEFAULT_TKI_PROFILES)
-    if args.features_json and args.features_json.is_file():
-        try:
-            with args.features_json.open() as h:
-                features = json.load(h)
-                if "tki_profiles" in features:
-                    tki_profiles.update(features["tki_profiles"])
-        except Exception as e:
-            sys.stderr.write(f"Warning: could not load TKI profiles from {args.features_json}: {e}\n")
+    # An explicit annotation resource is part of the requested analysis and
+    # must not silently fall back to a different clinical profile set.
+    features = load_features(args.features_json)
+    tki_profiles = load_tki_profiles(args.features_json)
 
     # Pre-extract reference k-mer context if reference fasta is provided
     # A mismatch in the flank is only evidence of a context error when it is
@@ -393,7 +470,7 @@ def main() -> None:
         exempt_positions.setdefault(site["chrom"], set()).add(site["pos"] - 1)
 
     ref_seqs_by_pos: Dict[Tuple[str, int], Tuple[str, str, Tuple[bool, ...], Tuple[bool, ...]]] = {}
-    if args.reference_fasta and args.reference_fasta.is_file():
+    if args.reference_fasta:
         try:
             ref_fasta = pysam.FastaFile(str(args.reference_fasta))
             fasta_refs = set(ref_fasta.references)
@@ -403,8 +480,16 @@ def main() -> None:
                     alt_c = c[3:] if c.startswith("chr") else f"chr{c}"
                     if alt_c in fasta_refs:
                         c = alt_c
+                if c not in fasta_refs:
+                    raise ValueError(f"BED contig {site['chrom']} is absent from FASTA")
                 if c in fasta_refs:
                     p0 = site["pos"] - 1
+                    fasta_ref = ref_fasta.fetch(c, p0, p0 + 1).upper()
+                    if fasta_ref != site["ref"]:
+                        raise ValueError(
+                            f"BED REF mismatch at {site['chrom']}:{site['pos']}: "
+                            f"BED={site['ref']} FASTA={fasta_ref}"
+                        )
                     kw = args.kmer_window
                     c_len = ref_fasta.get_reference_length(c)
                     if p0 >= kw and (p0 + 1 + kw) <= c_len:
@@ -418,7 +503,9 @@ def main() -> None:
                         )
             ref_fasta.close()
         except Exception as e:
-            sys.stderr.write(f"Warning: could not load reference fasta {args.reference_fasta} for k-mer check: {e}\n")
+            if isinstance(e, ValueError):
+                raise
+            raise RuntimeError(f"Could not validate reference FASTA {args.reference_fasta}: {e}") from e
 
     bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
 
@@ -465,6 +552,10 @@ def main() -> None:
 
         all_results: List[Dict[str, Any]] = []
         detected_mutations: List[Dict[str, Any]] = []
+        panel_sites_expected = len({(s["chrom"], s["pos"]) for s in sites})
+        panel_alts_by_pos: Dict[Tuple[str, int], set] = {}
+        for panel_site in sites:
+            panel_alts_by_pos.setdefault((panel_site["chrom"], panel_site["pos"]), set()).add(panel_site["alt"])
 
         for site in sites:
             chrom = site["chrom"]
@@ -519,8 +610,21 @@ def main() -> None:
             k_tot = counts.get("kmer_total_count", {}).get(alt, 0)
             kmer_clean_percent = round((k_clean / k_tot) * 100.0, 1) if k_tot > 0 else 100.0
 
-            # Error baseline from non-candidate alternative bases
-            other_bases = {b: per_base[b] for b in BASES if b != ref and b != alt}
+            # Other panel substitutions are competitors only when they have
+            # enough independent support to be plausible alleles themselves.
+            # This avoids treating a second real panel allele as sequencing
+            # background while retaining weak/unexpected substitutions as the
+            # conservative local error estimate.
+            candidate_panel_alts = panel_alts_by_pos.get((site["chrom"], pos), set())
+            credible_panel_alts = {
+                b for b in candidate_panel_alts
+                if b != ref and per_base[b] >= args.min_alt_reads
+                and depth > 0 and (per_base[b] / depth) >= args.subclonal_af
+            }
+            other_bases = {
+                b: per_base[b] for b in BASES
+                if b != ref and b != alt and b not in credible_panel_alts
+            }
             ad_other = sum(other_bases.values())
             ad_other_max = max(other_bases.values()) if other_bases else 0
             vaf_other_percent = round((ad_other / depth) * 100.0, 3) if depth > 0 else 0.0
@@ -583,8 +687,11 @@ def main() -> None:
             bosutinib = tki_info.get("Bosutinib", "Unknown")
             ponatinib = tki_info.get("Ponatinib", "Unknown")
             asciminib = tki_info.get("Asciminib", "Unknown")
+            consequence, resistance_class = variant_classification(short_mut, tki_info)
 
             record = {
+                "record_type": "SITE_AUDIT",
+                "panel_sites_expected": panel_sites_expected,
                 "sample": args.sample,
                 "chrom": site["chrom"],
                 "pos": pos,
@@ -592,6 +699,9 @@ def main() -> None:
                 "alt": alt,
                 "mutation": short_mut,
                 "aa_change": site["aa_change"],
+                "consequence": consequence,
+                "resistance_class": resistance_class,
+                "codon_context_status": "SINGLE_SITE_ANNOTATION",
                 "name": site["name"],
                 "depth": depth,
                 "ad_ref": ad_ref,
@@ -606,6 +716,7 @@ def main() -> None:
                 "ad_other": ad_other,
                 "vaf_other_percent": vaf_other_percent,
                 "other_bases": other_bases_str,
+                "credible_panel_alt_competitors": ",".join(sorted(credible_panel_alts - {alt})),
                 "alt_minor_strand_ratio": alt_minor_strand_ratio,
                 "sor": sor,
                 "mean_baseq_ref": mean_baseq_ref,
@@ -631,6 +742,141 @@ def main() -> None:
             elif args.include_artifacts and status == "ARTIFACT":
                 detected_mutations.append(record)
 
+        # If two distinct nucleotide positions in one codon are detected, the
+        # individual BED amino-acid annotations are marginal statements and may
+        # not describe the observed haplotype. Replace those mutation rows with
+        # read-supported codon haplotypes when a trustworthy reference codon is
+        # available. The complete nucleotide-level table above remains intact.
+        detected_positions = {
+            (r["chrom"], r["pos"]) for r in all_results
+            if r["status"] in ("DETECTED", "SUBCLONAL")
+        }
+        aggregated_positions = set()
+        for (_, codon_number), group in codon_groups(sites).items():
+            detected_group_positions = sorted({
+                s["pos"] for s in group if (s["chrom"], s["pos"]) in detected_positions
+            })
+            if len(detected_group_positions) < 2:
+                continue
+            group_pos = {(s["chrom"], s["pos"]) for s in group if s["pos"] in detected_group_positions}
+            aggregated_positions.update(group_pos)
+            for raw in all_results:
+                if (raw["chrom"], raw["pos"]) in group_pos:
+                    raw["codon_context_status"] = "CODON_CONTEXT_REQUIRED"
+                    raw["resistance_class"] = "UNCLASSIFIED"
+
+            genomic = infer_codon_genomic_positions(group)
+            reference_codon = None
+            codon_chrom = group[0]["chrom"]
+            if genomic and args.reference_fasta:
+                codon_chrom, codon_positions = genomic
+                fasta_contig = codon_chrom
+                if fasta_contig not in fasta_refs:
+                    fasta_contig = codon_chrom[3:] if codon_chrom.startswith("chr") else f"chr{codon_chrom}"
+                if fasta_contig in fasta_refs:
+                    reference_codon = "".join(
+                        pysam.FastaFile(str(args.reference_fasta)).fetch(fasta_contig, p, p + 1).upper()
+                        for p in codon_positions
+                    )
+                    if len(reference_codon) != 3 or any(b not in BASES for b in reference_codon):
+                        reference_codon = None
+                    for s in group:
+                        c_index = (s["cdna_pos"] - 1) % 3
+                        if reference_codon and reference_codon[c_index] != s["ref"]:
+                            raise ValueError(
+                                f"BED REF disagrees with reconstructed codon at {s['chrom']}:{s['pos']}"
+                            )
+            if not genomic or not reference_codon:
+                for s in group:
+                    if s["pos"] not in detected_group_positions:
+                        continue
+                    raw = next(r for r in all_results if r["chrom"] == s["chrom"] and r["pos"] == s["pos"] and r["alt"] == s["alt"])
+                    if raw["status"] not in ("DETECTED", "SUBCLONAL"):
+                        continue
+                    unresolved = dict(raw)
+                    unresolved.update({
+                        "record_type": "CODON_CONTEXT_UNRESOLVED", "mutation": "CODON_CONTEXT_UNRESOLVED",
+                        "aa_change": "", "consequence": "OTHER", "resistance_class": "UNCLASSIFIED",
+                        "filter_reason": "CODON_CONTEXT_UNRESOLVED", "codon_context_status": "CODON_CONTEXT_UNRESOLVED",
+                    })
+                    detected_mutations.append(unresolved)
+                detected_mutations = [r for r in detected_mutations if not (r.get("record_type") == "SITE_AUDIT" and (r["chrom"], r["pos"]) in group_pos)]
+                continue
+
+            codon_start = min(codon_positions) + 1
+            bam_chrom = codon_chrom
+            if bam_chrom not in bam_contigs:
+                alt_chrom = bam_chrom[3:] if bam_chrom.startswith("chr") else f"chr{bam_chrom}"
+                if alt_chrom in bam_contigs:
+                    bam_chrom = alt_chrom
+            if bam_chrom not in bam_contigs:
+                hap_counts = {}
+            else:
+                hap_counts = collect_codon_haplotypes(
+                    bam, bam_chrom, codon_positions, args.min_base_quality, args.min_mapping_quality
+                )
+            state_counts: Dict[str, Dict[str, int]] = {}
+            for (codon, reverse), values in hap_counts.items():
+                state_counts.setdefault(codon, {"fwd": 0, "rev": 0, "bq_sum": 0})
+                strand = "rev" if reverse else "fwd"
+                state_counts[codon][strand] += values["count"]
+                state_counts[codon]["bq_sum"] += values["bq_sum"]
+            codon_depth = sum(v["fwd"] + v["rev"] for v in state_counts.values())
+            ref_aa = CODON_TABLE.get(reference_codon)
+            for alternate_codon, values in state_counts.items():
+                if alternate_codon == reference_codon:
+                    continue
+                alt_count = values["fwd"] + values["rev"]
+                if not alt_count:
+                    continue
+                alt_aa = CODON_TABLE.get(alternate_codon)
+                aa_mut = f"{ref_aa}{codon_number + 1}{alt_aa}" if ref_aa and alt_aa else ""
+                aa_change = f"p.{next((k for k,v in AA3_TO_AA1.items() if v == ref_aa), ref_aa)}{codon_number + 1}{next((k for k,v in AA3_TO_AA1.items() if v == alt_aa), alt_aa)}" if aa_mut else ""
+                profile = tki_profiles.get(aa_mut, {})
+                consequence, resistance_class = variant_classification(aa_mut, profile)
+                other_codon_alt = max(
+                    (count["fwd"] + count["rev"] for c, count in state_counts.items() if c not in (reference_codon, alternate_codon)),
+                    default=0,
+                )
+                snr = round(alt_count / max(other_codon_alt, 1), 2)
+                af = alt_count / codon_depth if codon_depth else 0.0
+                if codon_depth < args.min_depth:
+                    hap_status, hap_reason = "LOW_DEPTH", f"DEPTH<{args.min_depth}"
+                elif alt_count < args.min_alt_reads:
+                    hap_status, hap_reason = "WILDTYPE", "NO_ALT"
+                elif snr < args.min_snr:
+                    hap_status, hap_reason = "ARTIFACT", f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)"
+                elif af >= args.min_af:
+                    hap_status, hap_reason = "DETECTED", "PASS"
+                elif af >= args.subclonal_af:
+                    hap_status, hap_reason = "SUBCLONAL", "PASS"
+                else:
+                    hap_status, hap_reason = "WILDTYPE", "LOW_AF"
+                three = {"F":"Phe", "L":"Leu", "S":"Ser", "Y":"Tyr", "C":"Cys", "W":"Trp", "P":"Pro", "H":"His", "Q":"Gln", "R":"Arg", "I":"Ile", "M":"Met", "T":"Thr", "N":"Asn", "K":"Lys", "V":"Val", "A":"Ala", "D":"Asp", "E":"Glu", "G":"Gly", "*":"Ter"}
+                record = {
+                    "record_type": "CODON_HAPLOTYPE", "panel_sites_expected": panel_sites_expected,
+                    "sample": args.sample, "chrom": codon_chrom, "pos": codon_start,
+                    "ref": reference_codon, "alt": alternate_codon, "mutation": aa_mut,
+                    "aa_change": aa_change, "name": f"NM_005157.6:c.({codon_number * 3 + 1}_{codon_number * 3 + 3}{reference_codon}>{alternate_codon})",
+                    "depth": codon_depth, "ad_ref": state_counts.get(reference_codon, {}).get("fwd", 0) + state_counts.get(reference_codon, {}).get("rev", 0),
+                    "ad_alt": alt_count, "vaf_percent": round(af * 100, 3), "depth_unfiltered": codon_depth,
+                    "ad_alt_unfiltered": alt_count, "vaf_unfiltered_percent": round(af * 100, 3),
+                    "status": hap_status, "filter_reason": hap_reason, "snr": snr, "ad_other": other_codon_alt,
+                    "vaf_other_percent": round(other_codon_alt / codon_depth * 100, 3) if codon_depth else 0,
+                    "other_bases": "", "credible_panel_alt_competitors": "", "alt_minor_strand_ratio": round(min(values["fwd"], values["rev"]) / max(alt_count, 1), 3),
+                    "sor": 0, "mean_baseq_ref": 0, "mean_baseq_alt": round(values["bq_sum"] / alt_count, 1),
+                    "kmer_clean_percent": 100, "consequence": consequence, "resistance_class": resistance_class,
+                    "codon_context_status": "RESOLVED", "imatinib": profile.get("Imatinib", "Unknown"),
+                    "dasatinib": profile.get("Dasatinib", "Unknown"), "nilotinib": profile.get("Nilotinib", "Unknown"),
+                    "bosutinib": profile.get("Bosutinib", "Unknown"), "ponatinib": profile.get("Ponatinib", "Unknown"),
+                    "asciminib": profile.get("Asciminib", "Unknown"), "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
+                    "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0), "ad_alt_fwd": values["fwd"],
+                    "ad_alt_rev": values["rev"], "n_refskip": 0, "n_deletion": 0,
+                }
+                if hap_status in ("DETECTED", "SUBCLONAL") or (args.include_artifacts and hap_status == "ARTIFACT"):
+                    detected_mutations.append(record)
+            detected_mutations = [r for r in detected_mutations if not (r.get("record_type") == "SITE_AUDIT" and (r["chrom"], r["pos"]) in group_pos)]
+
     finally:
         bam.close()
 
@@ -639,10 +885,11 @@ def main() -> None:
 
     # Output headers
     headers = [
-        "sample", "chrom", "pos", "ref", "alt", "mutation", "aa_change", "name",
+        "record_type", "panel_sites_expected", "sample", "chrom", "pos", "ref", "alt", "mutation", "aa_change", "name",
+        "consequence", "resistance_class", "codon_context_status",
         "depth", "ad_ref", "ad_alt", "vaf_percent", "status", "filter_reason",
         "depth_unfiltered", "ad_alt_unfiltered", "vaf_unfiltered_percent",
-        "snr", "ad_other", "vaf_other_percent", "other_bases",
+        "snr", "ad_other", "vaf_other_percent", "other_bases", "credible_panel_alt_competitors",
         "alt_minor_strand_ratio", "sor",
         "mean_baseq_ref", "mean_baseq_alt", "kmer_clean_percent",
         "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib", "asciminib",
@@ -656,6 +903,8 @@ def main() -> None:
         handle.write(f"# total_sites={len(all_results)}\n")
         handle.write(f"# detected_mutations={len([m for m in detected_mutations if m['status'] == 'DETECTED'])}\n")
         handle.write(f"# subclonal_mutations={len([m for m in detected_mutations if m['status'] == 'SUBCLONAL'])}\n")
+        handle.write(f"# panel_sites_expected={panel_sites_expected}\n")
+        handle.write(f"# tki_profile_version={features.get('version', 'unspecified')}\n")
         handle.write("\t".join(headers) + "\n")
         for rec in all_results:
             handle.write("\t".join(str(rec.get(h, "")) for h in headers) + "\n")
@@ -672,6 +921,8 @@ def main() -> None:
         handle.write(f"# min_base_quality={args.min_base_quality}\n")
         handle.write(f"# min_mean_baseq={args.min_mean_baseq}\n")
         handle.write(f"# min_kmer_rate={args.min_kmer_rate} kmer_window={args.kmer_window}\n")
+        handle.write(f"# tki_profile_source={features.get('version', 'unspecified')}\n")
+        handle.write(f"# panel_sites_expected={panel_sites_expected}\n")
         handle.write("\t".join(headers) + "\n")
         for rec in detected_mutations:
             handle.write("\t".join(str(rec.get(h, "")) for h in headers) + "\n")
@@ -695,7 +946,7 @@ def main() -> None:
             handle.write('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths (REF, ALT)">\n')
             handle.write('##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fraction">\n')
             handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + args.sample + "\n")
-            for rec in detected_mutations:
+            for rec in sorted(detected_mutations, key=lambda r: (r["chrom"], r["pos"], r["ref"], r["alt"])):
                 af_dec = rec["vaf_percent"] / 100.0
                 info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
                 gt = "0/1" if rec["status"] in ("DETECTED", "SUBCLONAL") else "./."

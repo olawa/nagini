@@ -9,13 +9,25 @@ def _bcr_abl_resource(filename):
     return os.path.join(workflow.basedir, "resources", "bcr_abl", filename)
 
 
+def _bcr_abl_build():
+    """Only select bundled coordinates for a reference they describe."""
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    aliases = {"hg19": "hg19", "grch37": "hg19", "b37": "hg19",
+               "hg38": "hg38", "grch38": "hg38"}
+    if build not in aliases:
+        raise WorkflowError(
+            "No bundled BCR-ABL1 resources for reference_build={!r}; "
+            "supported builds are hg19/GRCh37 and hg38/GRCh38.".format(build)
+        )
+    return aliases[build]
+
+
 def _branford_bed():
     """Pick the branford positions BED that matches the configured reference build."""
     override = config.get("bcr_abl", {}).get("branford_bed", "")
     if override:
         return override
-    build = str(config.get("reference_build", "hg38")).strip().lower()
-    bed_name = "branford_positions_hg19.bed" if "19" in build else "branford_positions_hg38.bed"
+    bed_name = f"branford_positions_{_bcr_abl_build()}.bed"
     return _bcr_abl_resource(bed_name)
 
 
@@ -24,8 +36,7 @@ def _bcr_abl_exons_bed():
     override = config.get("bcr_abl", {}).get("exons_bed", "")
     if override:
         return override
-    build = str(config.get("reference_build", "hg38")).strip().lower()
-    bed_name = "bcr_abl1_exons_hg19.bed" if "19" in build else "bcr_abl1_exons_hg38.bed"
+    bed_name = f"bcr_abl1_exons_{_bcr_abl_build()}.bed"
     return _bcr_abl_resource(bed_name)
 
 
@@ -37,8 +48,7 @@ def _bcr_abl_gtf():
     ref_gtf = config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", "")
     if ref_gtf and os.path.isfile(ref_gtf):
         return ref_gtf
-    build = str(config.get("reference_build", "hg38")).strip().lower()
-    gtf_name = "bcr_abl_hg19.gtf" if "19" in build else "bcr_abl_hg38.gtf"
+    gtf_name = f"bcr_abl_{_bcr_abl_build()}.gtf"
     return _bcr_abl_resource(gtf_name)
 
 
@@ -82,7 +92,7 @@ rule bcr_abl_fusion_counts:
     params:
         tolerance=lambda wildcards: config.get("bcr_abl", {}).get("tolerance", 150),
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
-        genome_build=lambda wildcards: config.get("reference_build", "hg38"),
+        genome_build=lambda wildcards: _bcr_abl_build(),
     log:
         "logs/bcr_abl_fusion_counts/{sample}_{type}.log",
     threads: config.get("bcr_abl", {}).get("threads", 4)
@@ -123,6 +133,10 @@ rule bcr_abl_branford_calling:
             or _bcr_abl_resource("bcr_abl_features.json")
         ),
         ref_fasta=lambda wildcards: config.get("reference", {}).get("fasta", ""),
+        known_variants=lambda wildcards: (
+            [config["bcr_abl"]["known_variants"]]
+            if config.get("bcr_abl", {}).get("known_variants") else []
+        ),
     output:
         all_sites="reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
@@ -134,6 +148,7 @@ rule bcr_abl_branford_calling:
         min_alt_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_alt_reads", 5),
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
         min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
+        min_mapping_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
         min_snr=lambda wildcards: config.get("bcr_abl", {}).get("min_snr", 3.0),
         min_minor_strand_ratio=lambda wildcards: config.get("bcr_abl", {}).get("min_minor_strand_ratio", 0.05),
         min_mean_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_mean_baseq", 14.0),
@@ -177,6 +192,7 @@ rule bcr_abl_branford_calling:
             --min-alt-reads {params.min_alt_reads} \
             --max-depth {params.max_depth} \
             --min-base-quality {params.min_base_quality} \
+            --min-mapping-quality {params.min_mapping_quality} \
             --min-snr {params.min_snr} \
             --min-minor-strand-ratio {params.min_minor_strand_ratio} \
             --min-mean-baseq {params.min_mean_baseq} \
@@ -202,6 +218,7 @@ rule bcr_abl_phasing:
     params:
         min_spanning_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_spanning_reads", 10),
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
+        min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
     log:
         "logs/bcr_abl_phasing/{sample}_{type}.log",
     threads: config.get("bcr_abl", {}).get("threads", 4)
@@ -225,6 +242,7 @@ rule bcr_abl_phasing:
             --output-json {output.json} \
             --min-spanning-reads {params.min_spanning_reads} \
             --min-mapq {params.min_mapq} \
+            --min-base-quality {params.min_base_quality} \
             --threads {threads} > {log} 2>&1
         """
 
