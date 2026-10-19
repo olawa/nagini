@@ -5,9 +5,9 @@ Computes mean, median, min, max depth, read counts, and percentage of bases
 meeting diagnostic thresholds (>=100x, >=500x, >=1000x) per BCR and ABL1 exon.
 """
 
-from __future__ import annotations
 
 import argparse
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 import pysam
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument("--bed", required=True, type=Path, help="Exon BED file (bcr_abl1_exons_*.bed)")
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality (default 1)")
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def read_exon_bed(bed_path: Path) -> List[Dict[str, Any]]:
@@ -180,7 +180,6 @@ def calculate_exon_coverage(
     return results
 
 
-
 def write_exon_coverage_tsv(results: List[Dict[str, Any]], output_path: Path) -> None:
     """Write exon coverage results to TSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -196,8 +195,8 @@ def write_exon_coverage_tsv(results: List[Dict[str, Any]], output_path: Path) ->
             handle.write(line + "\n")
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     if not args.bam.is_file():
         sys.exit(f"BAM file not found: {args.bam}")
     if not args.bed.is_file():
@@ -219,6 +218,27 @@ def main() -> None:
     write_exon_coverage_tsv(results, args.output)
     print(f"Wrote coverage statistics for {len(results)} exons to {args.output}")
 
+def snakemake_argv(smk) -> list:
+    """The command-line arguments the bcr_abl_exon_coverage rule stands for."""
+    p = smk.params
+    argv = [
+        "--bam", smk.input.bam,
+        "--bed", smk.input.bed,
+        "--sample", smk.wildcards.sample,
+        "--output", smk.output.tsv,
+        "--min-mapq", p.min_mapq,
+        "--max-depth", p.max_depth,
+        "--threads", smk.threads,
+    ]
+    return [str(arg) for arg in argv]
+
 
 if __name__ == "__main__":
+    if "snakemake" in globals():  # run by a Snakemake `script:` rule
+        try:
+            from snakemake_cli import run
+        except ImportError:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from snakemake_cli import run
+        sys.exit(run(main, snakemake_argv(snakemake), snakemake.log))
     main()

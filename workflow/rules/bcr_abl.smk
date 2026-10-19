@@ -84,20 +84,8 @@ rule bcr_abl_fusion_counts:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
-    shell:
-        """
-        python3 {workflow.basedir}/scripts/bcr_abl_fusion_counter.py \
-            --bam {input.bam} \
-            --sample {wildcards.sample} \
-            --genome-build {params.genome_build} \
-            --features-json {input.features} \
-            --output {output.tsv} \
-            --json-output {output.json} \
-            --arriba-output {output.arriba} \
-            --tolerance {params.tolerance} \
-            --min-mapq {params.min_mapq} \
-            --threads {threads} > {log} 2>&1
-        """
+    script:
+        "../scripts/bcr_abl_fusion_counter.py"
 
 
 rule bcr_abl_branford_calling:
@@ -132,13 +120,7 @@ rule bcr_abl_branford_calling:
         min_mean_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_mean_baseq", 14.0),
         min_kmer_rate=lambda wildcards: config.get("bcr_abl", {}).get("min_kmer_rate", 0.60),
         max_sor=lambda wildcards: config.get("bcr_abl", {}).get("max_sor", 3.0),
-        known_variants_arg=lambda wildcards: (
-            f"--known-variants {config['bcr_abl']['known_variants']}"
-            if config.get("bcr_abl", {}).get("known_variants")
-            else ""
-        ),
         kmer_window=lambda wildcards: config.get("bcr_abl", {}).get("kmer_window", 3),
-        fasta_arg=lambda wildcards, input: f"--reference-fasta {input.ref_fasta}" if input.ref_fasta else "",
         extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
@@ -153,34 +135,8 @@ rule bcr_abl_branford_calling:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
-    shell:
-        """
-        python3 {workflow.basedir}/scripts/bcr_abl_branford_caller.py \
-            --bam {input.bam} \
-            --bed {input.bed} \
-            --sample {wildcards.sample} \
-            --output-all {output.all_sites} \
-            --output-mutations {output.mutations} \
-            --output-vcf {output.vcf} \
-            --features-json {input.features} \
-            {params.fasta_arg} \
-            --min-af {params.min_af} \
-            --subclonal-af {params.subclonal_af} \
-            --min-depth {params.min_depth} \
-            --min-alt-reads {params.min_alt_reads} \
-            --max-depth {params.max_depth} \
-            --min-base-quality {params.min_base_quality} \
-            --min-mapping-quality {params.min_mapping_quality} \
-            --min-snr {params.min_snr} \
-            --min-minor-strand-ratio {params.min_minor_strand_ratio} \
-            --min-mean-baseq {params.min_mean_baseq} \
-            --min-kmer-rate {params.min_kmer_rate} \
-            --max-sor {params.max_sor} \
-            {params.known_variants_arg} \
-            --kmer-window {params.kmer_window} \
-            {params.extra} \
-            --threads {threads} > {log} 2>&1
-        """
+    script:
+        "../scripts/bcr_abl_branford_caller.py"
 
 
 
@@ -210,19 +166,8 @@ rule bcr_abl_phasing:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
-    shell:
-        """
-        python3 {workflow.basedir}/scripts/bcr_abl_phaser.py \
-            --bam {input.bam} \
-            --mutations-tsv {input.mutations} \
-            --sample {wildcards.sample} \
-            --output-tsv {output.tsv} \
-            --output-json {output.json} \
-            --min-spanning-reads {params.min_spanning_reads} \
-            --min-mapq {params.min_mapq} \
-            --min-base-quality {params.min_base_quality} \
-            --threads {threads} > {log} 2>&1
-        """
+    script:
+        "../scripts/bcr_abl_phaser.py"
 
 
 rule bcr_abl_exon_coverage:
@@ -249,17 +194,8 @@ rule bcr_abl_exon_coverage:
         config.get("bcr_abl", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
-    shell:
-        """
-        python3 {workflow.basedir}/scripts/bcr_abl_exon_coverage.py \
-            --bam {input.bam} \
-            --bed {input.bed} \
-            --sample {wildcards.sample} \
-            --output {output.tsv} \
-            --min-mapq {params.min_mapq} \
-            --max-depth {params.max_depth} \
-            --threads {threads} > {log} 2>&1
-        """
+    script:
+        "../scripts/bcr_abl_exon_coverage.py"
 
 
 

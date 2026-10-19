@@ -11,6 +11,7 @@ the rest of the QC rather than in a file nobody opens.
 """
 
 import argparse
+import os
 import csv
 import gzip
 import re
@@ -23,13 +24,13 @@ BARCODE_COLUMNS = ("barcode", "barcode_arrangement", "alias", "barcode_name")
 UNCLASSIFIED = "unclassified"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary", required=True, type=Path)
     parser.add_argument("--units", type=Path, default=None)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--kit", default="")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def open_text(path: Path):
@@ -144,8 +145,8 @@ def write_mqc(path: Path, rows: list, kit: str) -> None:
             handle.write("\t".join(str(row[column]) for column in COLUMNS) + "\n")
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     if not args.summary.is_file():
         raise SystemExit(f"Demux summary does not exist: {args.summary}")
     counts = count_barcodes(args.summary)
@@ -164,6 +165,23 @@ def main() -> None:
         print(f"Unclassified reads: {unclassified['Percent of run']}% of the run.")
     print(f"Wrote {args.output}")
 
+def snakemake_argv(smk) -> list:
+    """The command-line arguments the dorado_demux_qc rule stands for."""
+    argv = [
+        "--summary", smk.input.summary,
+        "--units", smk.input.units,
+        "--kit", smk.params.kit,
+        "--output", smk.output.mqc,
+    ]
+    return [str(arg) for arg in argv]
+
 
 if __name__ == "__main__":
+    if "snakemake" in globals():  # run by a Snakemake `script:` rule
+        try:
+            from snakemake_cli import run
+        except ImportError:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from snakemake_cli import run
+        sys.exit(run(main, snakemake_argv(snakemake), snakemake.log))
     main()

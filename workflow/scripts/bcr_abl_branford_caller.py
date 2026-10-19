@@ -51,15 +51,15 @@ Thresholds are conventional starting points, not values derived from these
 data. Calibrate them against the per-position background once it exists.
 """
 
-from __future__ import annotations
 
 import argparse
+import shlex
 import math
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 
 import pysam
 
@@ -97,7 +97,7 @@ def short_aa_notation(aa_change: str) -> str:
     return text
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument("--bed", required=True, type=Path, help="Branford positions BED file")
@@ -123,8 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--known-variants", type=Path, default=None, help="Optional BED/VCF of known polymorphisms whose flanking mismatches should not count as dirty context. Panel positions are always exempt.")
     parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
-    return parser.parse_args()
-
+    return parser.parse_args(argv)
 
 
 def read_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
@@ -308,7 +307,7 @@ def collect_codon_haplotypes(
 def count_positions_batch(
     bam: pysam.AlignmentFile,
     chrom: str,
-    positions_0based: set[int],
+    positions_0based: Set[int],
     max_depth: int,
     min_baseq: int,
     min_mapq: int,
@@ -442,9 +441,8 @@ def count_position(
     return batch_res.get(target_0based, {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
 
 
-
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     if not args.bam.is_file():
         sys.exit(f"BAM file not found: {args.bam}")
 
@@ -513,7 +511,7 @@ def main() -> None:
     bam_contigs = set(bam.references)
 
     # Group all target sites by resolved BAM contig for single-pass scanning
-    chrom_positions: Dict[str, set[int]] = {}
+    chrom_positions: Dict[str, Set[int]] = {}
     chrom_alias_map: Dict[str, str] = {}
     for site in sites:
         chrom = site["chrom"]
@@ -960,7 +958,49 @@ def main() -> None:
         file=sys.stderr,
     )
 
+def snakemake_argv(smk) -> list:
+    """The command-line arguments the bcr_abl_branford_calling rule stands for."""
+    p = smk.params
+    argv = [
+        "--bam", smk.input.bam,
+        "--bed", smk.input.bed,
+        "--sample", smk.wildcards.sample,
+        "--output-all", smk.output.all_sites,
+        "--output-mutations", smk.output.mutations,
+        "--output-vcf", smk.output.vcf,
+        "--features-json", smk.input.features,
+    ]
+    if smk.input.ref_fasta:
+        argv += ["--reference-fasta", smk.input.ref_fasta]
+    argv += [
+        "--min-af", p.min_af,
+        "--subclonal-af", p.subclonal_af,
+        "--min-depth", p.min_depth,
+        "--min-alt-reads", p.min_alt_reads,
+        "--max-depth", p.max_depth,
+        "--min-base-quality", p.min_base_quality,
+        "--min-mapping-quality", p.min_mapping_quality,
+        "--min-snr", p.min_snr,
+        "--min-minor-strand-ratio", p.min_minor_strand_ratio,
+        "--min-mean-baseq", p.min_mean_baseq,
+        "--min-kmer-rate", p.min_kmer_rate,
+        "--max-sor", p.max_sor,
+    ]
+    known_variants = list(smk.input.known_variants)
+    if known_variants:
+        argv += ["--known-variants", known_variants[0]]
+    argv += ["--kmer-window", p.kmer_window]
+    argv += shlex.split(str(p.extra or ""))
+    argv += ["--threads", smk.threads]
+    return [str(arg) for arg in argv]
+
 
 if __name__ == "__main__":
+    if "snakemake" in globals():  # run by a Snakemake `script:` rule
+        try:
+            from snakemake_cli import run
+        except ImportError:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from snakemake_cli import run
+        sys.exit(run(main, snakemake_argv(snakemake), snakemake.log))
     main()
-

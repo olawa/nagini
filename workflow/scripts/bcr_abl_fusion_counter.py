@@ -5,7 +5,6 @@ Analyzes long reads spanning BCR (chr22) and ABL1 (chr9) to identify and quantif
 junction isoforms (e14a2/b3a2, e13a2/b2a2, e1a2, e19a2, and atypical variants).
 """
 
-from __future__ import annotations
 
 import argparse
 import json
@@ -96,7 +95,7 @@ ISOFORM_METADATA = {
 }
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument("--sample", required=True, help="Sample identifier")
@@ -108,7 +107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tolerance", type=int, default=150, help="Coordinate tolerance in bp to match exon junction")
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality for read segments")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def detect_genome_build(bam: pysam.AlignmentFile, requested_build: str) -> str:
@@ -412,8 +411,8 @@ def write_arriba_tsv(
             handle.write("\t".join(row) + "\n")
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     if not args.bam.is_file():
         sys.exit(f"BAM file not found: {args.bam}")
 
@@ -448,7 +447,30 @@ def main() -> None:
         file=sys.stderr,
     )
 
+def snakemake_argv(smk) -> list:
+    """The command-line arguments the bcr_abl_fusion_counts rule stands for."""
+    p = smk.params
+    argv = [
+        "--bam", smk.input.bam,
+        "--sample", smk.wildcards.sample,
+        "--genome-build", p.genome_build,
+        "--features-json", smk.input.features,
+        "--output", smk.output.tsv,
+        "--json-output", smk.output.json,
+        "--arriba-output", smk.output.arriba,
+        "--tolerance", p.tolerance,
+        "--min-mapq", p.min_mapq,
+        "--threads", smk.threads,
+    ]
+    return [str(arg) for arg in argv]
+
 
 if __name__ == "__main__":
+    if "snakemake" in globals():  # run by a Snakemake `script:` rule
+        try:
+            from snakemake_cli import run
+        except ImportError:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from snakemake_cli import run
+        sys.exit(run(main, snakemake_argv(snakemake), snakemake.log))
     main()
-

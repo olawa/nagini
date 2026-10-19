@@ -7,7 +7,6 @@ resistance mutations to determine whether they occur on the SAME transcript mole
 (CIS / Compound mutation) or on DIFFERENT transcript molecules (TRANS / Polyclonal clones).
 """
 
-from __future__ import annotations
 
 import argparse
 import itertools
@@ -29,7 +28,7 @@ AA3_TO_AA1 = {
 }
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument("--mutations-tsv", required=True, type=Path, help="Detected mutations TSV from branford caller")
@@ -40,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality at both mutation positions")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def load_detected_mutations(tsv_path: Path) -> List[Dict[str, Any]]:
@@ -156,7 +155,6 @@ def get_base_at_pos(read: pysam.AlignedSegment, target_1based: int) -> Optional[
             break
 
     return None
-
 
 
 def phase_mutation_pair(
@@ -416,8 +414,8 @@ def _unphaseable_result(fields: Dict[str, Any], state: str) -> Dict[str, Any]:
     }
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     if not args.bam.is_file():
         sys.exit(f"BAM file not found: {args.bam}")
 
@@ -476,6 +474,29 @@ def main() -> None:
         file=sys.stderr,
     )
 
+def snakemake_argv(smk) -> list:
+    """The command-line arguments the bcr_abl_phasing rule stands for."""
+    p = smk.params
+    argv = [
+        "--bam", smk.input.bam,
+        "--mutations-tsv", smk.input.mutations,
+        "--sample", smk.wildcards.sample,
+        "--output-tsv", smk.output.tsv,
+        "--output-json", smk.output.json,
+        "--min-spanning-reads", p.min_spanning_reads,
+        "--min-mapq", p.min_mapq,
+        "--min-base-quality", p.min_base_quality,
+        "--threads", smk.threads,
+    ]
+    return [str(arg) for arg in argv]
+
 
 if __name__ == "__main__":
+    if "snakemake" in globals():  # run by a Snakemake `script:` rule
+        try:
+            from snakemake_cli import run
+        except ImportError:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from snakemake_cli import run
+        sys.exit(run(main, snakemake_argv(snakemake), snakemake.log))
     main()

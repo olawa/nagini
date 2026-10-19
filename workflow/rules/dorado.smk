@@ -269,7 +269,6 @@ rule dorado_demux_qc:
     output:
         mqc="qc/dorado_demux/dorado_demux_mqc.tsv",
     params:
-        script=os.path.join(SCRIPTS, "dorado_demux_summary.py"),
         kit=config.get("dorado", {}).get("kit", ""),
     log:
         "logs/dorado/demux_qc.log",
@@ -293,11 +292,5 @@ rule dorado_demux_qc:
         config.get("dorado_demux_qc", {}).get("container", config["default_container"])
     message:
         "{rule}: summarise reads per barcode for the run report"
-    shell:
-        """
-        python3 {params.script} \
-            --summary {input.summary:q} \
-            --units {input.units:q} \
-            --kit {params.kit:q} \
-            --output {output.mqc:q} &> {log}
-        """
+    script:
+        "../scripts/dorado_demux_summary.py"
