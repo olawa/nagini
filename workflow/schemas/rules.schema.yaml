@@ -8,6 +8,8 @@ properties:
     $ref: "#/definitions/rule_io"
   dorado_demux:
     $ref: "#/definitions/rule_io"
+  dorado_demux_summary:
+    $ref: "#/definitions/rule_io"
   dorado_demux_barcode_bam:
     $ref: "#/definitions/rule_io"
   dorado_demux_fastq:

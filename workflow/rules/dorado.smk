@@ -89,7 +89,6 @@ rule dorado_demux:
         bam="basecalling/dorado/basecalled.bam",
     output:
         raw_dir=temp(directory("basecalling/dorado_demux_raw")),
-        summary="basecalling/dorado_demux/demux_summary.tsv",
     params:
         dorado_bin=_dorado_exe,
         kit=config.get("dorado", {}).get("kit", ""),
@@ -120,22 +119,40 @@ rule dorado_demux:
     shell:
         r"""
         rm -rf {output.raw_dir:q}
-        mkdir -p {output.raw_dir:q} basecalling/dorado_demux
+        mkdir -p {output.raw_dir:q}
         {params.dorado_bin} demux --output-dir {output.raw_dir:q} \
             --kit-name {params.kit:q} --threads {threads} \
             --no-trim --emit-summary {params.extra} {input.bam:q} > {log} 2>&1
+        """
 
-        summary_file=""
-        while IFS= read -r candidate; do
-            summary_file="$candidate"
-            break
-        done < <(find {output.raw_dir:q} -type f \
-            \( -iname '*summary*.txt' -o -iname '*summary*.tsv' \) -print)
-        if [[ -z "$summary_file" ]]; then
-            echo "Dorado demux did not emit the requested summary file" >> {log}
-            exit 1
-        fi
-        cp "$summary_file" {output.summary:q}
+
+rule dorado_demux_summary:
+    """Copy Dorado's demultiplexing summary out of its raw output directory.
+
+    A separate step because the Dorado image has no Python and the other
+    containers have no Dorado."""
+    input:
+        raw_dir="basecalling/dorado_demux_raw",
+    output:
+        summary="basecalling/dorado_demux/demux_summary.tsv",
+    log:
+        "logs/dorado/demux_summary.log",
+    threads: 1
+    resources:
+        mem_mb=config.get("dorado_demux_summary", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("dorado_demux_summary", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("dorado_demux_summary", {}).get("partition", config["default_resources"]["partition"]),
+        threads=1,
+        time=config.get("dorado_demux_summary", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("dorado_demux_summary", {}).get("container", config["default_container"])
+    message:
+        "{rule}: take the demultiplexing summary from {input.raw_dir}"
+    shell:
+        """
+        python3 {workflow.basedir}/scripts/dorado_demux_collect.py summary \
+            --raw-dir {input.raw_dir:q} \
+            --output {output.summary:q} > {log} 2>&1
         """
 
 
@@ -148,9 +165,7 @@ rule dorado_demux_barcode_bam:
         bam=_dorado_barcode_bam_output,
     params:
         barcode=lambda wildcards: wildcards.dorado_barcode,
-        allow_empty=str(
-            bool(config.get("dorado", {}).get("allow_empty_barcodes", False))
-        ).lower(),
+        allow_empty_flag="--allow-empty" if config.get("dorado", {}).get("allow_empty_barcodes", False) else "",
     log:
         "logs/dorado/demux_{dorado_barcode}.log",
     benchmark:
@@ -185,33 +200,12 @@ rule dorado_demux_barcode_bam:
         "{rule}: retain unaligned reads assigned to {wildcards.dorado_barcode}"
     shell:
         r"""
-        barcode={params.barcode:q}
-        bam_files=()
-        while IFS= read -r bam_file; do
-            bam_files+=("$bam_file")
-        done < <(find {input.raw_dir:q} -type f \
-            \( -path "*/${{barcode}}/*.bam" \
-               -o -name "${{barcode}}.bam" \
-               -o -name "*${{barcode}}*.bam" \) -print)
-
-        if [[ "${{#bam_files[@]}}" -eq 0 ]]; then
-            if [[ {params.allow_empty:q} != "true" ]]; then
-                echo "No demultiplexed reads found for $barcode" > {log}
-                exit 1
-            fi
-            echo "WARNING: no reads for $barcode; writing a header-only BAM" > {log}
-            samtools view -H {input.basecalled:q} \
-                | samtools view -b -o {output.bam:q} - >> {log} 2>&1
-        elif [[ "${{#bam_files[@]}}" -eq 1 ]]; then
-            # Dorado normally emits one BAM per barcode. A hard link avoids
-            # rewriting the full file while the raw demux directory is live.
-            rm -f {output.bam:q}
-            ln "${{bam_files[0]}}" {output.bam:q}
-            echo "Linked ${{bam_files[0]}} to {output.bam}" > {log}
-        else
-            samtools cat -o {output.bam:q} \
-                "${{bam_files[@]}}" > {log} 2>&1
-        fi
+        python3 {workflow.basedir}/scripts/dorado_demux_collect.py barcode \
+            --raw-dir {input.raw_dir:q} \
+            --barcode {params.barcode:q} \
+            --basecalled {input.basecalled:q} \
+            --output {output.bam:q} \
+            {params.allow_empty_flag} > {log} 2>&1
         """
 
 
