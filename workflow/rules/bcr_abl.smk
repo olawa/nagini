@@ -317,160 +317,25 @@ rule bcr_abl_draw_fusions:
         config.get("arriba", {}).get("container", config.get("ARRIBA_CONTAINER", "docker://uhrigs/arriba:2.4.0"))
     conda:
         "../../envs/nagini.yaml"
+    message:
+        "{rule}: draw the BCR-ABL1 fusion plots for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        exec > {log} 2>&1
-
-        echo "Running BCR-ABL1 Fusion Plot for {wildcards.sample}..."
-
-        # 1. Look for draw_fusions.R
-        DRAW_CMD=""
-        if [ -f "{workflow.basedir}/scripts/draw_fusions.r" ]; then
-            DRAW_CMD="Rscript {workflow.basedir}/scripts/draw_fusions.r"
-        elif command -v draw_fusions.R >/dev/null 2>&1; then
-            DRAW_CMD="draw_fusions.R"
-        elif [ -f "/arriba_v2.4.0/draw_fusions.R" ]; then
-            DRAW_CMD="/arriba_v2.4.0/draw_fusions.R"
-        elif [ -f "/usr/local/bin/draw_fusions.R" ]; then
-            DRAW_CMD="/usr/local/bin/draw_fusions.R"
-        fi
-
-        # 2. Look for Cytobands
-        CYTO_FILE="{params.cytobands}"
-        if [ -z "$CYTO_FILE" ] || [ ! -f "$CYTO_FILE" ]; then
-            for c in \
-                /arriba_v2.4.0/database/cytobands_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /arriba_v2.4.0/database/cytobands_hg38_GRCh38_v2.4.0.tsv \
-                /var/lib/arriba/database/cytobands_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /var/lib/arriba/database/cytobands_hg38_GRCh38_v2.4.0.tsv \
-                /data/references/arriba/cytobands_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /data/references/arriba/cytobands_hg38_GRCh38_v2.4.0.tsv
-            do
-                if [ -f "$c" ]; then
-                    CYTO_FILE="$c"
-                    break
-                fi
-            done
-        fi
-
-        # 3. Look for Protein domains
-        PROT_FILE="{params.protein_domains}"
-        if [ -z "$PROT_FILE" ] || [ ! -f "$PROT_FILE" ]; then
-            for p in \
-                /arriba_v2.4.0/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
-                /arriba_v2.4.0/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.tsv \
-                /arriba_v2.4.0/database/protein_domains_hg38_GRCh38_v2.4.0.gff3 \
-                /arriba_v2.4.0/database/protein_domains_hg38_GRCh38_v2.4.0.tsv \
-                /var/lib/arriba/database/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
-                /var/lib/arriba/database/protein_domains_hg38_GRCh38_v2.4.0.gff3 \
-                /data/references/arriba/protein_domains_hg19_hs37d5_GRCh37_v2.4.0.gff3 \
-                /data/references/arriba/protein_domains_hg38_GRCh38_v2.4.0.gff3
-            do
-                if [ -f "$p" ]; then
-                    PROT_FILE="$p"
-                    break
-                fi
-            done
-        fi
-
-        echo "Draw script: $DRAW_CMD"
-        echo "Cytobands: $CYTO_FILE"
-        echo "Protein domains: $PROT_FILE"
-        echo "GTF: {params.gtf}"
-
-        # Try Arriba draw_fusions.R / bundled draw_fusions.r if available
-        if [ -n "$DRAW_CMD" ] && [ -f "{params.gtf}" ]; then
-            PROT_OPT=""
-            CYTO_OPT=""
-            PANELS="fusion,readcounts"
-
-            if [ -n "$CYTO_FILE" ] && [ -f "$CYTO_FILE" ]; then
-                CYTO_OPT="--cytobands=$CYTO_FILE"
-                PANELS="fusion,circos,readcounts"
-            fi
-
-            if [ -n "$PROT_FILE" ] && [ -f "$PROT_FILE" ]; then
-                PROT_OPT="--proteinDomains=$PROT_FILE"
-                if [ -n "$CYTO_OPT" ]; then
-                    PANELS="fusion,circos,domains,readcounts"
-                else
-                    PANELS="fusion,domains,readcounts"
-                fi
-            fi
-
-            echo "Executing Arriba draw_fusions.R (all fusions to PDF)..."
-            $DRAW_CMD \
-                --fusions={input.fusions} \
-                --alignments={input.bam} \
-                --output={output.pdf} \
-                --annotation={params.gtf} \
-                --sampleName="{wildcards.sample}" \
-                --transcriptSelection=canonical \
-                --plotPanels=$PANELS \
-                $CYTO_OPT $PROT_OPT {params.extra} || true
-
-            # Generate PNG for primary (most common) fusion only
-            PRIMARY_TSV="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.primary_fusion.tsv"
-            head -n 2 {input.fusions} > "$PRIMARY_TSV" 2>/dev/null || cp {input.fusions} "$PRIMARY_TSV"
-
-            echo "Executing Arriba draw_fusions.R for PNG (primary fusion)..."
-            $DRAW_CMD \
-                --fusions="$PRIMARY_TSV" \
-                --alignments={input.bam} \
-                --output={output.png} \
-                --annotation={params.gtf} \
-                --sampleName="{wildcards.sample}" \
-                --transcriptSelection=canonical \
-                --plotPanels=$PANELS \
-                $CYTO_OPT $PROT_OPT {params.extra} || true
-
-            PDF_FILE="{output.pdf}"
-            PNG_FILE="{output.png}"
-            P1_PREFIX="reports/bcr_abl/{wildcards.sample}_{wildcards.type}.fusion_plot_p1"
-
-            # If pdftoppm is available, ensure first page of PDF is used as PNG
-            if command -v pdftoppm >/dev/null 2>&1 && [ -s "$PDF_FILE" ]; then
-                pdftoppm -png -r 150 -f 1 -l 1 "$PDF_FILE" "$P1_PREFIX" 2>/dev/null || true
-                for f in "$P1_PREFIX-1.png" "$P1_PREFIX-01.png" "$P1_PREFIX-001.png"; do
-                    if [ -s "$f" ]; then
-                        mv -f "$f" "$PNG_FILE"
-                        break
-                    fi
-                done
-                rm -f "$P1_PREFIX"*.png 2>/dev/null || true
-            fi
-        fi
-
-
-
-
-        # If PDF was not produced or is 0 bytes, generate publication-ready fusion diagram via python
-        if [ ! -s "{output.pdf}" ]; then
-            echo "Generating BCR-ABL1 diagram with draw_bcr_abl_fusion.py..."
-            python3 {workflow.basedir}/scripts/draw_bcr_abl_fusion.py \
-                --sample {wildcards.sample} \
-                --fusions {input.fusion_summary} \
-                --mutations {input.mutations} \
-                --phasing {input.phasing} \
-                --exon-coverage {input.exon_coverage} \
-                --build {params.build} \
-                --output {output.pdf}
-        fi
-
-        # If PNG was not produced or is 0 bytes, generate via python
-        if [ ! -s "{output.png}" ]; then
-            python3 {workflow.basedir}/scripts/draw_bcr_abl_fusion.py \
-                --sample {wildcards.sample} \
-                --fusions {input.fusion_summary} \
-                --mutations {input.mutations} \
-                --phasing {input.phasing} \
-                --exon-coverage {input.exon_coverage} \
-                --build {params.build} \
-                --output {output.png} || true
-        fi
-
-        test -s "{output.pdf}"
-        test -s "{output.png}"
+        python3 {workflow.basedir}/scripts/bcr_abl_draw_fusions.py \
+            --sample {wildcards.sample} \
+            --fusions {input.fusions} \
+            --fusion-summary {input.fusion_summary} \
+            --mutations {input.mutations} \
+            --phasing {input.phasing} \
+            --exon-coverage {input.exon_coverage} \
+            --bam {input.bam} \
+            --gtf={params.gtf:q} \
+            --cytobands={params.cytobands:q} \
+            --protein-domains={params.protein_domains:q} \
+            --build {params.build} \
+            --extra={params.extra:q} \
+            --output-pdf {output.pdf} \
+            --output-png {output.png} > {log} 2>&1
         """
 
 
