@@ -1319,36 +1319,6 @@ def get_report_bcr_abl_plot_png(wildcards):
     return []
 
 
-def get_report_amplicon_stats(wildcards):
-    if sample_has_assay_module(wildcards.sample, "amplicon"):
-        return get_sample_type_path(wildcards, "reports/amplicon", ".amplicon_stats.tsv")
-    return []
-
-
-def get_report_amplicon_summary(wildcards):
-    if sample_has_assay_module(wildcards.sample, "amplicon"):
-        return get_sample_type_path(wildcards, "reports/amplicon", ".amplicon_summary.tsv")
-    return []
-
-
-def get_report_amplicon_itd(wildcards):
-    if sample_has_assay_module(wildcards.sample, "amplicon"):
-        return get_sample_type_path(wildcards, "reports/amplicon", ".flt3_itd.tsv")
-    return []
-
-
-def get_report_amplicon_vcf(wildcards):
-    if sample_has_assay_module(wildcards.sample, "amplicon"):
-        return get_sample_type_path(wildcards, "snv_indels/rindels", ".amplicon.vcf.gz")
-    return []
-
-
-def get_report_amplicon_pileup(wildcards):
-    if sample_has_assay_module(wildcards.sample, "amplicon"):
-        return get_sample_type_path(wildcards, "reports/amplicon", ".pileup_counts.tsv")
-    return []
-
-
 
 
 def get_unit_types_for_sample(sample):
