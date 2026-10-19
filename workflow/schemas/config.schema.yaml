@@ -203,6 +203,10 @@ properties:
       min_minor_strand_ratio:
         type: number
         description: 'min minor strand ratio (default: 0.05)'
+      min_read_qs:
+        type: number
+        description: 'minimum mean read quality (qs) of the aligned reads in the Branford caller and the
+          phaser; 0 is off (default: 0)'
       min_snr:
         type: number
         description: 'min snr (default: 3.0)'

@@ -122,6 +122,7 @@ rule bcr_abl_branford_calling:
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
         min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
         min_mapping_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
+        min_read_qs=lambda wildcards: config.get("bcr_abl", {}).get("min_read_qs", 0),
         min_snr=lambda wildcards: config.get("bcr_abl", {}).get("min_snr", 3.0),
         min_minor_strand_ratio=lambda wildcards: config.get("bcr_abl", {}).get("min_minor_strand_ratio", 0.05),
         min_mean_baseq=lambda wildcards: config.get("bcr_abl", {}).get("min_mean_baseq", 14.0),
@@ -167,6 +168,7 @@ rule bcr_abl_phasing:
         min_spanning_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_spanning_reads", 10),
         min_mapq=lambda wildcards: config.get("bcr_abl", {}).get("min_mapq", 1),
         min_base_quality=lambda wildcards: config.get("bcr_abl", {}).get("min_base_quality", 12),
+        min_read_qs=lambda wildcards: config.get("bcr_abl", {}).get("min_read_qs", 0),
     log:
         "logs/bcr_abl_phasing/{sample}_{type}.log",
     benchmark:

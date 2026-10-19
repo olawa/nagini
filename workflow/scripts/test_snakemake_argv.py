@@ -28,7 +28,7 @@ class BranfordTest(unittest.TestCase):
         self.params = dict(
             min_af=0.01, subclonal_af=0.002, min_depth=50, min_alt_reads=5, max_depth=1000000,
             min_base_quality=12, min_mapping_quality=1, min_snr=3.0, min_minor_strand_ratio=0.05,
-            min_mean_baseq=14.0, min_kmer_rate=0.6, max_sor=3.0, kmer_window=3, extra="",
+            min_mean_baseq=14.0, min_kmer_rate=0.6, max_sor=3.0, kmer_window=3, extra="", min_read_qs=0,
         )
 
     def job(self, ref="ref.fa", known=(), extra=""):
@@ -46,6 +46,7 @@ class BranfordTest(unittest.TestCase):
         self.assertEqual(args.min_af, 0.01)
         self.assertEqual(args.min_mapping_quality, 1)
         self.assertEqual(args.max_sor, 3.0)
+        self.assertEqual(args.min_read_qs, 0.0)
         self.assertEqual(args.threads, 4)
         self.assertEqual(str(args.known_variants), "kv.vcf")
         self.assertEqual(str(args.reference_fasta), "ref.fa")
@@ -67,7 +68,7 @@ class PhaserTest(unittest.TestCase):
         argv = mod.snakemake_argv(smk(
             input=dict(bam="a.bam", mutations="m.tsv"),
             output=dict(tsv="p.tsv", json="p.json"),
-            params=dict(min_spanning_reads=10, min_mapq=1, min_base_quality=12),
+            params=dict(min_spanning_reads=10, min_mapq=1, min_base_quality=12, min_read_qs=0),
         ))
         args = mod.parse_args(argv)
         self.assertEqual((args.sample, args.min_spanning_reads, args.min_mapq, args.min_base_quality, args.threads),

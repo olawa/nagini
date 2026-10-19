@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pysam
 
+from bcr_abl_read_quality import ReadQualityFilter
+
 BASES = ("A", "C", "G", "T")
 AA3_TO_AA1 = {
     "Ala": "A", "Arg": "R", "Asn": "N", "Asp": "D", "Cys": "C", "Gln": "Q",
@@ -38,6 +40,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--min-spanning-reads", type=int, default=10, help="Minimum spanning reads required for robust phasing")
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality at both mutation positions")
+    parser.add_argument("--min-read-qs", type=float, default=0.0, help="Minimum mean read quality (the qs value) of the aligned reads; 0 is off (default 0). Use the same value as the caller.")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args(argv)
 
@@ -165,6 +168,7 @@ def phase_mutation_pair(
     min_spanning: int,
     min_mapq: int,
     min_base_quality: int = 12,
+    read_filter: Optional[ReadQualityFilter] = None,
 ) -> Dict[str, Any]:
     """Interrogate all reads covering both mut1 and mut2 and compute haplotype co-occurrence."""
     chrom = mut1["chrom"]
@@ -217,6 +221,9 @@ def phase_mutation_pair(
         interval_end = max(pos1 + len(ref1) - 1, pos2 + len(ref2) - 1)
         for read in bam.fetch(chrom, pos1 - 1, interval_end):
             if read.is_unmapped or read.is_secondary or read.is_duplicate or read.is_qcfail or (read.mapping_quality or 0) < min_mapq:
+                continue
+            # Dropped before anything is counted, like a low mapping quality.
+            if read_filter is not None and not read_filter.passes(read):
                 continue
 
             # Verify the read actually spans both positions
@@ -426,15 +433,18 @@ def main(argv=None) -> None:
     # Open the BAM even when fewer than two mutations were supplied, so a
     # corrupt or unreadable input cannot become an apparently clean result.
     bam = pysam.AlignmentFile(str(args.bam), "rb", threads=getattr(args, "threads", 1))
+    read_filter = ReadQualityFilter(args.min_read_qs)
     try:
         if len(detected_muts) >= 2:
             for m1, m2 in itertools.combinations(detected_muts, 2):
                 pair_result = phase_mutation_pair(
-                    bam, m1, m2, args.sample, args.min_spanning_reads, args.min_mapq, args.min_base_quality
+                    bam, m1, m2, args.sample, args.min_spanning_reads, args.min_mapq, args.min_base_quality,
+                    read_filter=read_filter,
                 )
                 phased_pairs.append(pair_result)
     finally:
         bam.close()
+    print(read_filter.summary(), flush=True)
 
     # Write Output TSV
     headers = [
@@ -450,6 +460,7 @@ def main(argv=None) -> None:
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w") as handle:
         handle.write(f"# sample={args.sample}\n")
+        handle.write(f"# min_read_qs={args.min_read_qs:g} reads_dropped={len(read_filter.dropped)}\n")
         handle.write(f"# detected_mutations={len(detected_muts)}\n")
         handle.write(f"# phased_pairs={len(phased_pairs)}\n")
         handle.write("\t".join(headers) + "\n")
@@ -486,6 +497,7 @@ def snakemake_argv(smk) -> list:
         "--min-spanning-reads", p.min_spanning_reads,
         "--min-mapq", p.min_mapq,
         "--min-base-quality", p.min_base_quality,
+        "--min-read-qs", p.min_read_qs,
         "--threads", smk.threads,
     ]
     return [str(arg) for arg in argv]

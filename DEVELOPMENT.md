@@ -388,6 +388,19 @@ Ny basecalling kräver ett explicit `--input-type minknow` tillsammans med
 Dorado-inställningarna. Det gör att en katalog med redan producerade FASTQ-filer
 inte oavsiktligt använder GPU för en ny basecalling.
 
+### Kvalitetströsklar i BCR-ABL1-läget och omkörning
+
+Under `bcr_abl:` i configen finns trösklarna för Branford-callern (och i förekommande fall fasningen):
+`min_base_quality` (12, per bas, påverkar också djupet VAF räknas mot; delas med fasningen),
+`min_mean_baseq` (14.0, medelbaskvalitet för alt-läsen), `min_mapq` (1) och `min_read_qs` (0, av).
+`min_read_qs` är medelkvaliteten för hela läsningen (qs) och används av både callern och fasningen.
+Den läser taggen `qs` och räknar annars om den ur baskvaliteterna med samma formel som
+`read_filter`. Läsningar som `read_filter.min_qv` redan tagit bort före alignment kommer inte tillbaka,
+så `min_read_qs` kan bara vara strängare.
+
+En ändring av någon av dem kör bara om callern, fasningen och rapporterna ("Params have changed"),
+inte alignmenten. Att pröva ett lägre qs än `read_filter.min_qv` kräver däremot omalignering.
+
 ### MinKNOW/POD5, demultiplexering och alignment
 
 MinKNOW-input basecallas utan referens och Dorado demultiplexerar därefter till

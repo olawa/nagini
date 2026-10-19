@@ -429,6 +429,11 @@ bcr_abl:
   min_alt_reads: 5
   max_depth: 1000000
   min_spanning_reads: 10
+  # Mean read quality (the qs value) a read needs to count in the Branford caller
+  # and the phaser. 0 is off. It is applied to the aligned reads, so a stricter
+  # value than read_filter.min_qv can be tried by rerunning only the caller and
+  # what follows it; reads read_filter already removed cannot be brought back.
+  min_read_qs: 0
 
 annotate_small_variants: false
 annotate_svs: false

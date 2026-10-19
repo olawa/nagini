@@ -33,6 +33,12 @@ STRAND_BIAS (--min-minor-strand-ratio, --max-sor)
     the whole amplicon is strand-skewed the reference is one-sided too, and a
     real variant inherits that skew without being an artifact.
 
+READ QUALITY (--min-read-qs)
+    Drops whole reads whose mean quality (the qs value) is below the cut-off,
+    before any counting. Off by default. It applies to the aligned reads, so a
+    stricter value than the pre-alignment filter can be tried without aligning
+    again; reads the pre-alignment filter removed cannot be brought back.
+
 LOW_BASEQ (--min-base-quality, --min-mean-baseq)
     --min-base-quality drops individual base calls during the pileup, so it
     also changes the depth that VAF is computed against. depth_unfiltered and
@@ -64,6 +70,7 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 import pysam
 
 from bcr_abl_annotations import load_features, load_tki_profiles
+from bcr_abl_read_quality import ReadQualityFilter
 
 BASES = ("A", "C", "G", "T")
 
@@ -114,6 +121,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--max-depth", type=int, default=1_000_000, help="Maximum pileup depth")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
+    parser.add_argument("--min-read-qs", type=float, default=0.0, help="Minimum mean read quality (the qs value), applied to the aligned reads; 0 is off (default 0). Reads below the pre-alignment filter are already gone, so this can only be stricter.")
     parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio against other non-candidate bases. Credible panel alleles at the same position are modeled as candidates, not noise (default 3.0)")
     parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
     parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
@@ -266,6 +274,7 @@ def collect_codon_haplotypes(
     positions: List[int],
     min_baseq: int,
     min_mapq: int,
+    read_filter: Optional[ReadQualityFilter] = None,
 ) -> Dict[Tuple[str, bool], Dict[str, Any]]:
     """Count full codons once per read, retaining supplementary-only ABL signal."""
     target = set(positions)
@@ -276,6 +285,8 @@ def collect_codon_haplotypes(
         if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary:
             continue
         if (aln.mapping_quality or 0) < min_mapq:
+            continue
+        if read_filter is not None and not read_filter.passes(aln):
             continue
         qname_key = (aln.query_name, aln.is_read1, aln.is_read2)
         rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0), aln.reference_start)
@@ -313,6 +324,7 @@ def count_positions_batch(
     min_mapq: int,
     ref_seqs_by_pos: Optional[Dict[Tuple[str, int], Tuple[str, str]]] = None,
     orig_chrom: Optional[str] = None,
+    read_filter: Optional[ReadQualityFilter] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Extract forward/reverse base counts, base qualities, and k-mer context across coordinates."""
     results: Dict[int, Dict[str, Any]] = {}
@@ -372,6 +384,8 @@ def count_positions_batch(
                 aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary
                 or (aln.mapping_quality or 0) < min_mapq
             ):
+                continue
+            if read_filter is not None and not read_filter.passes(aln):
                 continue
             key = (aln.query_name, aln.is_read1, aln.is_read2)
             rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0))
@@ -434,10 +448,13 @@ def count_position(
     max_depth: int,
     min_baseq: int,
     min_mapq: int,
+    read_filter: Optional[ReadQualityFilter] = None,
 ) -> Dict[str, Any]:
     """Extract forward/reverse base counts at a single coordinate (wrapper for count_positions_batch)."""
     target_0based = pos_1based - 1
-    batch_res = count_positions_batch(bam, chrom, {target_0based}, max_depth, min_baseq, min_mapq)
+    batch_res = count_positions_batch(
+        bam, chrom, {target_0based}, max_depth, min_baseq, min_mapq, read_filter=read_filter
+    )
     return batch_res.get(target_0based, {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
 
 
@@ -525,6 +542,7 @@ def main(argv=None) -> None:
             chrom_positions[chrom] = set()
         chrom_positions[chrom].add(site["pos"] - 1)
 
+    read_filter = ReadQualityFilter(args.min_read_qs)
     cache: Dict[Tuple[str, int], Dict[str, Any]] = {}
     try:
         for chrom, pos_set in chrom_positions.items():
@@ -532,7 +550,7 @@ def main(argv=None) -> None:
                 orig_chrom = chrom_alias_map.get(chrom, chrom)
                 batch_counts = count_positions_batch(
                     bam, chrom, pos_set, args.max_depth, args.min_base_quality, args.min_mapping_quality,
-                    ref_seqs_by_pos=ref_seqs_by_pos, orig_chrom=orig_chrom
+                    ref_seqs_by_pos=ref_seqs_by_pos, orig_chrom=orig_chrom, read_filter=read_filter
                 )
                 for pos_0based, counts in batch_counts.items():
                     cache[(chrom, pos_0based + 1)] = counts
@@ -811,7 +829,8 @@ def main(argv=None) -> None:
                 hap_counts = {}
             else:
                 hap_counts = collect_codon_haplotypes(
-                    bam, bam_chrom, codon_positions, args.min_base_quality, args.min_mapping_quality
+                    bam, bam_chrom, codon_positions, args.min_base_quality, args.min_mapping_quality,
+                    read_filter=read_filter,
                 )
             state_counts: Dict[str, Dict[str, int]] = {}
             for (codon, reverse), values in hap_counts.items():
@@ -881,6 +900,8 @@ def main(argv=None) -> None:
     # Sort results
     detected_mutations.sort(key=lambda r: (r["status"] != "DETECTED", -r["vaf_percent"]))
 
+    print(read_filter.summary(), flush=True)
+
     # Output headers
     headers = [
         "record_type", "panel_sites_expected", "sample", "chrom", "pos", "ref", "alt", "mutation", "aa_change", "name",
@@ -898,6 +919,7 @@ def main(argv=None) -> None:
     args.output_all.parent.mkdir(parents=True, exist_ok=True)
     with args.output_all.open("w") as handle:
         handle.write(f"# sample={args.sample}\n")
+        handle.write(f"# min_read_qs={args.min_read_qs:g} reads_dropped={len(read_filter.dropped)}\n")
         handle.write(f"# total_sites={len(all_results)}\n")
         handle.write(f"# detected_mutations={len([m for m in detected_mutations if m['status'] == 'DETECTED'])}\n")
         handle.write(f"# subclonal_mutations={len([m for m in detected_mutations if m['status'] == 'SUBCLONAL'])}\n")
@@ -918,6 +940,7 @@ def main(argv=None) -> None:
         handle.write(f"# min_depth={args.min_depth}\n")
         handle.write(f"# min_base_quality={args.min_base_quality}\n")
         handle.write(f"# min_mean_baseq={args.min_mean_baseq}\n")
+        handle.write(f"# min_read_qs={args.min_read_qs:g} reads_dropped={len(read_filter.dropped)}\n")
         handle.write(f"# min_kmer_rate={args.min_kmer_rate} kmer_window={args.kmer_window}\n")
         handle.write(f"# tki_profile_source={features.get('version', 'unspecified')}\n")
         handle.write(f"# panel_sites_expected={panel_sites_expected}\n")
@@ -980,6 +1003,7 @@ def snakemake_argv(smk) -> list:
         "--max-depth", p.max_depth,
         "--min-base-quality", p.min_base_quality,
         "--min-mapping-quality", p.min_mapping_quality,
+        "--min-read-qs", p.min_read_qs,
         "--min-snr", p.min_snr,
         "--min-minor-strand-ratio", p.min_minor_strand_ratio,
         "--min-mean-baseq", p.min_mean_baseq,
