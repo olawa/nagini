@@ -28,7 +28,7 @@ class AssayRegistryTest(unittest.TestCase):
     def test_builtin_assays_resolve_with_defaults_filled_in(self):
         assays = routing.resolve_assays({})
         self.assertLessEqual(
-            {"wgs", "adaptive", "amplicon", "cdna", "bcr_abl"}, set(assays)
+            {"wgs", "adaptive", "cdna", "bcr_abl"}, set(assays)
         )
         for name, definition in assays.items():
             self.assertEqual(
@@ -46,17 +46,14 @@ class AssayRegistryTest(unittest.TestCase):
         self.assertEqual(bcr_abl["modules"], ["bcr_abl"])
         self.assertEqual(routing.minimap2_preset(bcr_abl["library_type"]), "splice")
 
-    def test_amplicon_and_flt3_tp53_use_amplicon_module(self):
-        """Amplicon and flt3_tp53 assays route to amplicon module with genomic map-ont alignment."""
+    def test_amplicon_assays_are_not_built_in(self):
+        """This nagini does BCR-ABL1 and adaptive sampling/WGS, not the amplicon panels."""
         assays = routing.resolve_assays({})
         for name in ("amplicon", "flt3_tp53"):
-            defn = assays[name]
-            self.assertEqual(defn["library_type"], "amplicon")
-            self.assertEqual(defn["modules"], ["amplicon"])
-            self.assertTrue(defn["target_restricted"])
-            self.assertEqual(routing.minimap2_preset(defn["library_type"]), "map-ont")
-            self.assertTrue(defn["config_overrides"].get("read_filter", {}).get("enabled"))
-
+            self.assertNotIn(name, assays)
+        self.assertNotIn("amplicon", routing.LIBRARY_TYPES)
+        for definition in assays.values():
+            self.assertNotIn("amplicon", definition["modules"])
 
     def test_adaptive_is_wgs_confined_to_the_design(self):
         assays = routing.resolve_assays({})
@@ -96,7 +93,7 @@ class AssayRegistryTest(unittest.TestCase):
             {
                 "assays": {
                     "my_panel": {
-                        "library_type": "amplicon",
+                        "library_type": "wgs",
                         "snv_calling": True,
                         "target_restricted": True,
                         "modules": ["my_panel"],
@@ -133,13 +130,11 @@ class SampleRoutingTest(unittest.TestCase):
             {"sample": "S_WGS", "assay": "wgs"},
             {"sample": "S_ADAPT", "assay": "adaptive"},
             {"sample": "S_BCR", "assay": "bcr_abl"},
-            {"sample": "S_AMP", "assay": "amplicon"},
         ])
         self.assertTrue(routing.sample_needs_sv_calling(units, "S_WGS", self.assays))
         self.assertTrue(routing.sample_needs_sv_calling(units, "S_ADAPT", self.assays))
         self.assertFalse(routing.sample_needs_sv_calling(units, "S_BCR", self.assays))
         self.assertFalse(routing.sample_needs_snv_calling(units, "S_BCR", self.assays))
-        self.assertTrue(routing.sample_needs_snv_calling(units, "S_AMP", self.assays))
         self.assertEqual(
             routing.get_library_type(units, "S_BCR", self.assays), "cdna"
         )
@@ -157,9 +152,9 @@ class SampleRoutingTest(unittest.TestCase):
         """A BCR-ABL panel run on gDNA must not be spliced."""
 
         units = units_frame([
-            {"sample": "S", "assay": "bcr_abl", "library_type": "amplicon"},
+            {"sample": "S", "assay": "bcr_abl", "library_type": "wgs"},
         ])
-        self.assertEqual(routing.get_library_type(units, "S", self.assays), "amplicon")
+        self.assertEqual(routing.get_library_type(units, "S", self.assays), "wgs")
         self.assertEqual(
             routing.minimap2_preset(routing.get_library_type(units, "S", self.assays)),
             "map-ont",
@@ -167,7 +162,7 @@ class SampleRoutingTest(unittest.TestCase):
         self.assertFalse(routing.sample_needs_snv_calling(units, "S", self.assays))
         warnings = routing.routing_warnings(units, ["S"], self.assays)
         self.assertEqual(len(warnings), 1)
-        self.assertIn("library_type=amplicon", warnings[0])
+        self.assertIn("library_type=wgs", warnings[0])
 
 
     def test_read_filter_warns_when_the_input_is_already_aligned(self):
@@ -242,15 +237,11 @@ class BackwardCompatibilityTest(unittest.TestCase):
     def test_legacy_library_type_values_keep_their_old_routing(self):
         units = units_frame([
             {"sample": "S_WGS", "library_type": "wgs"},
-            {"sample": "S_AMP", "library_type": "amplicon"},
             {"sample": "S_CDNA", "library_type": "cdna"},
         ])
         # wgs: SNV + SV, unspliced
         self.assertTrue(routing.sample_needs_snv_calling(units, "S_WGS", self.assays))
         self.assertTrue(routing.sample_needs_sv_calling(units, "S_WGS", self.assays))
-        # amplicon: SNV only
-        self.assertTrue(routing.sample_needs_snv_calling(units, "S_AMP", self.assays))
-        self.assertFalse(routing.sample_needs_sv_calling(units, "S_AMP", self.assays))
         # cdna without an assay: spliced, and no calling, exactly as before
         self.assertFalse(routing.sample_needs_snv_calling(units, "S_CDNA", self.assays))
         self.assertFalse(routing.sample_needs_sv_calling(units, "S_CDNA", self.assays))
@@ -275,7 +266,6 @@ class PresetTest(unittest.TestCase):
         self.assertEqual(routing.minimap2_preset("cdna"), "splice")
         self.assertEqual(routing.minimap2_preset("direct_rna"), "splice")
         self.assertEqual(routing.minimap2_preset("wgs"), "map-ont")
-        self.assertEqual(routing.minimap2_preset("amplicon"), "map-ont")
 
     def test_the_configured_default_is_used_for_unspliced_libraries(self):
         self.assertEqual(routing.minimap2_preset("wgs", "lr:hq"), "lr:hq")
@@ -378,18 +368,22 @@ class AssaySettingTest(unittest.TestCase):
         self.assays = routing.resolve_assays({})
 
     def test_targeted_assays_lower_the_allele_fraction_floor(self):
-        """A 20 000x amplicon and a 30x genome cannot share a floor."""
+        """A very deep targeted panel and a 30x genome cannot share a floor."""
 
+        assays = routing.resolve_assays(
+            {"assays": {"deep_panel": {"snv_calling": True, "target_restricted": True,
+                                       "config_overrides": {"clairs_to_call": {"snv_min_af": 0.01}}}}}
+        )
         units = units_frame([
             {"sample": "S_WGS", "assay": "wgs"},
-            {"sample": "S_AMP", "assay": "amplicon"},
+            {"sample": "S_PANEL", "assay": "deep_panel"},
         ])
         self.assertEqual(
-            routing.assay_setting(units, "S_WGS", self.assays, "clairs_to_call", "snv_min_af", 0.05),
+            routing.assay_setting(units, "S_WGS", assays, "clairs_to_call", "snv_min_af", 0.05),
             0.05,
         )
         self.assertEqual(
-            routing.assay_setting(units, "S_AMP", self.assays, "clairs_to_call", "snv_min_af", 0.05),
+            routing.assay_setting(units, "S_PANEL", assays, "clairs_to_call", "snv_min_af", 0.05),
             0.01,
         )
 
@@ -405,7 +399,7 @@ class AssaySettingTest(unittest.TestCase):
 
     def test_config_can_add_overrides_to_a_new_assay(self):
         assays = routing.resolve_assays(
-            {"assays": {"panel": {"library_type": "amplicon",
+            {"assays": {"panel": {"library_type": "wgs",
                                   "config_overrides": {"clairs_to_call": {"snv_min_af": 0.02}}}}}
         )
         units = units_frame([{"sample": "S", "assay": "panel"}])
@@ -522,15 +516,10 @@ class CallerResolutionTest(unittest.TestCase):
             "clairs_to",
         )
 
-    def test_amplicon_and_bcr_abl_route_to_clairs_to(self):
+    def test_bcr_abl_routes_to_clairs_to(self):
         units = units_frame([
-            {"sample": "S_AMP", "assay": "amplicon"},
             {"sample": "S_BCR", "assay": "bcr_abl"},
         ])
-        self.assertEqual(
-            routing.get_sample_caller(units, "S_AMP", self.assays, "auto"),
-            "clairs_to",
-        )
         self.assertEqual(
             routing.get_sample_caller(units, "S_BCR", self.assays, "auto"),
             "clairs_to",

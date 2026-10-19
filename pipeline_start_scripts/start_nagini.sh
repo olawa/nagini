@@ -103,7 +103,7 @@ Options:
   --profile PATH                Snakemake profile (default: profiles/<site>).
   --input-type TYPE             minknow, fastq, unmapped_bam, or aligned_bam.
   --sample-type TYPE            N, T, or R (default: N).
-  --library-type TYPE           Default library type: wgs, amplicon, cdna, or direct_rna
+  --library-type TYPE           Default library type: wgs, cdna, or direct_rna
                                 (default: wgs). Decides how reads are aligned.
   --assay NAME                  Default assay: wgs, adaptive, bcr_abl, or one declared in
                                 config assays. Decides which analysis runs. A per-sample
@@ -622,8 +622,6 @@ if [[ "$assay" == "bcr_abl" ]]; then
     else
         caller_display="Branford Pileup Caller (ABL1 KD panel, fast pileup)"
     fi
-elif [[ "$assay" == "amplicon" ]]; then
-    caller_display="Rindels (Amplicon)"
 elif [[ "$assay" == "adaptive_cnv_sv" ]]; then
     caller_display="None (CNV/SV only)"
 else

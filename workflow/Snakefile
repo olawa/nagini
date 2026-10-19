@@ -19,7 +19,6 @@ include: "rules/cnvkit.smk"
 include: "rules/cnv_html_report.smk"
 include: "rules/snv_postprocess.smk"
 include: "rules/bcr_abl.smk"
-include: "rules/amplicon.smk"
 include: "rules/excel_report.smk"
 include: "rules/copy_results.smk"
 
@@ -820,55 +819,6 @@ use rule tabix from snv_indels as snv_indels_deepvariant_vep_tabix with:
         )
 
 
-
-# ===========================================================================
-# HYDRA-GENETICS MODULE: snv_indels / amplicon (rindels)
-# ===========================================================================
-
-# neville normalises with vt before VEP. Without the same step an indel can
-# sit at a different position in the two reports and look like a discrepancy.
-use rule bcftools_norm from snv_indels as snv_indels_bcftools_norm_amplicon with:
-    input:
-        vcf="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz",
-        tbi="snv_indels/rindels/{sample}_{type}.amplicon.vcf.gz.tbi",
-        ref=config["reference"]["fasta"],
-        fai=config["reference"]["fai"],
-    output:
-        vcf=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz"),
-    params:
-        extra=config.get("amplicon_norm_rindels", {}).get("extra", "--multiallelics -both --check-ref w"),
-    log:
-        "logs/amplicon_norm_rindels/{sample}_{type}.log",
-    benchmark:
-        repeat(
-            "benchmarks/amplicon_norm_rindels/{sample}_{type}.tsv",
-            config.get("amplicon_norm_rindels", {}).get("benchmark_repeats", 1),
-        )
-    threads: 1
-    resources:
-        mem_mb=config.get("amplicon", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("amplicon", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("amplicon", {}).get("partition", config["default_resources"]["partition"]),
-        threads=1,
-        time=config.get("amplicon", {}).get("time", config["default_resources"]["time"]),
-    container:
-        config.get("amplicon", {}).get("container", config["default_container"])
-
-
-use rule tabix from snv_indels as snv_indels_bcftools_norm_amplicon_tabix with:
-    input:
-        gz="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz",
-    output:
-        tbi=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz.tbi"),
-    log:
-        "logs/amplicon_norm_rindels_tabix/{sample}_{type}.log",
-    benchmark:
-        repeat(
-            "benchmarks/amplicon_norm_rindels_tabix/{sample}_{type}.tsv",
-            config.get("tabix", {}).get("benchmark_repeats", 1),
-        )
-
-
 # ===========================================================================
 # HYDRA-GENETICS MODULE: qc
 # ===========================================================================
@@ -1160,36 +1110,3 @@ use rule vep from annotation as annotation_vep_deepvariant with:
             "benchmarks/vep_annotate_deepvariant/{sample}_{type}.tsv",
             config.get("vep", {}).get("benchmark_repeats", 1),
         )
-
-
-use rule vep from annotation as annotation_vep_amplicon with:
-    input:
-        cache=config.get("vep", {}).get("vep_cache", ""),
-        fasta=config["reference"]["fasta"],
-        tabix="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz.tbi",
-        vcf="snv_indels/rindels/{sample}_{type}.amplicon.norm.vcf.gz",
-    output:
-        vcf=temp("snv_indels/rindels/{sample}_{type}.amplicon.norm.vep.vcf"),
-    params:
-        mode=config.get("amplicon_vep", {}).get("mode", config.get("vep", {}).get("mode", "--offline --cache --merged")),
-        extra=config.get("amplicon_vep", {}).get(
-            "extra",
-            "--format vcf --assembly GRCh38 --check_existing --pick --variant_class --everything "
-            "--pick_order mane_select,mane_plus_clinical,canonical,biotype,rank,appris,tsl,ccds,length,ensembl,refseq",
-        ),
-    log:
-        "logs/amplicon_vep_annotate/{sample}_{type}.log",
-    benchmark:
-        repeat(
-            "benchmarks/amplicon_vep_annotate/{sample}_{type}.tsv",
-            config.get("amplicon_vep", {}).get("benchmark_repeats", 1),
-        )
-    threads: config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4))
-    resources:
-        mem_mb=config.get("amplicon_vep", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("amplicon_vep", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
-        partition=config.get("amplicon_vep", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("amplicon_vep", {}).get("threads", config.get("vep", {}).get("threads", 4)),
-        time=config.get("amplicon_vep", {}).get("time", config["default_resources"]["time"]),
-    container:
-        config.get("amplicon_vep", {}).get("container", config.get("vep", {}).get("container", config["default_container"]))

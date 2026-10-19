@@ -170,7 +170,7 @@ properties:
           type: string
         library_type:
           type: string
-          enum: ["wgs", "amplicon", "cdna", "direct_rna"]
+          enum: ["wgs", "cdna", "direct_rna"]
         snv_calling:
           type: boolean
         sv_calling:

@@ -847,13 +847,13 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             mapping.write_text(
                 "barcode,sample,type,library_type\n"
                 "barcode01,SAMPLE_WGS,T,wgs\n"
-                "barcode02,SAMPLE_AMP,T,amplicon\n"
+                "barcode02,SAMPLE_DRNA,T,direct_rna\n"
                 "barcode03,SAMPLE_RNA,T,cdna\n"
                 "barcode04,SAMPLE_DEF,N,\n"
             )
             parsed = PREPARE.read_barcode_map(mapping, "N", default_library_type="wgs")
             self.assertEqual(parsed["barcode01"]["library_type"], "wgs")
-            self.assertEqual(parsed["barcode02"]["library_type"], "amplicon")
+            self.assertEqual(parsed["barcode02"]["library_type"], "direct_rna")
             self.assertEqual(parsed["barcode03"]["library_type"], "cdna")
             self.assertEqual(parsed["barcode04"]["library_type"], "wgs")
 

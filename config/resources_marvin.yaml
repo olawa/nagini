@@ -18,7 +18,7 @@ dorado:
   basecaller_time: "72:00:00"
   basecaller_mem_mb: 120000
   basecaller_mem_per_cpu: 5000
-  # Partition and gres follow the marvin convention used by neville_mx_amplicon
+  # Partition and gres follow the marvin convention
   # and fluffy_hematology_wgs. Verify both against sinfo before the first run.
   basecaller_partition: "GPU_low"
   basecaller_gres: "--gres=gres:gpu:4"

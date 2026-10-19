@@ -43,7 +43,7 @@ properties:
     type: string
   library_type:
     type: string
-    enum: ["wgs", "amplicon", "cdna", "direct_rna", ""]
+    enum: ["wgs", "cdna", "direct_rna", ""]
   assay:
     description: >
       What the sample was sequenced for. Decides which analysis runs, while

@@ -21,7 +21,7 @@ than implemented::
 
     assays:
       my_panel:
-        library_type: amplicon
+        library_type: wgs
         snv_calling: true
         sv_calling: false
         target_restricted: true
@@ -38,7 +38,6 @@ from __future__ import annotations
 # preset; nothing else in the pipeline should branch on the library type.
 LIBRARY_TYPES = {
     "wgs": {"spliced": False, "description": "Genomic DNA, whole genome"},
-    "amplicon": {"spliced": False, "description": "Genomic DNA, amplicon or targeted"},
     "cdna": {"spliced": True, "description": "Reverse-transcribed RNA"},
     "direct_rna": {"spliced": True, "description": "Direct RNA sequencing"},
 }
@@ -71,29 +70,6 @@ BUILTIN_ASSAYS = {
         "sv_calling": True,
         "cnv_calling": True,
         "target_restricted": False,
-    },
-    "amplicon": {
-        "description": "Genomic DNA amplicon or targeted panel",
-        "library_type": "amplicon",
-        "snv_calling": True,
-        "sv_calling": False,
-        "target_restricted": True,
-        "modules": ["amplicon"],
-        "config_overrides": {
-            "clairs_to_call": {"snv_min_af": 0.01, "indel_min_af": 0.01},
-            "read_filter": {"enabled": True},
-        },
-    },
-    "flt3_tp53": {
-        "description": "FLT3/TP53 AML targeted amplicon panel",
-        "library_type": "amplicon",
-        "snv_calling": False,
-        "sv_calling": False,
-        "target_restricted": True,
-        "modules": ["amplicon"],
-        "config_overrides": {
-            "read_filter": {"enabled": True},
-        },
     },
     "cdna": {
         "description": "cDNA library without an assay-specific analysis",
@@ -326,7 +302,7 @@ def get_sample_caller(units, sample: str, assays: dict, global_caller: str = "au
     3. Auto resolution:
        - 'N' (Normal/Germline) -> 'deepvariant'
        - 'T' (Tumor) -> 'clairs_to'
-       - amplicon / cdna -> 'clairs_to'
+       - cdna -> 'clairs_to'
        - wgs -> 'deepvariant'
     """
     overrides = get_assay_definition(units, sample, assays).get("config_overrides", {})
@@ -340,7 +316,7 @@ def get_sample_caller(units, sample: str, assays: dict, global_caller: str = "au
     if norm_global != "auto":
         return norm_global
     lib = get_library_type(units, sample, assays)
-    if lib in ("amplicon", "cdna"):
+    if lib == "cdna":
         return "clairs_to"
     if str(unit_type).upper() == "N":
         return "deepvariant"

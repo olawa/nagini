@@ -60,8 +60,6 @@ def resolve_library_type_for_assay(
     norm_assay = str(assay or "").strip().lower()
     if norm_assay in ("bcr_abl", "cdna"):
         return "cdna"
-    if norm_assay == "amplicon":
-        return "amplicon"
     if norm_assay in ("wgs", "adaptive"):
         return "wgs"
     default_clean = str(default_lib or "").strip().lower()
@@ -162,7 +160,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--library-type",
-        choices=("wgs", "amplicon", "cdna", ""),
+        choices=("wgs", "cdna", ""),
         default="",
         help="Default library type when not specified in barcode map (default: derived from assay or wgs).",
     )
@@ -251,7 +249,7 @@ def parse_args() -> argparse.Namespace:
         "--enable-rindels",
         action="store_true",
         default=False,
-        help="Enable Rindels variant caller for BCR-ABL1 or amplicon assays.",
+        help="Enable Rindels variant caller for BCR-ABL1.",
     )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument(
@@ -480,7 +478,7 @@ def read_barcode_map(
             raise SystemExit(
                 f"Invalid type={sample_type!r} for {barcode}; expected N, T or R."
             )
-        allowed = valid_library_types or {"wgs", "amplicon", "cdna", "direct_rna"}
+        allowed = valid_library_types or {"wgs", "cdna", "direct_rna"}
         if library_type not in allowed:
             raise SystemExit(
                 f"Invalid library_type={library_type!r} for {barcode} in {path}; "

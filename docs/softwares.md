@@ -22,8 +22,8 @@ Hydra-moduler använder sina containrar eller wrapperns egen miljödefinition.
 | alignment | `v0.9.0` | minimap2-index, `minimap2_align` (FASTQ- och uBAM-units), `minimap2_merge` (sammanslagning av units), `samtools_index` (mergad BAM) |
 | cnv_sv | `v3.4.0` | Sniffles2, bgzip, tabix |
 | qc | `v0.8.0` | cramino, mosdepth (`mosdepth`, `mosdepth_bed`), MultiQC |
-| snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO, DeepVariant och amplikon), ClairS-TO, DeepVariant, bgzip, tabix |
-| annotation | `v1.5.0` | SnpEff, simple SV annotation och VEP (`vep`, för Mutect2, ClairS-TO, DeepVariant och amplikon). VEP körs med `--no_stats`, så ingen `*.vep.summary.html` skrivs (D16). |
+| snv_indels | `v2.1.0-nagini` | BED-split, Mutect2, MergeMutectStats (`gatk_mutect2_merge_stats`), FilterMutectCalls (`gatk_mutect2_filter`), bcftools concat, bcftools norm (`bcftools_norm`, för Mutect2, ClairS-TO och DeepVariant), ClairS-TO, DeepVariant, bgzip, tabix |
+| annotation | `v1.5.0` | SnpEff, simple SV annotation och VEP (`vep`, för Mutect2, ClairS-TO och DeepVariant). VEP körs med `--no_stats`, så ingen `*.vep.summary.html` skrivs (D16). |
 
 `v2.1.0-nagini` är en lokal kompatibilitetstagg från Hydra
 `snv_indels v2.1.0`; patchen tar bort en oanvänd DeepTrio-include som annars

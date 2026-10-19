@@ -147,13 +147,13 @@ references:
 #
 #   assays:
 #     my_panel:
-#       library_type: amplicon      # wgs | amplicon | cdna | direct_rna
+#       library_type: wgs           # wgs | cdna | direct_rna
 #       snv_calling: true
 #       sv_calling: false
 #       target_restricted: true     # confine analysis to reference.design_bed
 #       modules: [my_panel]         # assay-specific rules to switch on
 #
-# Built in already: wgs, adaptive, amplicon, cdna, bcr_abl. Override any of
+# Built in already: wgs, adaptive, adaptive_cnv_sv, cdna, bcr_abl. Override any of
 # them here; anything not listed keeps its built-in definition.
 assays: {}
 
@@ -429,35 +429,6 @@ bcr_abl:
   min_alt_reads: 5
   max_depth: 1000000
   min_spanning_reads: 10
-
-amplicon:
-  top_n: 0
-  min_qs: 10
-  len_range: "1000-3500"
-  threads: 8
-  rindels_extra: "--ont --amplicon"
-  # FLT3-ITD is derived from insertions in the long-read Rindels VCF inside the
-  # FLT3 exon 13-15 target (amplicon_targets.bed), not across the whole 3 kb
-  # amplicon: an insertion outside the duplication hotspot is not an ITD.
-  # "rindels itd" is a short-read caller and is deliberately not used here.
-  flt3_itd_region: "chr13:28033864-28034426"
-  flt3_itd_min_length: 6
-  flt3_itd_min_vaf: 1.0
-  # neville_mx_amplicon comparison report
-  neville_callers_label: "rindels"
-  neville_min_af: 0.005
-  neville_min_sv_length: 50
-
-# VEP settings for the neville comparison report only. These are neville's own
-# flags: a different --pick_order selects a different transcript, and the same
-# variant would then carry a different HGVSc/ENSP in the two reports.
-amplicon_vep:
-  container: "docker://hydragenetics/vep:111.0"
-  mode: "--offline --cache --merged"
-  extra: "--format vcf --assembly GRCh38 --check_existing --pick --variant_class --everything
-    --pick_order mane_select,mane_plus_clinical,canonical,biotype,rank,appris,tsl,ccds,length,ensembl,refseq"
-  threads: 4
-
 
 annotate_small_variants: false
 annotate_svs: false
