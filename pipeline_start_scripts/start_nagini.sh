@@ -515,9 +515,26 @@ esac
 [[ -f "$reference_files" ]] || die "Reference registry does not exist: $reference_files"
 [[ -f "$pipeline_path/workflow/Snakefile" ]] || die "Snakefile not found below $pipeline_path"
 [[ -d "$profile" ]] || die "Snakemake profile does not exist: $profile"
-[[ -d "$pipeline_path/vendor/hydra-genetics" ]] || die "Hydra modules are missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
-[[ -d "$pipeline_path/vendor/hydra-genetics/reports" ]] || die "Hydra reports module is missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
-[[ -d "$pipeline_path/vendor/snakemake-wrappers" ]] || die "Snakemake wrappers are missing. Run $pipeline_path/build/vendor_hydra_dependencies.sh first."
+# Check vendored Hydra modules and pinned tags; fetch automatically if missing or outdated
+needs_vendor=false
+if [[ ! -d "$pipeline_path/vendor/hydra-genetics" || ! -d "$pipeline_path/vendor/snakemake-wrappers" ]]; then
+    needs_vendor=true
+else
+    for mod_tag in "alignment:v0.9.0" "annotation:v1.5.0" "cnv_sv:v3.4.0" "qc:v0.8.0" "reports:v1.1.1" "snv_indels:v2.1.0-nagini"; do
+        mod="${mod_tag%%:*}"
+        tag="${mod_tag##*:}"
+        dest="$pipeline_path/vendor/hydra-genetics/$mod"
+        if [[ ! -d "$dest/.git" ]] || ! git -C "$dest" rev-parse --verify "refs/tags/$tag" &>/dev/null; then
+            needs_vendor=true
+            break
+        fi
+    done
+fi
+
+if $needs_vendor; then
+    echo "Fetching or updating missing vendored Hydra dependencies..."
+    "$pipeline_path/build/vendor_hydra_dependencies.sh"
+fi
 
 require_command python3
 
