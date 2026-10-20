@@ -270,7 +270,7 @@ rule bcr_abl_draw_fusions:
         "{rule}: draw the BCR-ABL1 fusion plots for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        python3 {workflow.basedir}/scripts/bcr_abl_draw_fusions.py \
+        bash {workflow.basedir}/scripts/bcr_abl_draw_fusions.sh \
             --sample {wildcards.sample} \
             --fusions {input.fusions} \
             --fusion-summary {input.fusion_summary} \
