@@ -81,10 +81,10 @@ def load_branford_bed(bed_path: Path) -> List[Dict[str, Any]]:
     return sites
 
 
-def detect_genome_build_from_bam(bam_path: Path) -> str:
+def detect_genome_build_from_bam(bam_path: Path, threads: int = 1) -> str:
     """Auto-detect whether BAM was aligned to hg19 or hg38 from reference contig lengths."""
     try:
-        with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+        with pysam.AlignmentFile(str(bam_path), "rb", threads=threads) as bam:
             for c in ("chr9", "9"):
                 if c in bam.references:
                     length = bam.get_reference_length(c)
@@ -131,6 +131,7 @@ def collect_qs_pileup(
     min_base_quality: int = 0,
     min_mapping_quality: int = 0,
     cumulative_thresholds: Optional[List[int]] = None,
+    threads: int = 1,
 ) -> Tuple[str, Dict[Any, Any]]:
     """Collect integer QS bins, evaluating cumulative filters on exact read QS."""
     target_pos = {s["pos0"] for s in sites}
@@ -148,7 +149,7 @@ def collect_qs_pileup(
     if not target_pos:
         return "", by_pos
 
-    with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+    with pysam.AlignmentFile(str(bam_path), "rb", threads=threads) as bam:
         ref_chrom = sites[0]["chrom"]
         chrom = ref_chrom
         if chrom not in bam.references:
@@ -676,6 +677,10 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--split-strands", action="store_true", default=False,
         help="Shortcut to output separate forward (+) and reverse (-) stacked bar pages for all bins (equivalent to --strand both)"
     )
+    parser.add_argument(
+        "--threads", "-t", type=int, default=1,
+        help="Number of worker threads for BAM decompression (default: 1)"
+    )
     parsed = parser.parse_args(argv)
     if parsed.split_strands:
         parsed.strand = "both"
@@ -690,7 +695,8 @@ def main():
     if not args.bam.is_file():
         sys.exit(f"Error: BAM file not found: {args.bam}")
 
-    detected_build = detect_genome_build_from_bam(args.bam)
+    threads = getattr(args, "threads", 1)
+    detected_build = detect_genome_build_from_bam(args.bam, threads=threads)
     print(f"[BAM] Detected reference genome build: {detected_build}", file=sys.stderr)
 
     bed_file = args.bed
@@ -739,6 +745,7 @@ def main():
         min_base_quality=args.min_base_quality,
         min_mapping_quality=args.min_mapping_quality,
         cumulative_thresholds=[int(b["min_qs"]) for b in bins if "min_qs" in b],
+        threads=threads,
     )
 
     print(f"[Sweep] Evaluating {len(bins)} QS bins ({args.mode} mode)...", file=sys.stderr)
