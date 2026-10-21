@@ -15,7 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import xlsxwriter
+try:
+    import xlsxwriter
+except ImportError:
+    xlsxwriter = None
 
 # Import shared functions and styles from nagini_report
 try:
@@ -444,10 +447,11 @@ def build_summary_report(
                         "consequence": r.get("mutation", ""),
                         "clinical_note": r.get("tki_resistance", "Resistance mutation"),
                         "status": "DETECTED",
+                        "caller": "Branford",
                     })
 
         if snv_vcf_path and os.path.exists(snv_vcf_path):
-            _, snvs, _ = parse_small_variant_vcf(snv_vcf_path)
+            _, snvs, caller_name = parse_small_variant_vcf(snv_vcf_path)
             for v in snvs:
                 if v.get("Filter") in {"PASS", "."}:
                     all_pass_variants.append({
@@ -461,11 +465,40 @@ def build_summary_report(
                         "alt": v.get("Alternate", ""),
                         "vaf": v.get("VAF", ""),
                         "depth": v.get("Depth", ""),
-                        "alt_reads": v.get("Alt_Reads", ""),
+                        "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
                         "consequence": v.get("Consequence", ""),
                         "clinical_note": v.get("ClinVar_Significance", ""),
                         "status": "PASS",
+                        "caller": v.get("Caller") or caller_name or "ClairS-TO",
                     })
+
+        for caller_key, default_caller_name in (
+            ("bcr_abl_vardictrust_vcf", "VarDictRust"),
+            ("bcr_abl_rindels_vcf", "Rindels"),
+            ("bcr_abl_bcftools_vcf", "bcftools"),
+        ):
+            c_vcf = s.get(caller_key, "")
+            if c_vcf and os.path.exists(c_vcf):
+                _, c_snvs, c_name = parse_small_variant_vcf(c_vcf, default_caller=default_caller_name)
+                for v in c_snvs:
+                    if v.get("Filter") in {"PASS", "."}:
+                        all_pass_variants.append({
+                            "sample": sample_name,
+                            "dna_number": dna_number,
+                            "type": sample_type,
+                            "gene": v.get("Gene", "") or "ABL1",
+                            "chrom": v.get("Chromosome", ""),
+                            "pos": v.get("Position", ""),
+                            "ref": v.get("Reference", ""),
+                            "alt": v.get("Alternate", ""),
+                            "vaf": v.get("VAF", ""),
+                            "depth": v.get("Depth", ""),
+                            "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
+                            "consequence": v.get("Consequence", ""),
+                            "clinical_note": v.get("ClinVar_Significance", "") or f"{default_caller_name} call",
+                            "status": "PASS",
+                            "caller": v.get("Caller") or c_name or default_caller_name,
+                        })
 
     sheets.append(("Overview", overview_rows, LAYOUT))
 
@@ -477,6 +510,7 @@ def build_summary_report(
             ("DNA Number", 1),
             ("Sample ID", 1),
             ("Type", 1),
+            ("Caller", 1),
             ("Gene", 1),
             ("Chr", 1),
             ("Position", 1),
@@ -495,6 +529,7 @@ def build_summary_report(
             (pv.get("dna_number", "") or "-", 10),
             (pv["sample"], 0),
             (pv["type"], 0),
+            (pv.get("caller", "ClairS-TO"), 0),
             (pv["gene"], 0),
             (pv["chrom"], 0),
             (pv["pos"], 0),
@@ -512,7 +547,11 @@ def build_summary_report(
         # as "none detected" reads as a negative finding rather than as a
         # question this run did not ask.
         assessed = any(
-            record.get("snv_vcf") or record.get("bcr_abl_mutations")
+            record.get("snv_vcf")
+            or record.get("bcr_abl_mutations")
+            or record.get("bcr_abl_vardictrust_vcf")
+            or record.get("bcr_abl_rindels_vcf")
+            or record.get("bcr_abl_bcftools_vcf")
             for record in sample_records
         )
         note = (
@@ -739,6 +778,9 @@ def run_from_snakemake(snakemake):
     bcr_exons = list(getattr(snakemake.params, "bcr_abl_exon_paths", []))
     bcr_all_sites = list(getattr(snakemake.params, "bcr_abl_all_sites_paths", []))
     bcr_plots = list(getattr(snakemake.params, "bcr_abl_plot_paths", []))
+    bcr_vardict_vcfs = list(getattr(snakemake.params, "bcr_abl_vardictrust_vcf_paths", []))
+    bcr_rindels_vcfs = list(getattr(snakemake.params, "bcr_abl_rindels_vcf_paths", []))
+    bcr_bcftools_vcfs = list(getattr(snakemake.params, "bcr_abl_bcftools_vcf_paths", []))
 
     sample_records = []
     for i, name in enumerate(sample_names):
@@ -773,6 +815,9 @@ def run_from_snakemake(snakemake):
             "bcr_abl_exon_coverage": bcr_exons[i] if i < len(bcr_exons) else "",
             "bcr_abl_all_sites": bcr_all_sites[i] if i < len(bcr_all_sites) else "",
             "bcr_abl_plot_png": bcr_plots[i] if i < len(bcr_plots) else "",
+            "bcr_abl_vardictrust_vcf": bcr_vardict_vcfs[i] if i < len(bcr_vardict_vcfs) else "",
+            "bcr_abl_rindels_vcf": bcr_rindels_vcfs[i] if i < len(bcr_rindels_vcfs) else "",
+            "bcr_abl_bcftools_vcf": bcr_bcftools_vcfs[i] if i < len(bcr_bcftools_vcfs) else "",
         })
 
 

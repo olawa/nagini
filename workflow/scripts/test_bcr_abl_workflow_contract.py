@@ -1,12 +1,14 @@
 """Exercise resource selection and report dependencies from the actual rules."""
 
 import os
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 class WorkflowContractTest(unittest.TestCase):
@@ -36,17 +38,22 @@ class WorkflowContractTest(unittest.TestCase):
             "sample_has_assay_module": lambda sample, module: sample == "bcr_sample" and module == "bcr_abl",
         }
         for name in ("sample_has_target_metrics", "sniffles2_enabled", "sample_has_rindels_sv",
-                     "savana_enabled", "sample_needs_cnv_calling"):
+                     "savana_enabled", "sample_needs_cnv_calling",
+                     "bcr_abl_vardictrust_enabled", "bcr_abl_rindels_enabled", "bcr_abl_bcftools_enabled"):
             scope[name] = lambda sample: False
         exec(compile(source, "excel_report.smk", "exec"), scope)
         expected = "reports/bcr_abl/bcr_sample_T.branford_all_sites.tsv"
         self.assertEqual(scope["get_summary_report_paths"]("bcr_abl_all_sites"), ["", expected])
         self.assertEqual(scope["get_summary_report_inputs"](None)["bcr_abl_all_sites"], [expected])
         self.assertIn("bcr_abl_all_sites", scope["_SUMMARY_OPTIONAL_KEYS"])
+        self.assertIn("bcr_abl_vardictrust_vcfs", scope["_SUMMARY_OPTIONAL_KEYS"])
+        self.assertIn("bcr_abl_rindels_vcfs", scope["_SUMMARY_OPTIONAL_KEYS"])
+        self.assertIn("bcr_abl_bcftools_vcfs", scope["_SUMMARY_OPTIONAL_KEYS"])
 
     def test_vardictrust_rules_and_contract(self):
         import nagini_routing
         self.assertIn("enable_vardictrust", nagini_routing.CONFIG_FLAG_CONDITIONS)
+        self.assertIn("enable_all_callers", nagini_routing.CONFIG_FLAG_CONDITIONS)
 
         bcr_smk = (ROOT / "workflow/rules/bcr_abl.smk").read_text()
         self.assertIn("rule bcr_abl_vardictrust:", bcr_smk)

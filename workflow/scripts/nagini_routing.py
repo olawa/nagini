@@ -486,6 +486,7 @@ CONFIG_FLAG_CONDITIONS = {
     "enable_rindels",
     "enable_bcftools_pileup",
     "enable_vardictrust",
+    "enable_all_callers",
 }
 
 

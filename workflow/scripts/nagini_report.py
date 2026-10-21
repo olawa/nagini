@@ -172,7 +172,15 @@ def parse_small_variant_vcf(path, default_caller=""):
     detected_caller = default_caller
 
     path_str = str(path).lower()
-    if "clairs" in path_str:
+    if "vardict" in path_str:
+        detected_caller = "VarDictRust"
+    elif "rindels" in path_str:
+        detected_caller = "Rindels"
+    elif "bcftools" in path_str:
+        detected_caller = "bcftools"
+    elif "deepvariant" in path_str:
+        detected_caller = "DeepVariant"
+    elif "clairs" in path_str:
         detected_caller = "ClairS-TO"
     elif "mutect" in path_str:
         detected_caller = "Mutect2"
@@ -184,7 +192,15 @@ def parse_small_variant_vcf(path, default_caller=""):
         for line in handle:
             if line.startswith("##"):
                 line_lower = line.lower()
-                if "clairs-to" in line_lower or "clairs_to" in line_lower or "source=clairs-to" in line_lower:
+                if "vardict" in line_lower:
+                    detected_caller = "VarDictRust"
+                elif "rindels" in line_lower:
+                    detected_caller = "Rindels"
+                elif "bcftools" in line_lower:
+                    detected_caller = "bcftools"
+                elif "deepvariant" in line_lower:
+                    detected_caller = "DeepVariant"
+                elif "clairs-to" in line_lower or "clairs_to" in line_lower or "source=clairs-to" in line_lower:
                     detected_caller = "ClairS-TO"
                 elif "gatkcommandline=mutect2" in line_lower or "mutect2" in line_lower:
                     detected_caller = "Mutect2"
@@ -234,11 +250,41 @@ def parse_small_variant_vcf(path, default_caller=""):
                 gnomad_display = gnomad_af
 
             raw_vaf = sample_values.get("AF", sample_values.get("VAF", ""))
+            if not raw_vaf and info.get("AF"):
+                raw_vaf = info.get("AF")
+            if not raw_vaf and sample_values.get("AD") and "," in str(sample_values.get("AD")):
+                try:
+                    ad_parts = [float(x) for x in str(sample_values["AD"]).split(",")]
+                    if len(ad_parts) >= 2 and sum(ad_parts) > 0:
+                        raw_vaf = ad_parts[1] / sum(ad_parts)
+                except (ValueError, TypeError):
+                    pass
+            elif not raw_vaf and sample_values.get("VD") and sample_values.get("DP"):
+                try:
+                    vd_f = float(sample_values["VD"])
+                    dp_f = float(sample_values["DP"])
+                    if dp_f > 0:
+                        raw_vaf = vd_f / dp_f
+                except (ValueError, TypeError):
+                    pass
+
             try:
                 vaf_float = float(str(raw_vaf).split(",")[0])
                 vaf_display = f"{vaf_float:.3f}"
             except (ValueError, TypeError, AttributeError):
                 vaf_display = raw_vaf
+
+            ad_val = sample_values.get("AD", "")
+            if not ad_val and "VD" in sample_values:
+                ad_val = sample_values.get("VD", "")
+
+            gene_name = annotation.get("SYMBOL", annotation.get("Gene_Name", ""))
+            if not gene_name:
+                c_clean = str(chrom).removeprefix("chr").lower()
+                if c_clean in ("9", "abl1") or "abl" in path_str:
+                    gene_name = "ABL1"
+                elif c_clean in ("22", "bcr") or "bcr" in path_str:
+                    gene_name = "BCR"
 
             records.append({
                 "Caller": detected_caller or "ClairS-TO",
@@ -250,8 +296,8 @@ def parse_small_variant_vcf(path, default_caller=""):
                 "Quality": qual,
                 "VAF": vaf_display,
                 "Depth": sample_values.get("DP", info.get("DP", "")),
-                "Allele depth": sample_values.get("AD", ""),
-                "Gene": annotation.get("SYMBOL", annotation.get("Gene_Name", "")),
+                "Allele depth": ad_val,
+                "Gene": gene_name,
                 "Consequence": annotation.get("Consequence", annotation.get("Annotation", "")),
                 "Impact": annotation.get("IMPACT", annotation.get("Annotation_Impact", "")),
                 "HGVSc": annotation.get("HGVSc", annotation.get("HGVS.c", "")),
@@ -645,7 +691,7 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
-def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None):
+def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None, other_caller_snvs=None):
     layout = [
         [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
@@ -675,15 +721,16 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
             ])
 
     layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-    layout.append([("2. ABL1 KINASE DOMAIN RESISTANCE MUTATIONS (BRANFORD PANEL)", 3)] + [("", 3)] * 17)
+    layout.append([("2. ABL1 KINASE DOMAIN RESISTANCE MUTATIONS (BRANFORD PANEL)", 3)] + [("", 3)] * 18)
     layout.append([
         ("Mutation", 1), ("AA Change", 1), ("Position", 1), ("Ref", 1), ("Alt", 1),
         ("Depth", 1), ("Alt Reads", 1), ("VAF (%)", 1), ("Status", 1),
+        ("Supporting Callers", 1),
         ("SNR (x)", 1), ("Strand Ratio", 1), ("Mean BaseQ", 1),
         ("Imatinib", 1), ("Dasatinib", 1), ("Nilotinib", 1), ("Bosutinib", 1), ("Ponatinib", 1), ("Asciminib", 1)
     ])
     if not mutation_rows:
-        layout.append([("No candidate variants called", 0)] + [("", 0)] * 17)
+        layout.append([("No candidate variants called", 0)] + [("", 0)] * 18)
     else:
         for r in mutation_rows:
             mut_status = str(r.get("status", "")).upper()
@@ -707,6 +754,35 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
             except (ValueError, TypeError):
                 baseq_display = str(baseq_val)
 
+            support_display = ""
+            if other_caller_snvs:
+                m_pos = int(r.get("pos", 0))
+                m_alt = str(r.get("alt", "")).upper()
+                supporting = []
+                for cs in other_caller_snvs:
+                    try:
+                        c_pos = int(cs.get("Position", 0))
+                    except (ValueError, TypeError):
+                        c_pos = 0
+                    if c_pos == m_pos:
+                        c_alt = str(cs.get("Alternate", "")).upper()
+                        if not c_alt or c_alt == m_alt or m_alt in c_alt:
+                            c_caller = cs.get("Caller", "Caller")
+                            raw_vaf = cs.get("VAF", "")
+                            try:
+                                v_float = float(raw_vaf)
+                                v_pct = v_float * 100.0 if v_float <= 1.0 else v_float
+                                v_display = f"{v_pct:.1f}%"
+                            except (ValueError, TypeError):
+                                v_display = str(raw_vaf)
+                            supporting.append(f"{c_caller} ({v_display})")
+                if supporting:
+                    support_display = ", ".join(supporting)
+                elif mut_status in ("DETECTED", "SUBCLONAL"):
+                    support_display = "Branford only"
+            elif mut_status in ("DETECTED", "SUBCLONAL"):
+                support_display = "Branford"
+
             layout.append([
                 (r.get("mutation", ""), 8 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)),
                 (r.get("aa_change", ""), 0),
@@ -717,6 +793,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 (int(r.get("ad_alt", 0)), 0),
                 (float(r.get("vaf_percent", 0.0)), mut_style),
                 (mut_status, mut_style),
+                (support_display, 0),
                 (snr_display, 0),
                 (strand_display, 0),
                 (baseq_display, 0),
@@ -736,6 +813,33 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
             layout.append([(r.get("mutation", ""), 0), (r.get("consequence", ""), 0),
                            (r.get("resistance_class", "UNCLASSIFIED"), 0), (r.get("status", ""), 0),
                            (float(r.get("vaf_percent", 0) or 0), 0), (r.get("filter_reason", ""), 0)])
+
+    if other_caller_snvs:
+        branford_positions = {int(r.get("pos", 0)) for r in (all_sites_rows or mutation_rows) if r.get("pos")}
+        additional_exon_variants = [
+            v for v in other_caller_snvs
+            if int(v.get("Position", 0)) not in branford_positions
+            and str(v.get("Filter", "")).upper() in ("PASS", ".", "PASS_ONLY")
+        ]
+        if additional_exon_variants:
+            layout.append([("", 0)] * 10)
+            layout.append([("ADDITIONAL ABL1 EXON VARIANTS (OTHER CALLERS)", 3)] + [("", 3)] * 8)
+            layout.append([
+                ("Caller", 1), ("Chromosome", 1), ("Position", 1), ("Ref", 1), ("Alt", 1),
+                ("VAF", 1), ("Depth", 1), ("Allele Depth", 1), ("Filter", 1)
+            ])
+            for v in additional_exon_variants:
+                layout.append([
+                    (v.get("Caller", ""), 0),
+                    (v.get("Chromosome", ""), 0),
+                    (int(v.get("Position", 0)), 0),
+                    (v.get("Reference", ""), 0),
+                    (v.get("Alternate", ""), 0),
+                    (v.get("VAF", ""), 0),
+                    (v.get("Depth", ""), 0),
+                    (v.get("Allele depth", ""), 0),
+                    (v.get("Filter", ""), 0),
+                ])
 
     layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
     layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
@@ -821,9 +925,26 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     savana_sv_tsv="", savana_translocations_tsv="",
                     target_cramino="",
                     dna_number="",
-                    cnv_ideogram=""):
+                    cnv_ideogram="",
+                    bcr_abl_vardictrust_vcf="",
+                    bcr_abl_rindels_vcf="",
+                    bcr_abl_bcftools_vcf=""):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
+
+    other_caller_snvs = []
+    if bcr_abl_vardictrust_vcf and os.path.isfile(bcr_abl_vardictrust_vcf):
+        _, vardict_snvs, _ = parse_small_variant_vcf(bcr_abl_vardictrust_vcf, default_caller="VarDictRust")
+        other_caller_snvs.extend(vardict_snvs)
+
+    if bcr_abl_rindels_vcf and os.path.isfile(bcr_abl_rindels_vcf):
+        _, rindels_snvs, _ = parse_small_variant_vcf(bcr_abl_rindels_vcf, default_caller="Rindels")
+        other_caller_snvs.extend(rindels_snvs)
+
+    if bcr_abl_bcftools_vcf and os.path.isfile(bcr_abl_bcftools_vcf):
+        _, bcftools_snvs, _ = parse_small_variant_vcf(bcr_abl_bcftools_vcf, default_caller="bcftools")
+        other_caller_snvs.extend(bcftools_snvs)
+
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
     cnv_columns, cnvs = parse_tsv(cnv_tsv)
@@ -879,6 +1000,55 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     bcr_abl_exon_rows = parse_bcr_abl_tsv(bcr_abl_exon_coverage)
     bcr_abl_all_sites_rows = parse_bcr_abl_tsv(bcr_abl_all_sites)
     has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows or bcr_abl_all_sites_rows or any(os.path.exists(p) for p in (bcr_abl_fusion, bcr_abl_mutations, bcr_abl_phasing, bcr_abl_exon_coverage, bcr_abl_all_sites) if p))
+
+    branford_snvs = []
+    if has_bcr_abl and bcr_abl_mutation_rows:
+        for r in bcr_abl_mutation_rows:
+            st = str(r.get("status", "")).upper()
+            if st in ("DETECTED", "SUBCLONAL") or float(r.get("vaf_percent", 0.0) or 0.0) > 0:
+                try:
+                    vaf_f = float(r.get("vaf_percent", 0.0)) / 100.0
+                    vaf_str = f"{vaf_f:.3f}"
+                except (ValueError, TypeError):
+                    vaf_str = str(r.get("vaf_percent", ""))
+                branford_snvs.append({
+                    "Caller": "Branford Pileup Caller",
+                    "Chromosome": str(r.get("chrom", "chr9")),
+                    "Position": int(r.get("pos", 0)),
+                    "Reference": str(r.get("ref", "")),
+                    "Alternate": str(r.get("alt", "")),
+                    "Filter": "PASS" if st == "DETECTED" else st,
+                    "Quality": ".",
+                    "VAF": vaf_str,
+                    "Depth": r.get("depth", ""),
+                    "Allele depth": r.get("ad_alt", ""),
+                    "Gene": "ABL1",
+                    "Consequence": r.get("aa_change", r.get("mutation", "")),
+                    "Impact": "MODERATE",
+                    "HGVSc": "",
+                    "HGVSp": r.get("aa_change", ""),
+                    "Existing variation": r.get("mutation", ""),
+                    "gnomAD_AF": "",
+                    "ClinVar_Significance": r.get("tki_resistance", "Resistance mutation"),
+                    "ClinVar_Disease": "Chronic Myeloid Leukemia",
+                    "ClinVar_Review": "",
+                })
+
+    all_snvs = list(snvs) + branford_snvs + other_caller_snvs
+    if all_snvs:
+        def _sort_snv(item):
+            chrom_str = str(item.get("Chromosome", "")).lower().removeprefix("chr")
+            try:
+                c_idx = int(chrom_str)
+            except ValueError:
+                c_idx = 100 if chrom_str == "x" else (101 if chrom_str == "y" else (102 if chrom_str in ("m", "mt") else 103))
+            try:
+                pos_idx = int(item.get("Position", 0))
+            except (ValueError, TypeError):
+                pos_idx = 0
+            return (c_idx, chrom_str, pos_idx, str(item.get("Caller", "")))
+        all_snvs.sort(key=_sort_snv)
+        snvs = all_snvs
 
     pass_count = sum(record["Filter"] in {"PASS", "."} for record in snvs)
     pathogenic_snvs = [
@@ -1118,13 +1288,28 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             ("PASS", 5) if low_20x_count == 0 else (("REVIEW", 6) if low_20x_count <= 5 else ("ACTION REQUIRED", 4))
         )
 
-    caller_display = detected_caller
-    if has_bcr_abl and not snvs:
-        caller_display = "Branford Pileup Caller"
-    elif platform and "clairs" in caller_display.lower():
-        caller_display = f"ClairS-TO ({platform})"
-    elif not caller_display:
-        caller_display = "ClairS-TO"
+    if has_bcr_abl:
+        active_callers = []
+        if bcr_abl_mutation_rows:
+            active_callers.append("Branford Pileup Caller")
+        if bcr_abl_vardictrust_vcf and os.path.isfile(bcr_abl_vardictrust_vcf):
+            active_callers.append("VarDictRust")
+        if bcr_abl_rindels_vcf and os.path.isfile(bcr_abl_rindels_vcf):
+            active_callers.append("Rindels")
+        if bcr_abl_bcftools_vcf and os.path.isfile(bcr_abl_bcftools_vcf):
+            active_callers.append("bcftools")
+        if detected_caller and detected_caller not in active_callers:
+            active_callers.insert(0, detected_caller)
+        if active_callers:
+            caller_display = " + ".join(active_callers)
+        else:
+            caller_display = "Branford Pileup Caller"
+    else:
+        caller_display = detected_caller
+        if platform and "clairs" in (caller_display or "").lower():
+            caller_display = f"ClairS-TO ({platform})"
+        elif not caller_display:
+            caller_display = "ClairS-TO"
 
     target_display = (
         "BCR-ABL1 Target Exons"
@@ -1376,7 +1561,8 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     if has_bcr_abl:
         bcr_layout = build_bcr_abl_sheet(
             sample, bcr_abl_fusion_rows, bcr_abl_mutation_rows, bcr_abl_phasing_rows,
-            bcr_abl_exon_rows, plot_png=bcr_abl_plot_png, all_sites_rows=bcr_abl_all_sites_rows
+            bcr_abl_exon_rows, plot_png=bcr_abl_plot_png, all_sites_rows=bcr_abl_all_sites_rows,
+            other_caller_snvs=other_caller_snvs
         )
         sheets.append(("BCR-ABL1", bcr_layout, LAYOUT))
 
@@ -1461,6 +1647,9 @@ def run_from_snakemake(snakemake):
         bcr_abl_exon_coverage=_first_or_str(getattr(snakemake.input, "bcr_abl_exon_coverage", "")),
         bcr_abl_all_sites=_first_or_str(getattr(snakemake.input, "bcr_abl_all_sites", "")),
         bcr_abl_plot_png=_first_or_str(getattr(snakemake.input, "bcr_abl_plot_png", "")),
+        bcr_abl_vardictrust_vcf=_first_or_str(getattr(snakemake.input, "bcr_abl_vardictrust_vcf", "")),
+        bcr_abl_rindels_vcf=_first_or_str(getattr(snakemake.input, "bcr_abl_rindels_vcf", "")),
+        bcr_abl_bcftools_vcf=_first_or_str(getattr(snakemake.input, "bcr_abl_bcftools_vcf", "")),
         cnv_tsv=_first_or_str(getattr(snakemake.input, "cnv", "")),
     )
 
@@ -1495,6 +1684,9 @@ def main():
     parser.add_argument("--bcr-abl-exon-coverage", default="")
     parser.add_argument("--bcr-abl-all-sites", default="")
     parser.add_argument("--bcr-abl-plot-png", default="")
+    parser.add_argument("--bcr-abl-vardictrust-vcf", default="")
+    parser.add_argument("--bcr-abl-rindels-vcf", default="")
+    parser.add_argument("--bcr-abl-bcftools-vcf", default="")
     parser.add_argument("--cnv-tsv", default="")
     args = parser.parse_args()
     generate_report(
@@ -1511,6 +1703,9 @@ def main():
         bcr_abl_exon_coverage=args.bcr_abl_exon_coverage,
         bcr_abl_all_sites=args.bcr_abl_all_sites,
         bcr_abl_plot_png=args.bcr_abl_plot_png,
+        bcr_abl_vardictrust_vcf=args.bcr_abl_vardictrust_vcf,
+        bcr_abl_rindels_vcf=args.bcr_abl_rindels_vcf,
+        bcr_abl_bcftools_vcf=args.bcr_abl_bcftools_vcf,
         cnv_tsv=args.cnv_tsv,
         rindels_sv_tsv=args.rindels_sv_tsv,
         rindels_translocations_tsv=args.rindels_translocations_tsv,

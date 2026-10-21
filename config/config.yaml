@@ -442,7 +442,10 @@ bcr_abl:
   # value than read_filter.min_qv can be tried by rerunning only the caller and
   # what follows it; reads read_filter already removed cannot be brought back.
   min_read_qs: 0
+  enable_all_callers: false
   enable_vardictrust: false
+  enable_bcftools_pileup: false
+  enable_rindels: false
 
 annotate_small_variants: false
 annotate_svs: false

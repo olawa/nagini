@@ -29,6 +29,9 @@ rule nagini_excel_report:
         bcr_abl_phasing=get_report_bcr_abl_phasing,
         bcr_abl_exon_coverage=get_report_bcr_abl_exon_coverage,
         bcr_abl_plot_png=get_report_bcr_abl_plot_png,
+        bcr_abl_vardictrust_vcf=get_report_bcr_abl_vardictrust_vcf,
+        bcr_abl_rindels_vcf=get_report_bcr_abl_rindels_vcf,
+        bcr_abl_bcftools_vcf=get_report_bcr_abl_bcftools_vcf,
     output:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
@@ -86,6 +89,9 @@ _SUMMARY_OPTIONAL_KEYS = (
     "bcr_abl_phasings",
     "bcr_abl_exons",
     "bcr_abl_plots",
+    "bcr_abl_vardictrust_vcfs",
+    "bcr_abl_rindels_vcfs",
+    "bcr_abl_bcftools_vcfs",
 )
 
 
@@ -173,6 +179,21 @@ def summary_report_files():
                     "bcr_abl_phasings": clean_report_path(f"reports/bcr_abl/{s}_{t}.phasing.tsv") if bcr else "",
                     "bcr_abl_exons": clean_report_path(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv") if bcr else "",
                     "bcr_abl_plots": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_plot.png") if bcr else "",
+                    "bcr_abl_vardictrust_vcfs": (
+                        clean_report_path(f"snv_indels/vardictrust/{s}_{t}.bcr_abl.vcf.gz")
+                        if bcr and bcr_abl_vardictrust_enabled(s)
+                        else ""
+                    ),
+                    "bcr_abl_rindels_vcfs": (
+                        clean_report_path(f"snv_indels/rindels/{s}_{t}.rindels.vcf.gz")
+                        if bcr and bcr_abl_rindels_enabled(s)
+                        else ""
+                    ),
+                    "bcr_abl_bcftools_vcfs": (
+                        clean_report_path(f"snv_indels/bcftools_mpileup/{s}_{t}.bcr_abl.vcf.gz")
+                        if bcr and bcr_abl_bcftools_enabled(s)
+                        else ""
+                    ),
                 }
             )
     return rows
@@ -250,6 +271,9 @@ rule nagini_summary_excel_report:
         bcr_abl_phasing_paths=lambda wildcards: get_summary_report_paths("bcr_abl_phasings"),
         bcr_abl_exon_paths=lambda wildcards: get_summary_report_paths("bcr_abl_exons"),
         bcr_abl_plot_paths=lambda wildcards: get_summary_report_paths("bcr_abl_plots"),
+        bcr_abl_vardictrust_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_vardictrust_vcfs"),
+        bcr_abl_rindels_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_rindels_vcfs"),
+        bcr_abl_bcftools_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_bcftools_vcfs"),
     log:
         "logs/nagini_summary_excel_report/summary.log",
     benchmark:

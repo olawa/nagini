@@ -1319,6 +1319,58 @@ def get_report_bcr_abl_plot_png(wildcards):
     return []
 
 
+def all_callers_enabled(sample=None):
+    return bool(
+        config.get("bcr_abl", {}).get("enable_all_callers", False)
+        or config.get("enable_all_callers", False)
+    )
+
+
+def bcr_abl_bcftools_enabled(sample=None):
+    if all_callers_enabled(sample):
+        return True
+    return bool(
+        config.get("bcr_abl", {}).get("enable_bcftools_pileup", False)
+        or config.get("enable_bcftools_pileup", False)
+    )
+
+
+def bcr_abl_rindels_enabled(sample=None):
+    if all_callers_enabled(sample):
+        return True
+    return bool(
+        config.get("bcr_abl", {}).get("enable_rindels", False)
+        or config.get("enable_rindels", False)
+    )
+
+
+def bcr_abl_vardictrust_enabled(sample=None):
+    if all_callers_enabled(sample):
+        return True
+    return bool(
+        config.get("bcr_abl", {}).get("enable_vardictrust", False)
+        or config.get("enable_vardictrust", False)
+    )
+
+
+def get_report_bcr_abl_vardictrust_vcf(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl") and bcr_abl_vardictrust_enabled(wildcards.sample):
+        return get_sample_type_path(wildcards, "snv_indels/vardictrust", ".bcr_abl.vcf.gz")
+    return []
+
+
+def get_report_bcr_abl_rindels_vcf(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl") and bcr_abl_rindels_enabled(wildcards.sample):
+        return get_sample_type_path(wildcards, "snv_indels/rindels", ".rindels.vcf.gz")
+    return []
+
+
+def get_report_bcr_abl_bcftools_vcf(wildcards):
+    if sample_has_assay_module(wildcards.sample, "bcr_abl") and bcr_abl_bcftools_enabled(wildcards.sample):
+        return get_sample_type_path(wildcards, "snv_indels/bcftools_mpileup", ".bcr_abl.vcf.gz")
+    return []
+
+
 
 
 def get_unit_types_for_sample(sample):
@@ -1355,9 +1407,10 @@ _PIPELINE_CONDITIONS = {
     "cnvkit_enabled": lambda: any(cnvkit_enabled(s) for s in get_samples(samples)),
     "sniffles2_enabled": lambda: any(sniffles2_enabled(s) for s in get_samples(samples)),
     "savana_enabled": lambda: any(savana_enabled(s) for s in get_samples(samples)),
-    "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
-    "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
-    "enable_vardictrust": lambda: bool(config.get("bcr_abl", {}).get("enable_vardictrust", False) or config.get("enable_vardictrust", False)),
+    "enable_all_callers": lambda: all_callers_enabled(),
+    "enable_bcftools_pileup": lambda: bcr_abl_bcftools_enabled(),
+    "enable_rindels": lambda: bcr_abl_rindels_enabled(),
+    "enable_vardictrust": lambda: bcr_abl_vardictrust_enabled(),
 }
 
 _SAMPLE_CONDITIONS = {
@@ -1385,9 +1438,10 @@ _SAMPLE_CONDITIONS = {
     "target_metrics": sample_has_target_metrics,
     "merged_fastq": sample_has_merged_fastq,
     "rindels_sv": sample_has_rindels_sv,
-    "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
-    "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
-    "enable_vardictrust": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_vardictrust", False) or config.get("enable_vardictrust", False)),
+    "enable_all_callers": lambda s: sample_has_assay_module(s, "bcr_abl") and all_callers_enabled(s),
+    "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bcr_abl_bcftools_enabled(s),
+    "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bcr_abl_rindels_enabled(s),
+    "enable_vardictrust": lambda s: sample_has_assay_module(s, "bcr_abl") and bcr_abl_vardictrust_enabled(s),
 }
 
 

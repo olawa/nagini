@@ -1,6 +1,9 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
     import openpyxl
@@ -67,6 +70,100 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertIn("Resistance panel incomplete", text)
             self.assertNotIn("Normal / Sensitive", text)
             self.assertNotIn("POLYCLONAL (TRANS)", text)
+
+    def test_multi_caller_consolidation_in_individual_and_summary_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            muts = self._write(
+                root, "mut.tsv",
+                "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\tref\talt\tdepth\tad_alt\tvaf_percent\n"
+                "T315I\tp.Thr315Ile\tMISSENSE\tCURATED_RESISTANCE\tDETECTED\tchr9\t133748283\tC\tT\t1000\t250\t25.0\n"
+            )
+            vardict = self._write(
+                root, "vardict.vcf",
+                "##fileformat=VCFv4.2\n"
+                "##source=VarDictRust\n"
+                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n"
+                "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Total Depth\">\n"
+                "##FORMAT=<ID=VD,Number=1,Type=Integer,Description=\"Variant Depth\">\n"
+                "##FORMAT=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
+                "chr9\t133748283\t.\tC\tT\t100\tPASS\t.\tGT:DP:VD:AF\t0/1:1000:240:0.240\n"
+                "chr9\t133750500\t.\tG\tA\t80\tPASS\t.\tGT:DP:VD:AF\t0/1:800:160:0.200\n"
+            )
+            bcftools = self._write(
+                root, "bcftools.vcf",
+                "##fileformat=VCFv4.2\n"
+                "##source=bcftools\n"
+                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n"
+                "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Depth\">\n"
+                "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
+                "chr9\t133748283\t.\tC\tT\t100\tPASS\t.\tGT:DP:AD\t0/1:1000:760,240\n"
+            )
+            rindels = self._write(
+                root, "rindels.vcf",
+                "##fileformat=VCFv4.2\n"
+                "##source=rindels\n"
+                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n"
+                "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Depth\">\n"
+                "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">\n"
+                "##FORMAT=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
+                "chr9\t133748283\t.\tC\tT\t100\tPASS\t.\tGT:DP:AD:AF\t0/1:1000:750,250:0.250\n"
+            )
+
+            # Test individual sample report
+            out_sample = root / "sample.xlsx"
+            report.generate_report(
+                str(out_sample), "S1", "T", "hg19", "", "", "", "", "", "", "",
+                bcr_abl_mutations=muts,
+                bcr_abl_vardictrust_vcf=vardict,
+                bcr_abl_rindels_vcf=rindels,
+                bcr_abl_bcftools_vcf=bcftools,
+            )
+            self.assertTrue(out_sample.exists())
+
+            overview_txt = self._sheet_text(out_sample, "Overview")
+            self.assertIn("Small Variant Caller", overview_txt)
+            self.assertIn("Branford", overview_txt)
+            self.assertIn("VarDictRust", overview_txt)
+
+            snv_txt = self._sheet_text(out_sample, "SNVs and indels")
+            self.assertIn("Caller", snv_txt)
+            self.assertIn("Branford", snv_txt)
+            self.assertIn("VarDictRust", snv_txt)
+            self.assertIn("bcftools", snv_txt)
+            self.assertIn("Rindels", snv_txt)
+            self.assertIn("133748283", snv_txt)
+            self.assertIn("133750500", snv_txt)
+
+            bcr_abl_txt = self._sheet_text(out_sample, "BCR-ABL1")
+            self.assertIn("Supporting Callers", bcr_abl_txt)
+            self.assertIn("VarDictRust", bcr_abl_txt)
+            self.assertIn("bcftools", bcr_abl_txt)
+            self.assertIn("Rindels", bcr_abl_txt)
+            self.assertIn("ADDITIONAL ABL1 EXON VARIANTS (OTHER CALLERS)", bcr_abl_txt)
+            self.assertIn("133750500", bcr_abl_txt)
+
+            # Test summary report
+            out_summary = root / "summary.xlsx"
+            summary.build_summary_report(
+                str(out_summary), "RUN_01", "hg19", [{
+                    "sample": "S1", "type": "T", "assay": "bcr_abl",
+                    "bcr_abl_mutations": muts,
+                    "bcr_abl_vardictrust_vcf": vardict,
+                    "bcr_abl_rindels_vcf": rindels,
+                    "bcr_abl_bcftools_vcf": bcftools,
+                }]
+            )
+            self.assertTrue(out_summary.exists())
+            pass_var_txt = self._sheet_text(out_summary, "PASS Variants")
+            self.assertIn("Caller", pass_var_txt)
+            self.assertIn("Branford", pass_var_txt)
+            self.assertIn("VarDictRust", pass_var_txt)
+            self.assertIn("bcftools", pass_var_txt)
+            self.assertIn("Rindels", pass_var_txt)
 
 
 if __name__ == "__main__":

@@ -246,6 +246,13 @@ def parse_args() -> argparse.Namespace:
         help="Number of CPU cores allocated for the pipeline run.",
     )
     parser.add_argument(
+        "--enable-all-callers",
+        "--all-callers",
+        action="store_true",
+        default=False,
+        help="Enable all variant callers (Branford, VarDictRust, Rindels, bcftools mpileup) for BCR-ABL1.",
+    )
+    parser.add_argument(
         "--enable-rindels",
         action="store_true",
         default=False,
@@ -256,6 +263,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Enable VarDictRust variant caller for BCR-ABL1 target exons.",
+    )
+    parser.add_argument(
+        "--enable-bcftools-pileup",
+        "--bcftools-pileup",
+        action="store_true",
+        default=False,
+        help="Enable bcftools mpileup variant caller for BCR-ABL1 target exons.",
     )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument(
@@ -1931,6 +1945,16 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     if getattr(args, "small_variant_caller", ""):
         config["small_variant_caller"] = args.small_variant_caller
 
+    if getattr(args, "enable_all_callers", False):
+        config["enable_all_callers"] = True
+        config.setdefault("bcr_abl", {})["enable_all_callers"] = True
+        config["enable_rindels"] = True
+        config.setdefault("bcr_abl", {})["enable_rindels"] = True
+        config["enable_vardictrust"] = True
+        config.setdefault("bcr_abl", {})["enable_vardictrust"] = True
+        config["enable_bcftools_pileup"] = True
+        config.setdefault("bcr_abl", {})["enable_bcftools_pileup"] = True
+
     if getattr(args, "enable_rindels", False):
         config["enable_rindels"] = True
         config.setdefault("bcr_abl", {})["enable_rindels"] = True
@@ -1938,6 +1962,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     if getattr(args, "enable_vardictrust", False):
         config["enable_vardictrust"] = True
         config.setdefault("bcr_abl", {})["enable_vardictrust"] = True
+
+    if getattr(args, "enable_bcftools_pileup", False):
+        config["enable_bcftools_pileup"] = True
+        config.setdefault("bcr_abl", {})["enable_bcftools_pileup"] = True
 
     clairs_to_platform = getattr(args, "clairs_to_platform", "")
     if not clairs_to_platform:

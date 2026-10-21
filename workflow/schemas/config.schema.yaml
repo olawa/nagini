@@ -152,6 +152,9 @@ properties:
       container:
         type: string
         description: name or path to docker/singularity container
+      enable_all_callers:
+        type: boolean
+        description: 'enable all variant callers for BCR-ABL1 (default: False)'
       enable_bcftools_pileup:
         type: boolean
         description: 'enable bcftools pileup (default: False)'
