@@ -1074,6 +1074,7 @@ def validate_reference_registry(
     verify_checksums: bool = False,
     strict: bool = False,
     default_root: str = "",
+    active_build: str | None = None,
 ) -> None:
     """Check the inventory before Snakemake builds a DAG against it.
 
@@ -1089,7 +1090,13 @@ def validate_reference_registry(
     bad_checksum = []
     checked = 0
 
+    active_norm = active_build.strip().lower() if active_build else None
+
     for entry in entries:
+        if active_norm:
+            parts = entry.source.split(".")
+            if len(parts) >= 2 and parts[0] == "reference_builds" and parts[1].strip().lower() != active_norm:
+                continue
         if not entry.path:
             if entry.required:
                 missing.append(f"{entry.source} has no path")
@@ -1808,11 +1815,17 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
             )
         if getattr(args, "check_references", True):
             _verify = bool(getattr(args, "verify_references", False))
+            _active_b = str(
+                getattr(args, "reference_build", "")
+                or config.get("reference_build", "")
+                or ""
+            ).strip().lower()
             validate_reference_registry(
                 reference_registry,
                 verify_checksums=_verify,
                 strict=_verify,
                 default_root=reference_root,
+                active_build=_active_b or None,
             )
 
     # Nagini's checked-in configs use paths relative to the repository root,
@@ -1993,6 +2006,8 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     read_filter_overrides = {}
     if getattr(args, "filter_reads", None) is not None:
         read_filter_overrides["enabled"] = bool(args.filter_reads)
+    elif getattr(args, "filter_qv", "") or getattr(args, "filter_len", "") or getattr(args, "filter_binary", ""):
+        read_filter_overrides["enabled"] = True
     if getattr(args, "filter_qv", ""):
         try:
             read_filter_overrides["min_qv"] = float(args.filter_qv)

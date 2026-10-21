@@ -905,6 +905,44 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
             config = yaml.safe_load(runtime.read_text())
+            self.assertEqual(config["cores"], 96)
+
+    def test_runtime_config_auto_enables_read_filter(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_type = "fastq"
+        args.dorado_input = None
+        args.input_dir = Path("/tmp/run")
+        args.dorado_model = ""
+        args.basecalling_model = "sup"
+        args.dorado_kit = ""
+        args.dorado_device = ""
+        args.dorado_models_directory = None
+        args.dorado_container = ""
+        args.dorado_binary = ""
+        args.bed_file = None
+        args.filter_reads = None
+        args.filter_qv = "18"
+        args.filter_len = "800-2000"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+            self.assertTrue(config["read_filter"]["enabled"])
+            self.assertEqual(config["read_filter"]["min_qv"], 18.0)
+            self.assertEqual(config["read_filter"]["length_range"], "800-2000")
+
+        # Explicitly disabling overrides auto-enable
+        args.filter_reads = False
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+            self.assertFalse(config["read_filter"]["enabled"])
 
     def test_barcode_map_with_library_type_and_defaults(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1199,6 +1237,20 @@ class ReferenceRegistryTest(unittest.TestCase):
         registry = {"reference_builds": {"hg38": {"fasta": {"path": "/nope/genome.fa", "type": "file"}}}}
         with self.assertRaises(SystemExit):
             PREPARE.validate_reference_registry(registry, strict=True)
+
+    def test_validate_reference_registry_filters_by_active_build(self):
+        registry = {
+            "reference_builds": {
+                "hg38": {"fasta": {"path": "/nope/hg38.fa", "type": "file"}},
+                "hg19": {"fasta": {"path": "/nope/hg19.fa", "type": "file"}},
+            }
+        }
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            PREPARE.validate_reference_registry(registry, active_build="hg19")
+        output = buffer.getvalue()
+        self.assertIn("/nope/hg19.fa", output)
+        self.assertNotIn("/nope/hg38.fa", output)
 
     def test_optional_assets_are_not_required(self):
         registry = {"reference_builds": {"hg38": {"cytoband": {"path": "", "type": "optional"}}}}

@@ -627,6 +627,12 @@ mkdir -p "$analysis_dir"
 if [[ -z "$sequence_id" ]]; then
     sequence_id="$(basename "$input_dir")"
 fi
+if [[ -z "$filter_reads" ]]; then
+    if [[ -n "$filter_qv" || -n "$filter_len" || -n "$filter_binary" ]]; then
+        filter_reads=true
+    fi
+fi
+
 # A launch banner rather than a flat list of echos: which inbox, which
 # analysis directory and which site config were picked is what a rerun is
 # reconstructed from, and grouping keeps the three apart at a glance.
@@ -667,6 +673,19 @@ else
     caller_display="${small_variant_caller:-auto (ClairS-TO + DeepVariant)}"
 fi
 field "variant caller" "$caller_display"
+if [[ "$filter_reads" == "true" ]]; then
+    filter_desc="enabled"
+    filter_details=()
+    [[ -n "$filter_qv" ]] && filter_details+=("min QV >= $filter_qv")
+    [[ -n "$filter_len" ]] && filter_details+=("length $filter_len")
+    [[ -n "$filter_binary" ]] && filter_details+=("binary: $(basename "$filter_binary")")
+    if [[ ${#filter_details[@]} -gt 0 ]]; then
+        filter_desc+=" ($(IFS=", "; echo "${filter_details[*]}"))"
+    fi
+    field "read filter" "$filter_desc"
+elif [[ "$filter_reads" == "false" ]]; then
+    field "read filter" "disabled"
+fi
 field_if "design bed" "$bed_file"
 field_if "merged fastq" "$merged_fastq"
 
