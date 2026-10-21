@@ -16,7 +16,7 @@ import argparse
 import csv
 import math
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -31,6 +31,7 @@ except ImportError as err:
     sys.exit(f"Error: missing required package ({err}). Ensure pysam, matplotlib, and numpy are installed.")
 
 from plot_branford_background import build_plot_figure, BASE_COLORS, STATUS_COLORS
+from bcr_abl_read_quality import ReadQualityFilter
 
 AA3_TO_AA1 = {
     "Ala": "A", "Arg": "R", "Asn": "N", "Asp": "D", "Cys": "C", "Gln": "Q", "Glu": "E",
@@ -121,18 +122,29 @@ def empty_qs_counts() -> Dict[str, int]:
     }
 
 
+CUMULATIVE_COUNTS = "_cumulative_counts"
+
+
 def collect_qs_pileup(
     bam_path: Path,
     sites: List[Dict[str, Any]],
     min_base_quality: int = 0,
     min_mapping_quality: int = 0,
-) -> Tuple[str, Dict[int, Dict[Optional[int], Dict[str, int]]]]:
-    """Collect base and indel counts for each genomic position stratified by integer read QS and strand."""
-    by_pos: Dict[int, Dict[Optional[int], Dict[str, int]]] = {
+    cumulative_thresholds: Optional[List[int]] = None,
+) -> Tuple[str, Dict[Any, Any]]:
+    """Collect integer QS bins, evaluating cumulative filters on exact read QS."""
+    target_pos = {s["pos0"] for s in sites}
+    by_pos: Dict[Any, Any] = {
         s["pos0"]: defaultdict(empty_qs_counts)
         for s in sites
     }
-    target_pos = set(by_pos.keys())
+    # Keep the public helper useful for callers that collect and then request
+    # the standard QS range directly. main() passes only thresholds it needs.
+    thresholds = sorted(set(range(20, 31) if cumulative_thresholds is None else cumulative_thresholds))
+    by_pos[CUMULATIVE_COUNTS] = {
+        pos: {threshold: empty_qs_counts() for threshold in thresholds}
+        for pos in target_pos
+    }
     if not target_pos:
         return "", by_pos
 
@@ -152,7 +164,9 @@ def collect_qs_pileup(
 
         print(f"[Pileup] Scanning BAM {bam_path.name} across {chrom}:{min_pos:,}-{max_pos:,}...", file=sys.stderr)
         total_reads_seen = 0
-        qs_values: List[int] = []
+        qs_value_counts: Counter = Counter()
+        quality_values = ReadQualityFilter()
+        dropped_by_threshold: Dict[int, Set[str]] = {q: set() for q in thresholds}
 
         for col in bam.pileup(
             chrom, min_pos, max_pos, truncate=True,
@@ -163,57 +177,55 @@ def collect_qs_pileup(
             if pos0 not in target_pos:
                 continue
 
-            best_by_read: Dict[Tuple[str, bool, bool], Tuple[Tuple[int, int], Any, str, str, bool]] = {}
+            record_type = Tuple[Tuple[int, int], Any, Optional[float]]
+            best_by_read: Dict[Tuple[str, bool, bool], record_type] = {}
+            best_by_read_threshold: Dict[int, Dict[Tuple[str, bool, bool], record_type]] = {
+                threshold: {} for threshold in thresholds
+            }
             for read in col.pileups:
                 aln = read.alignment
                 if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary:
                     continue
                 if (aln.mapping_quality or 0) < min_mapping_quality:
                     continue
-                if read.is_refskip:
-                    continue
-
-                strand = "rev" if aln.is_reverse else "fwd"
+                # Evaluate every alignment before refskip/base-quality
+                # filtering, matching the caller's read-level filter order.
+                qs_value = quality_values.value(aln)
+                eligible_thresholds: List[int] = []
+                for threshold in thresholds:
+                    dropped = dropped_by_threshold[threshold]
+                    if aln.query_name in dropped:
+                        continue
+                    if qs_value is not None and qs_value < threshold:
+                        dropped.add(aln.query_name)
+                        continue
+                    eligible_thresholds.append(threshold)
                 key = (aln.query_name, aln.is_read1, aln.is_read2)
                 rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0))
+                record = (rank, read, qs_value)
+                if key not in best_by_read or rank < best_by_read[key][0]:
+                    best_by_read[key] = record
+                for threshold in eligible_thresholds:
+                    previous = best_by_read_threshold[threshold].get(key)
+                    if previous is None or rank < previous[0]:
+                        best_by_read_threshold[threshold][key] = record
 
+            def selected_observation(record):
+                _, read, qs_value = record
+                aln = read.alignment
+                if read.is_refskip:
+                    return None
                 if read.is_del or read.query_position is None:
-                    if key not in best_by_read or rank < best_by_read[key][0]:
-                        best_by_read[key] = (rank, aln, "DEL", strand, False)
-                    continue
-
+                    return "DEL", "rev" if aln.is_reverse else "fwd", False, qs_value
                 qpos = read.query_position
                 if aln.query_qualities is not None and aln.query_qualities[qpos] < min_base_quality:
-                    continue
+                    return None
                 base = aln.query_sequence[qpos].upper()
                 if base not in ("A", "C", "G", "T"):
-                    continue
+                    return None
+                return base, "rev" if aln.is_reverse else "fwd", bool(getattr(read, "indel", 0) > 0), qs_value
 
-                has_ins = bool(getattr(read, "indel", 0) > 0)
-                if key not in best_by_read or rank < best_by_read[key][0]:
-                    best_by_read[key] = (rank, aln, base, strand, has_ins)
-
-            for _, aln, base, strand, has_ins in best_by_read.values():
-                qs_int: Optional[int] = None
-                for tag_name in ("qs", "QS"):
-                    if aln.has_tag(tag_name):
-                        try:
-                            qs_val = float(aln.get_tag(tag_name))
-                            qs_int = int(qs_val)
-                            break
-                        except (ValueError, TypeError):
-                            pass
-
-                # Fallback: recompute mean read quality from base qualities if tag missing
-                if qs_int is None and aln.query_qualities is not None and len(aln.query_qualities) > 0:
-                    try:
-                        mean_err = sum(10.0 ** (-q / 10.0) for q in aln.query_qualities) / len(aln.query_qualities)
-                        mean_q = -10.0 * math.log10(mean_err) if mean_err > 0 else float(max(aln.query_qualities))
-                        qs_int = int(mean_q)
-                    except Exception:
-                        pass
-
-                counts = by_pos[pos0][qs_int]
+            def add_observation(counts: Dict[str, int], base: str, strand: str, has_ins: bool) -> None:
                 if base == "DEL":
                     counts["del"] += 1
                     counts[f"del_{strand}"] += 1
@@ -225,15 +237,37 @@ def collect_qs_pileup(
                     if has_ins:
                         counts["ins"] += 1
                         counts[f"ins_{strand}"] += 1
+
+            for record in best_by_read.values():
+                observation = selected_observation(record)
+                if observation is None:
+                    continue
+                base, strand, has_ins, qs_value = observation
+                # Integer bins have bounded cardinality even when every read
+                # has a distinct fractional tag. Cumulative counts above use
+                # the original value before this display-only binning.
+                qs_bin = math.floor(qs_value) if qs_value is not None else None
+                counts = by_pos[pos0][qs_bin]
+                add_observation(counts, base, strand, has_ins)
+                if base != "DEL":
                     total_reads_seen += 1
 
-                if qs_int is not None:
-                    qs_values.append(qs_int)
+                if qs_value is not None:
+                    qs_value_counts[qs_value] += 1
+
+            for threshold, observations in best_by_read_threshold.items():
+                counts = by_pos[CUMULATIVE_COUNTS][pos0][threshold]
+                for record in observations.values():
+                    observation = selected_observation(record)
+                    if observation is None:
+                        continue
+                    base, strand, has_ins, _ = observation
+                    add_observation(counts, base, strand, has_ins)
 
         if total_reads_seen > 0:
-            min_q = min(qs_values) if qs_values else "N/A"
-            max_q = max(qs_values) if qs_values else "N/A"
-            med_q = int(np.median(qs_values)) if qs_values else "N/A"
+            min_q = min(qs_value_counts) if qs_value_counts else "N/A"
+            max_q = max(qs_value_counts) if qs_value_counts else "N/A"
+            med_q = weighted_median(qs_value_counts) if qs_value_counts else "N/A"
             print(
                 f"[Pileup] Collected {total_reads_seen:,} base calls across target sites. "
                 f"Read QS range: {min_q} to {max_q} (median: {med_q}).",
@@ -248,6 +282,28 @@ def collect_qs_pileup(
     return ref_chrom, by_pos
 
 
+def weighted_median(counts: Counter) -> float:
+    """Compute the median of repeated QS values without storing each read value."""
+    total = sum(counts.values())
+    if total == 0:
+        return float("nan")
+    ordered = sorted(counts.items())
+    middle_low = (total - 1) // 2
+    middle_high = total // 2
+    cumulative = 0
+    values = []
+    for value, count in ordered:
+        next_cumulative = cumulative + count
+        if cumulative <= middle_low < next_cumulative:
+            values.append(value)
+        if cumulative <= middle_high < next_cumulative:
+            values.append(value)
+        if len(values) == 2 or (total % 2 and values):
+            break
+        cumulative = next_cumulative
+    return float(sum(values) / len(values))
+
+
 def make_bins(qs_min: int, qs_max: int, mode: str) -> List[Dict[str, Any]]:
     bins = []
     if mode in ("binned", "both"):
@@ -256,20 +312,28 @@ def make_bins(qs_min: int, qs_max: int, mode: str) -> List[Dict[str, Any]]:
             "type": "binned",
             "label": f"QS < {qs_min}",
             "short_label": f"<{qs_min}",
-            "filter_fn": lambda q: q is None or q < qs_min,
+            "filter_fn": lambda q: q is not None and q < qs_min,
         })
         for q in range(qs_min, qs_max + 1):
             bins.append({
                 "type": "binned",
                 "label": f"QS = {q}",
                 "short_label": f"{q}",
-                "filter_fn": (lambda target_q: lambda q: q == target_q)(q),
+                # Stored bins correspond to floor(QS); cumulative thresholds
+                # are evaluated on exact values during collection.
+                "filter_fn": (lambda target_q: lambda value: value is not None and math.floor(value) == target_q)(q),
             })
         bins.append({
             "type": "binned",
             "label": f"QS > {qs_max}",
             "short_label": f">{qs_max}",
-            "filter_fn": lambda q: q is not None and q > qs_max,
+            "filter_fn": lambda q: q is not None and q >= qs_max + 1,
+        })
+        bins.append({
+            "type": "binned",
+            "label": "QS unknown",
+            "short_label": "unknown",
+            "filter_fn": lambda q: q is None,
         })
 
     if mode in ("cumulative", "both"):
@@ -279,47 +343,58 @@ def make_bins(qs_min: int, qs_max: int, mode: str) -> List[Dict[str, Any]]:
                 "type": "cumulative",
                 "label": f"QS >= {q}",
                 "short_label": f">={q}",
-                "filter_fn": (lambda target_q: lambda q: q is not None and q >= target_q)(q),
+                # Unknown QS values are retained, as in ReadQualityFilter.
+                "filter_fn": (lambda target_q: lambda value: value is None or value >= target_q)(q),
+                "min_qs": float(q),
             })
     return bins
 
 
 def rows_for_bin(
     sites: List[Dict[str, Any]],
-    by_pos: Dict[int, Dict[Optional[int], Dict[str, int]]],
+    by_pos: Dict[Any, Any],
     bin_def: Dict[str, Any],
     sample: str,
     strand: str = "all",
 ) -> List[Dict[str, str]]:
     rows = []
     filter_fn = bin_def["filter_fn"]
+    min_qs = bin_def.get("min_qs")
 
     for s in sites:
         pos0 = s["pos0"]
         counts_for_pos = by_pos.get(pos0, {})
+        pos_filter_fn = filter_fn
+        cumulative = by_pos.get(CUMULATIVE_COUNTS, {}).get(pos0, {})
+        if min_qs is not None and int(min_qs) in cumulative:
+            counts_for_pos = {None: cumulative[int(min_qs)]}
+            pos_filter_fn = lambda _q: True
 
-        c_a_fwd = sum(c.get("A_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_a_rev = sum(c.get("A_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        def count(field: str) -> int:
+            return sum(c.get(field, 0) for q, c in counts_for_pos.items() if pos_filter_fn(q))
+
+        c_a_fwd = count("A_fwd")
+        c_a_rev = count("A_rev")
         c_a = c_a_fwd + c_a_rev
 
-        c_c_fwd = sum(c.get("C_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_c_rev = sum(c.get("C_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_c_fwd = count("C_fwd")
+        c_c_rev = count("C_rev")
         c_c = c_c_fwd + c_c_rev
 
-        c_g_fwd = sum(c.get("G_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_g_rev = sum(c.get("G_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_g_fwd = count("G_fwd")
+        c_g_rev = count("G_rev")
         c_g = c_g_fwd + c_g_rev
 
-        c_t_fwd = sum(c.get("T_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_t_rev = sum(c.get("T_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_t_fwd = count("T_fwd")
+        c_t_rev = count("T_rev")
         c_t = c_t_fwd + c_t_rev
 
-        c_del_fwd = sum(c.get("del_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_del_rev = sum(c.get("del_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_del_fwd = count("del_fwd")
+        c_del_rev = count("del_rev")
         c_del = c_del_fwd + c_del_rev
 
-        c_ins_fwd = sum(c.get("ins_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
-        c_ins_rev = sum(c.get("ins_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_ins_fwd = count("ins_fwd")
+        c_ins_rev = count("ins_rev")
         c_ins = c_ins_fwd + c_ins_rev
 
         depth_fwd = c_a_fwd + c_c_fwd + c_g_fwd + c_t_fwd
@@ -352,18 +427,21 @@ def rows_for_bin(
         if strand == "fwd":
             plot_depth = depth_fwd
             p_a, p_c, p_g, p_t = c_a_fwd, c_c_fwd, c_g_fwd, c_t_fwd
+            plot_del, plot_ins = c_del_fwd, c_ins_fwd
             ad_ref = ad_ref_fwd
             ad_alt = ad_alt_fwd
             vaf_pct = vaf_fwd_pct
         elif strand == "rev":
             plot_depth = depth_rev
             p_a, p_c, p_g, p_t = c_a_rev, c_c_rev, c_g_rev, c_t_rev
+            plot_del, plot_ins = c_del_rev, c_ins_rev
             ad_ref = ad_ref_rev
             ad_alt = ad_alt_rev
             vaf_pct = vaf_rev_pct
         else:
             plot_depth = depth_all
             p_a, p_c, p_g, p_t = c_a, c_c, c_g, c_t
+            plot_del, plot_ins = c_del, c_ins
             ad_ref = ad_ref_all
             ad_alt = ad_alt_all
             vaf_pct = vaf_all_pct
@@ -394,10 +472,10 @@ def rows_for_bin(
             "count_G_rev": str(c_g_rev),
             "count_T_fwd": str(c_t_fwd),
             "count_T_rev": str(c_t_rev),
-            "count_del": str(c_del),
+            "count_del": str(plot_del),
             "count_del_fwd": str(c_del_fwd),
             "count_del_rev": str(c_del_rev),
-            "count_ins": str(c_ins),
+            "count_ins": str(plot_ins),
             "count_ins_fwd": str(c_ins_fwd),
             "count_ins_rev": str(c_ins_rev),
             "pct_A": f"{(p_a / plot_depth * 100.0) if plot_depth > 0 else 0.0:.2f}",
@@ -415,13 +493,62 @@ def rows_for_bin(
             "vaf_rev_percent": f"{vaf_rev_pct:.2f}",
             "alt_minor_strand_ratio": f"{alt_minor_strand_ratio:.3f}",
             "sor": f"{sor:.2f}",
-            "status": "DETECTED" if vaf_pct >= 1.0 else ("SUBCLONAL" if vaf_pct >= 0.2 else "NEGATIVE"),
-            "filter_reason": "PASS" if vaf_pct >= 0.2 else "NOISE",
+            "status": (
+                "LOW_DEPTH" if plot_depth == 0 else
+                ("DETECTED" if vaf_pct >= 1.0 else ("SUBCLONAL" if vaf_pct >= 0.2 else "NEGATIVE"))
+            ),
+            "filter_reason": "LOW_DEPTH" if plot_depth == 0 else ("PASS" if vaf_pct >= 0.2 else "NOISE"),
             "qs_bin": bin_def["label"],
             "qs_type": bin_def["type"],
         }
         rows.append(r)
     return rows
+
+
+def row_allele_key(row: Dict[str, str]) -> Tuple[str, int, str, str]:
+    return row["chrom"], int(row["pos"]) - 1, row["ref"].upper(), row["alt"].upper()
+
+
+def row_allele_label(row: Dict[str, str]) -> str:
+    chrom, pos0, ref, alt = row_allele_key(row)
+    return f'{row["mutation"]} ({chrom}:{pos0 + 1} {ref}>{alt})'
+
+
+def unique_position_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    seen: Set[Tuple[str, int]] = set()
+    result = []
+    for row in rows:
+        position = (row["chrom"], int(row["pos"]) - 1)
+        if position not in seen:
+            seen.add(position)
+            result.append(row)
+    return result
+
+
+def background_noise_values(
+    rows: List[Dict[str, str]],
+    candidate_alleles: Set[Tuple[str, int, str, str]],
+    strand: str,
+) -> List[float]:
+    """Return total non-reference rates once per covered, non-candidate position."""
+    candidates_by_position = {(chrom, pos0) for chrom, pos0, _, _ in candidate_alleles}
+    seen_positions: Set[Tuple[str, int]] = set()
+    values: List[float] = []
+    for row in rows:
+        position = (row["chrom"], int(row["pos"]) - 1)
+        if position in seen_positions:
+            continue
+        seen_positions.add(position)
+        if position in candidates_by_position:
+            continue
+
+        depth = int(row["depth"] if strand == "all" else row[f"depth_{strand}"])
+        if depth == 0:
+            continue
+        ref = row["ref"]
+        ref_count = int(row[f"count_{ref}"] if strand == "all" else row[f"count_{ref}_{strand}"])
+        values.append((depth - ref_count) / depth * 100.0)
+    return values
 
 
 def build_summary_figure(
@@ -435,15 +562,18 @@ def build_summary_figure(
     depths_fwd = [b.get("median_depth_fwd", 0.0) for b in bin_summaries]
     depths_rev = [b.get("median_depth_rev", 0.0) for b in bin_summaries]
 
-    noises = [b["mean_background_noise"] for b in bin_summaries]
-    noises_fwd = [b.get("mean_background_noise_fwd", 0.0) for b in bin_summaries]
-    noises_rev = [b.get("mean_background_noise_rev", 0.0) for b in bin_summaries]
-    del_rates = [b.get("mean_del_rate", 0.0) for b in bin_summaries]
-    ins_rates = [b.get("mean_ins_rate", 0.0) for b in bin_summaries]
+    def plotted(values):
+        return [np.nan if value is None else value for value in values]
 
-    mut_vafs: Dict[str, List[float]] = {}
-    mut_vafs_fwd: Dict[str, List[float]] = {}
-    mut_vafs_rev: Dict[str, List[float]] = {}
+    noises = plotted([b["mean_background_noise"] for b in bin_summaries])
+    noises_fwd = plotted([b.get("mean_background_noise_fwd") for b in bin_summaries])
+    noises_rev = plotted([b.get("mean_background_noise_rev") for b in bin_summaries])
+    del_rates = plotted([b.get("mean_del_rate") for b in bin_summaries])
+    ins_rates = plotted([b.get("mean_ins_rate") for b in bin_summaries])
+
+    mut_vafs: Dict[str, List[Optional[float]]] = {}
+    mut_vafs_fwd: Dict[str, List[Optional[float]]] = {}
+    mut_vafs_rev: Dict[str, List[Optional[float]]] = {}
     for b in bin_summaries:
         for mut_name, vaf in b["mutation_vafs"].items():
             mut_vafs.setdefault(mut_name, []).append(vaf)
@@ -471,15 +601,16 @@ def build_summary_figure(
     ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.5, label="Mean Non-Ref Noise (%) Combined")
     ax2.plot(x, noises_fwd, marker="^", color="#0288d1", linewidth=1.6, linestyle="--", label="Forward Strand (+) Noise (%)")
     ax2.plot(x, noises_rev, marker="v", color="#2e7d32", linewidth=1.6, linestyle="--", label="Reverse Strand (-) Noise (%)")
-    if any(r > 0 for r in del_rates):
+    if any(math.isfinite(r) and r > 0 for r in del_rates):
         ax2.plot(x, del_rates, marker="x", color="#757575", linewidth=1.2, linestyle=":", label="Mean Deletion Rate (%)")
-    if any(r > 0 for r in ins_rates):
+    if any(math.isfinite(r) and r > 0 for r in ins_rates):
         ax2.plot(x, ins_rates, marker="+", color="#8e24aa", linewidth=1.2, linestyle=":", label="Mean Insertion Rate (%)")
     ax2.axhline(1.0, color="gray", linestyle=":", linewidth=1, label="1.0% Threshold")
     ax2.axhline(0.2, color="lightgray", linestyle=":", linewidth=0.8, label="0.2% Subclonal")
     ax2.set_ylabel("Background Rate (%)", fontsize=11, fontweight="bold")
     all_noise_pts = noises + noises_fwd + noises_rev + del_rates + ins_rates
-    max_noise = max(all_noise_pts) if all_noise_pts else 0.5
+    finite_noise_pts = [value for value in all_noise_pts if math.isfinite(value)]
+    max_noise = max(finite_noise_pts) if finite_noise_pts else 0.5
     ax2.set_ylim(0, max(1.5, max_noise * 1.25))
     ax2.grid(True, linestyle="--", alpha=0.5)
     ax2.set_title("Background Noise & Strand Bias across Negative Sites", fontsize=11, loc="left", fontweight="semibold")
@@ -490,16 +621,16 @@ def build_summary_figure(
     if mut_vafs:
         for idx, (m_name, v_list) in enumerate(mut_vafs.items()):
             col = colors[idx % len(colors)]
-            ax3.plot(x, v_list, marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
+            ax3.plot(x, plotted(v_list), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
             if m_name in mut_vafs_fwd:
-                ax3.plot(x, mut_vafs_fwd[m_name], color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
+                ax3.plot(x, plotted(mut_vafs_fwd[m_name]), color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
             if m_name in mut_vafs_rev:
-                ax3.plot(x, mut_vafs_rev[m_name], color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
+                ax3.plot(x, plotted(mut_vafs_rev[m_name]), color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
     else:
         ax3.text(0.5, 0.5, "No variants with VAF >= 1.0% detected in sample", ha="center", va="center", transform=ax3.transAxes)
 
     ax3.set_ylabel("Mutation VAF (%)", fontsize=11, fontweight="bold")
-    all_vafs = [v for v_list in mut_vafs.values() for v in v_list]
+    all_vafs = [v for v_list in mut_vafs.values() for v in v_list if v is not None and math.isfinite(v)]
     max_vaf = max(all_vafs) if all_vafs else 5.0
     ax3.set_ylim(0, max(5.0, max_vaf * 1.25))
     ax3.grid(True, linestyle="--", alpha=0.5)
@@ -601,14 +732,15 @@ def main():
         sys.exit(f"Error: no valid sites loaded from BED {bed_file}")
 
     print(f"[Init] Loaded {len(sites)} Branford resistance positions from {bed_file.name}.", file=sys.stderr)
+    bins = make_bins(args.qs_min, args.qs_max, args.mode)
     chrom, by_pos = collect_qs_pileup(
         bam_path=args.bam,
         sites=sites,
         min_base_quality=args.min_base_quality,
         min_mapping_quality=args.min_mapping_quality,
+        cumulative_thresholds=[int(b["min_qs"]) for b in bins if "min_qs" in b],
     )
 
-    bins = make_bins(args.qs_min, args.qs_max, args.mode)
     print(f"[Sweep] Evaluating {len(bins)} QS bins ({args.mode} mode)...", file=sys.stderr)
 
     bin_summaries: List[Dict[str, Any]] = []
@@ -619,70 +751,66 @@ def main():
     # First check an unconstrained pool
     all_reads_fn = lambda q: True
     baseline_rows = rows_for_bin(sites, by_pos, {"filter_fn": all_reads_fn, "label": "ALL", "type": "all"}, sample, strand="all")
-    candidate_mutations: Set[str] = {
-        r["mutation"] for r in baseline_rows
+    candidate_mutations: Set[Tuple[str, int, str, str]] = {
+        row_allele_key(r) for r in baseline_rows
         if float(r["vaf_percent"]) >= 1.0
     }
     if not candidate_mutations:
-        candidate_mutations = {r["mutation"] for r in baseline_rows if float(r["vaf_percent"]) >= 0.5}
+        candidate_mutations = {
+            row_allele_key(r) for r in baseline_rows if float(r["vaf_percent"]) >= 0.5
+        }
 
     for b in bins:
         rows_all = rows_for_bin(sites, by_pos, b, sample, strand="all")
         rows_fwd = rows_for_bin(sites, by_pos, b, sample, strand="fwd")
         rows_rev = rows_for_bin(sites, by_pos, b, sample, strand="rev")
 
-        depths_all = [float(r["depth"]) for r in rows_all]
-        depths_fwd = [float(r["depth_fwd"]) for r in rows_all]
-        depths_rev = [float(r["depth_rev"]) for r in rows_all]
+        unique_rows_all = unique_position_rows(rows_all)
+        depths_all = [float(r["depth"]) for r in unique_rows_all]
+        depths_fwd = [float(r["depth_fwd"]) for r in unique_rows_all]
+        depths_rev = [float(r["depth_rev"]) for r in unique_rows_all]
 
         med_depth_all = float(np.median(depths_all)) if depths_all else 0.0
         med_depth_fwd = float(np.median(depths_fwd)) if depths_fwd else 0.0
         med_depth_rev = float(np.median(depths_rev)) if depths_rev else 0.0
 
-        # Background noise on non-candidate sites
-        non_candidate_noises_all = [
-            float(r["vaf_percent"]) for r in rows_all
-            if r["mutation"] not in candidate_mutations
-        ]
-        non_candidate_noises_fwd = [
-            float(r["vaf_fwd_percent"]) for r in rows_all
-            if r["mutation"] not in candidate_mutations
-        ]
-        non_candidate_noises_rev = [
-            float(r["vaf_rev_percent"]) for r in rows_all
-            if r["mutation"] not in candidate_mutations
-        ]
+        # Background noise is the sum of all non-reference bases, once per
+        # unique genomic position. Candidate alleles exclude their position
+        # from this negative-site summary.
+        noise_all = background_noise_values(rows_all, candidate_mutations, "all")
+        noise_fwd = background_noise_values(rows_fwd, candidate_mutations, "fwd")
+        noise_rev = background_noise_values(rows_rev, candidate_mutations, "rev")
+        mean_noise_all = float(np.mean(noise_all)) if noise_all else None
+        mean_noise_fwd = float(np.mean(noise_fwd)) if noise_fwd else None
+        mean_noise_rev = float(np.mean(noise_rev)) if noise_rev else None
 
-        mean_noise_all = float(np.mean(non_candidate_noises_all)) if non_candidate_noises_all else 0.0
-        mean_noise_fwd = float(np.mean(non_candidate_noises_fwd)) if non_candidate_noises_fwd else 0.0
-        mean_noise_rev = float(np.mean(non_candidate_noises_rev)) if non_candidate_noises_rev else 0.0
-
-        del_rates = [
-            (float(r["count_del"]) / float(r["depth"]) * 100.0) if float(r["depth"]) > 0 else 0.0
-            for r in rows_all
-        ]
-        ins_rates = [
-            (float(r["count_ins"]) / float(r["depth"]) * 100.0) if float(r["depth"]) > 0 else 0.0
-            for r in rows_all
-        ]
-        mean_del_rate = float(np.mean(del_rates)) if del_rates else 0.0
-        mean_ins_rate = float(np.mean(ins_rates)) if ins_rates else 0.0
+        del_rates: List[float] = []
+        ins_rates: List[float] = []
+        for row in unique_rows_all:
+            depth = int(row["depth"])
+            deletions = int(row["count_del"])
+            if depth + deletions > 0:
+                del_rates.append(deletions / (depth + deletions) * 100.0)
+            if depth > 0:
+                ins_rates.append(int(row["count_ins"]) / depth * 100.0)
+        mean_del_rate = float(np.mean(del_rates)) if del_rates else None
+        mean_ins_rate = float(np.mean(ins_rates)) if ins_rates else None
 
         # VAF of tracked candidate mutations
         mut_vafs_all = {
-            r["mutation"]: float(r["vaf_percent"])
+            row_allele_label(r): (float(r["vaf_percent"]) if float(r["depth"]) > 0 else None)
             for r in rows_all
-            if r["mutation"] in candidate_mutations
+            if row_allele_key(r) in candidate_mutations
         }
         mut_vafs_fwd = {
-            r["mutation"]: float(r["vaf_fwd_percent"])
+            row_allele_label(r): (float(r["vaf_fwd_percent"]) if float(r["depth_fwd"]) > 0 else None)
             for r in rows_all
-            if r["mutation"] in candidate_mutations
+            if row_allele_key(r) in candidate_mutations
         }
         mut_vafs_rev = {
-            r["mutation"]: float(r["vaf_rev_percent"])
+            row_allele_label(r): (float(r["vaf_rev_percent"]) if float(r["depth_rev"]) > 0 else None)
             for r in rows_all
-            if r["mutation"] in candidate_mutations
+            if row_allele_key(r) in candidate_mutations
         }
 
         bin_summary = {

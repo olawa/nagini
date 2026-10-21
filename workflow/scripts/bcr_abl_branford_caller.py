@@ -7,7 +7,9 @@ and annotating TKI resistance profiles.
 
 Every interrogated position is written to the all-sites TSV with its status and
 filter_reason, so the output answers "was T315I excluded?" and not only "was
-T315I found?". The mutations TSV and VCF carry DETECTED and SUBCLONAL only.
+T315I found?". The mutations TSV and VCF retain detected/subclonal evidence,
+including explicitly unresolved codons; unresolved VCF records have a named
+filter and a missing genotype. --include-artifacts also retains failed calls.
 
 Artifact filters, and what each one can and cannot see
 -----------------------------------------------------
@@ -18,8 +20,10 @@ from negative samples.
 
 SNR (--min-snr)
     ad_alt divided by the largest observed non-candidate base count. Other
-    panel substitutions count as background only when they are below the
-    independent minimum-support/frequency screen for a candidate allele.
+    panel substitutions are exempted only when they have independent support
+    and exceed the weakest observed non-reference base by --min-snr, and pass
+    the base-quality, strand-bias, and context checks. This
+    keeps a balanced spectrum across all three alternatives conservative.
     Catches noise that spreads evenly across the remaining substitutions.
     It is blind to the opposite and more common case: a context-specific
     Nanopore error produces the same substitution every time, leaving the other
@@ -122,7 +126,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
     parser.add_argument("--min-read-qs", type=float, default=0.0, help="Minimum mean read quality (the qs value), applied to the aligned reads; 0 is off (default 0). Reads below the pre-alignment filter are already gone, so this can only be stricter.")
-    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio against other non-candidate bases. Credible panel alleles at the same position are modeled as candidates, not noise (default 3.0)")
+    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio; supported panel competitors are exempt only if they exceed the weakest non-reference base by this ratio (default 3.0)")
     parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
     parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
     parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
@@ -275,10 +279,11 @@ def collect_codon_haplotypes(
     min_baseq: int,
     min_mapq: int,
     read_filter: Optional[ReadQualityFilter] = None,
+    reference_context: Optional[Tuple[str, str, Tuple[bool, ...], Tuple[bool, ...]]] = None,
 ) -> Dict[Tuple[str, bool], Dict[str, Any]]:
     """Count full codons once per read, retaining supplementary-only ABL signal."""
     target = set(positions)
-    by_read: Dict[Tuple[str, bool, bool], Tuple[Tuple[int, int, int], Dict[int, Tuple[str, int, bool]]]] = {}
+    by_read = {}
     if not target:
         return {}
     for aln in bam.fetch(chrom, min(target), max(target) + 1):
@@ -288,9 +293,16 @@ def collect_codon_haplotypes(
             continue
         if read_filter is not None and not read_filter.passes(aln):
             continue
+        # A codon is only interpretable when all three bases come from one
+        # uninterrupted aligned segment. In particular, get_aligned_pairs()
+        # does not put inserted query bases at a reference coordinate, so a
+        # naïve three-position lookup can silently stitch across an insertion.
+        if _indel_or_skip_spans_interval(aln, min(target), max(target)):
+            continue
         qname_key = (aln.query_name, aln.is_read1, aln.is_read2)
         rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0), aln.reference_start)
         bases: Dict[int, Tuple[str, int, bool]] = {}
+        query_positions = {}
         qualities = aln.query_qualities
         for qpos, rpos in aln.get_aligned_pairs(matches_only=False):
             if qpos is None or rpos not in target:
@@ -299,20 +311,91 @@ def collect_codon_haplotypes(
             base = aln.query_sequence[qpos].upper()
             if base in BASES and bq >= min_baseq:
                 bases[rpos] = (base, bq, aln.is_reverse)
+                query_positions[rpos] = qpos
+        # Rank only alignments that can provide a complete usable codon.
+        if not target.issubset(bases):
+            continue
+        clean_context = None
+        if reference_context is not None:
+            left, right, left_mask, right_mask = reference_context
+            q_start, q_end = min(query_positions.values()), max(query_positions.values()) + 1
+            sequence = aln.query_sequence.upper()
+            if q_start >= len(left) and q_end + len(right) <= len(sequence):
+                clean_context = context_is_clean(sequence[q_start - len(left):q_start], left, left_mask) and context_is_clean(
+                    sequence[q_end:q_end + len(right)], right, right_mask
+                )
         old = by_read.get(qname_key)
         if old is None or rank < old[0]:
-            by_read[qname_key] = (rank, bases)
+            by_read[qname_key] = (rank, bases, clean_context)
     out: Dict[Tuple[str, bool], Dict[str, Any]] = {}
-    for _, bases in by_read.values():
+    for _, bases, clean_context in by_read.values():
         # Codon positions are passed in transcript order and can be genomic +1.
         if not all(pos in bases for pos in positions):
             continue
         codon = "".join(bases[pos][0] for pos in positions)
         reverse = bases[positions[0]][2]
-        item = out.setdefault((codon, reverse), {"count": 0, "bq_sum": 0})
+        item = out.setdefault((codon, reverse), {"count": 0, "bq_sum": 0, "kmer_total": 0, "kmer_clean": 0})
         item["count"] += 1
         item["bq_sum"] += sum(bases[pos][1] for pos in positions) / 3
+        if clean_context is not None:
+            item["kmer_total"] += 1
+            item["kmer_clean"] += int(clean_context)
     return out
+
+
+def allele_quality(args, ref_fwd, ref_rev, alt_fwd, alt_rev, bq_sum, bq_count, k_clean=0, k_total=0):
+    """The same non-SNR quality requirements apply to sites and full haplotypes."""
+    count = alt_fwd + alt_rev
+    minor = round(min(alt_fwd, alt_rev) / max(count, 1), 3)
+    r1 = (alt_fwd + 1) * (ref_rev + 1)
+    r2 = (alt_rev + 1) * (ref_fwd + 1)
+    sor = round(math.log(max(r1 / r2, r2 / r1)), 2)
+    baseq = round(bq_sum / bq_count, 1) if bq_count else 0.0
+    clean_percent = round(100 * k_clean / k_total, 1) if k_total else None
+    failures = []
+    if ref_fwd > 0 and ref_rev > 0 and count >= 20 and minor < args.min_minor_strand_ratio and sor > args.max_sor:
+        failures.append(f"STRAND_BIAS(ratio={minor:.3f}<{args.min_minor_strand_ratio:.2f},SOR={sor:.2f}>{args.max_sor:.1f})")
+    if baseq < args.min_mean_baseq:
+        failures.append(f"LOW_BASEQ({baseq:.1f}<{args.min_mean_baseq:.1f})")
+    if clean_percent is not None and clean_percent < args.min_kmer_rate * 100:
+        failures.append(f"DIRTY_CONTEXT({clean_percent:.1f}%<{args.min_kmer_rate * 100:.0f}%)")
+    return {
+        "alt_minor_strand_ratio": minor, "sor": sor, "mean_baseq_alt": baseq,
+        "kmer_clean_percent": clean_percent if clean_percent is not None else "NA",
+    }, failures
+
+
+def unresolved_codon_records(all_results, group_pos, reason):
+    """Retain marginal evidence when complete codon support cannot resolve it."""
+    records = []
+    for raw in all_results:
+        if (raw["chrom"], raw["pos"]) not in group_pos:
+            continue
+        raw["codon_context_status"] = "CODON_CONTEXT_UNRESOLVED"
+        if raw["status"] in ("DETECTED", "SUBCLONAL"):
+            records.append({
+                **raw, "record_type": "CODON_CONTEXT_UNRESOLVED",
+                "mutation": "CODON_CONTEXT_UNRESOLVED", "aa_change": "",
+                "consequence": "OTHER", "resistance_class": "UNCLASSIFIED",
+                "filter_reason": reason,
+            })
+    return records
+
+
+def _indel_or_skip_spans_interval(aln: pysam.AlignedSegment, first: int, last: int) -> bool:
+    """Return whether an insertion, deletion, or reference skip crosses codon bases."""
+    ref_pos = aln.reference_start
+    for op, length in aln.cigartuples or ():
+        if op == 1:  # insertion between reference bases
+            if first < ref_pos <= last:
+                return True
+        elif op in (2, 3):  # deletion or reference skip
+            if ref_pos <= last and ref_pos + length > first:
+                return True
+            ref_pos += length
+        elif op in (0, 7, 8):  # aligned bases
+            ref_pos += length
+    return False
 
 
 def count_positions_batch(
@@ -608,37 +691,38 @@ def main(argv=None) -> None:
             ad_alt_fwd = counts.get(f"{alt}_fwd", 0)
             ad_alt_rev = counts.get(f"{alt}_rev", 0)
 
-            # Strand balance & Strand Odds Ratio (SOR)
-            alt_minor_strand_ratio = round(min(ad_alt_fwd, ad_alt_rev) / max(ad_alt, 1), 3)
-            ref_has_both_strands = (ad_ref_fwd > 0 and ad_ref_rev > 0)
-            r1 = (ad_alt_fwd + 1) * (ad_ref_rev + 1)
-            r2 = (ad_alt_rev + 1) * (ad_ref_fwd + 1)
-            sor = round(math.log(max(r1 / r2, r2 / r1)), 2)
-
-            # Mean base quality for Ref and Alt
-            bq_sum_alt = counts.get("base_qual_sum", {}).get(alt, 0)
-            bq_cnt_alt = counts.get("base_qual_count", {}).get(alt, 0)
-            mean_baseq_alt = round(bq_sum_alt / max(bq_cnt_alt, 1), 1) if bq_cnt_alt > 0 else 0.0
-
+            quality_by_base = {
+                b: allele_quality(
+                    args, ad_ref_fwd, ad_ref_rev,
+                    counts.get(f"{b}_fwd", 0), counts.get(f"{b}_rev", 0),
+                    counts.get("base_qual_sum", {}).get(b, 0),
+                    counts.get("base_qual_count", {}).get(b, 0),
+                    counts.get("kmer_clean_count", {}).get(b, 0),
+                    counts.get("kmer_total_count", {}).get(b, 0),
+                ) for b in BASES
+            }
+            quality, quality_failures = quality_by_base[alt]
+            alt_minor_strand_ratio = quality["alt_minor_strand_ratio"]
+            sor = quality["sor"]
+            mean_baseq_alt = quality["mean_baseq_alt"]
+            kmer_clean_percent = quality["kmer_clean_percent"]
             bq_sum_ref = counts.get("base_qual_sum", {}).get(ref, 0)
             bq_cnt_ref = counts.get("base_qual_count", {}).get(ref, 0)
-            mean_baseq_ref = round(bq_sum_ref / max(bq_cnt_ref, 1), 1) if bq_cnt_ref > 0 else 0.0
+            mean_baseq_ref = round(bq_sum_ref / bq_cnt_ref, 1) if bq_cnt_ref else 0.0
 
-            # Flanking k-mer reference clean percentage
-            k_clean = counts.get("kmer_clean_count", {}).get(alt, 0)
-            k_tot = counts.get("kmer_total_count", {}).get(alt, 0)
-            kmer_clean_percent = round((k_clean / k_tot) * 100.0, 1) if k_tot > 0 else 100.0
-
-            # Other panel substitutions are competitors only when they have
-            # enough independent support to be plausible alleles themselves.
-            # This avoids treating a second real panel allele as sequencing
-            # background while retaining weak/unexpected substitutions as the
-            # conservative local error estimate.
+            # A panel ALT is a credible independent allele only if it has the
+            # ordinary minimum support/frequency, passes quality checks, and dominates the weakest
+            # observed non-reference base by the configured SNR. Without this
+            # gate, a balanced three-base error spectrum makes every panel ALT
+            # exempt itself from the local noise estimate.
             candidate_panel_alts = panel_alts_by_pos.get((site["chrom"], pos), set())
+            nonref_floor = min((per_base[b] for b in BASES if b != ref), default=0)
             credible_panel_alts = {
                 b for b in candidate_panel_alts
                 if b != ref and per_base[b] >= args.min_alt_reads
                 and depth > 0 and (per_base[b] / depth) >= args.subclonal_af
+                and per_base[b] >= args.min_snr * max(nonref_floor, 1)
+                and not quality_by_base[b][1]
             }
             other_bases = {
                 b: per_base[b] for b in BASES
@@ -666,24 +750,7 @@ def main(argv=None) -> None:
                 fails = []
                 if snr < args.min_snr:
                     fails.append(f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)")
-                # One-sidedness alone is not bias: on a strand-skewed amplicon the
-                # reference is one-sided too, and a real variant inherits that skew.
-                # SOR compares the alt balance against the reference's own, so both
-                # have to agree before the call is rejected.
-                if (
-                    ref_has_both_strands
-                    and ad_alt >= 20
-                    and alt_minor_strand_ratio < args.min_minor_strand_ratio
-                    and sor > args.max_sor
-                ):
-                    fails.append(
-                        f"STRAND_BIAS(ratio={alt_minor_strand_ratio:.3f}<{args.min_minor_strand_ratio:.2f},"
-                        f"SOR={sor:.2f}>{args.max_sor:.1f})"
-                    )
-                if mean_baseq_alt < args.min_mean_baseq:
-                    fails.append(f"LOW_BASEQ({mean_baseq_alt:.1f}<{args.min_mean_baseq:.1f})")
-                if k_tot > 0 and kmer_clean_percent < (args.min_kmer_rate * 100.0):
-                    fails.append(f"DIRTY_CONTEXT({kmer_clean_percent:.1f}%<{(args.min_kmer_rate*100):.0f}%)")
+                fails.extend(quality_failures)
 
                 if fails:
                     status = "ARTIFACT"
@@ -766,9 +833,12 @@ def main(argv=None) -> None:
             all_results.append(record)
 
             if status in ("DETECTED", "SUBCLONAL"):
-                detected_mutations.append(record)
+                # Keep SITE_AUDIT in all-sites.tsv for nucleotide-level
+                # traceability, but give downstream variant consumers a
+                # distinct record type.
+                detected_mutations.append({**record, "record_type": "SITE_VARIANT"})
             elif args.include_artifacts and status == "ARTIFACT":
-                detected_mutations.append(record)
+                detected_mutations.append({**record, "record_type": "SITE_VARIANT"})
 
         # If two distinct nucleotide positions in one codon are detected, the
         # individual BED amino-acid annotations are marginal statements and may
@@ -815,22 +885,24 @@ def main(argv=None) -> None:
                                 f"BED REF disagrees with reconstructed codon at {s['chrom']}:{s['pos']}"
                             )
             if not genomic or not reference_codon:
-                for s in group:
-                    if s["pos"] not in detected_group_positions:
-                        continue
-                    raw = next(r for r in all_results if r["chrom"] == s["chrom"] and r["pos"] == s["pos"] and r["alt"] == s["alt"])
-                    if raw["status"] not in ("DETECTED", "SUBCLONAL"):
-                        continue
-                    unresolved = dict(raw)
-                    unresolved.update({
-                        "record_type": "CODON_CONTEXT_UNRESOLVED", "mutation": "CODON_CONTEXT_UNRESOLVED",
-                        "aa_change": "", "consequence": "OTHER", "resistance_class": "UNCLASSIFIED",
-                        "filter_reason": "CODON_CONTEXT_UNRESOLVED", "codon_context_status": "CODON_CONTEXT_UNRESOLVED",
-                    })
-                    detected_mutations.append(unresolved)
-                detected_mutations = [r for r in detected_mutations if not (r.get("record_type") == "SITE_AUDIT" and (r["chrom"], r["pos"]) in group_pos)]
+                detected_mutations.extend(unresolved_codon_records(
+                    all_results, group_pos, "CODON_CONTEXT_UNRESOLVED"
+                ))
+                detected_mutations = [r for r in detected_mutations if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)]
                 continue
 
+            reference_context = None
+            with pysam.FastaFile(str(args.reference_fasta)) as fasta:
+                first, last = min(codon_positions), max(codon_positions)
+                kw = args.kmer_window
+                if first >= kw and last + 1 + kw <= fasta.get_reference_length(fasta_contig):
+                    left_mask, _ = flank_masks(codon_chrom, first, kw, exempt_positions)
+                    _, right_mask = flank_masks(codon_chrom, last, kw, exempt_positions)
+                    reference_context = (
+                        fasta.fetch(fasta_contig, first - kw, first).upper(),
+                        fasta.fetch(fasta_contig, last + 1, last + 1 + kw).upper(),
+                        left_mask, right_mask,
+                    )
             codon_start = min(codon_positions) + 1
             bam_chrom = codon_chrom
             if bam_chrom not in bam_contigs:
@@ -842,15 +914,52 @@ def main(argv=None) -> None:
             else:
                 hap_counts = collect_codon_haplotypes(
                     bam, bam_chrom, codon_positions, args.min_base_quality, args.min_mapping_quality,
-                    read_filter=read_filter,
+                    read_filter=read_filter, reference_context=reference_context,
                 )
             state_counts: Dict[str, Dict[str, int]] = {}
             for (codon, reverse), values in hap_counts.items():
-                state_counts.setdefault(codon, {"fwd": 0, "rev": 0, "bq_sum": 0})
+                state_counts.setdefault(codon, {"fwd": 0, "rev": 0, "bq_sum": 0, "kmer_total": 0, "kmer_clean": 0})
                 strand = "rev" if reverse else "fwd"
                 state_counts[codon][strand] += values["count"]
                 state_counts[codon]["bq_sum"] += values["bq_sum"]
+                state_counts[codon]["kmer_total"] += values["kmer_total"]
+                state_counts[codon]["kmer_clean"] += values["kmer_clean"]
             codon_depth = sum(v["fwd"] + v["rev"] for v in state_counts.values())
+            unresolved_reason = None
+            if codon_depth < args.min_depth:
+                unresolved_reason = f"LOW_CODON_DEPTH({codon_depth}<{args.min_depth})"
+            else:
+                for site in group:
+                    if not any(r["pos"] == site["pos"] and r["alt"] == site["alt"] and
+                               r["status"] in ("DETECTED", "SUBCLONAL") for r in all_results
+                               if (r["chrom"], r["pos"]) in group_pos):
+                        continue
+                    index = (site["cdna_pos"] - 1) % 3
+                    support = sum(v["fwd"] + v["rev"] for c, v in state_counts.items() if c[index] == site["alt"])
+                    if support < args.min_alt_reads:
+                        unresolved_reason = "INSUFFICIENT_CODON_ALT_SUPPORT"
+                        break
+            if unresolved_reason:
+                detected_mutations = [r for r in detected_mutations if not (
+                    r.get("record_type") == "SITE_VARIANT" and (r["chrom"], r["pos"]) in group_pos
+                )]
+                detected_mutations.extend(unresolved_codon_records(all_results, group_pos, unresolved_reason))
+                continue
+
+            ref_values = state_counts.get(reference_codon, {"fwd": 0, "rev": 0, "bq_sum": 0})
+            ref_count = ref_values["fwd"] + ref_values["rev"]
+            codon_quality = {
+                c: allele_quality(args, ref_values["fwd"], ref_values["rev"], v["fwd"], v["rev"],
+                                  v["bq_sum"], v["fwd"] + v["rev"], v["kmer_clean"], v["kmer_total"])
+                for c, v in state_counts.items()
+            }
+            nonref_codon_counts = {c: v["fwd"] + v["rev"] for c, v in state_counts.items() if c != reference_codon}
+            credible_codon_haplotypes = {
+                c for c, count in nonref_codon_counts.items()
+                if count >= args.min_alt_reads and count / codon_depth >= args.subclonal_af
+                and not codon_quality[c][1]
+            }
+            passing_haplotypes = 0
             ref_aa = CODON_TABLE.get(reference_codon)
             for alternate_codon, values in state_counts.items():
                 if alternate_codon == reference_codon:
@@ -863,8 +972,10 @@ def main(argv=None) -> None:
                 aa_change = f"p.{next((k for k,v in AA3_TO_AA1.items() if v == ref_aa), ref_aa)}{codon_number + 1}{next((k for k,v in AA3_TO_AA1.items() if v == alt_aa), alt_aa)}" if aa_mut else ""
                 profile = tki_profiles.get(aa_mut, {})
                 consequence, resistance_class = variant_classification(aa_mut, profile)
+                quality, quality_failures = codon_quality[alternate_codon]
                 other_codon_alt = max(
-                    (count["fwd"] + count["rev"] for c, count in state_counts.items() if c not in (reference_codon, alternate_codon)),
+                    (count for c, count in nonref_codon_counts.items()
+                     if c != alternate_codon and c not in credible_codon_haplotypes),
                     default=0,
                 )
                 snr = round(alt_count / max(other_codon_alt, 1), 2)
@@ -873,15 +984,15 @@ def main(argv=None) -> None:
                     hap_status, hap_reason = "LOW_DEPTH", f"DEPTH<{args.min_depth}"
                 elif alt_count < args.min_alt_reads:
                     hap_status, hap_reason = "WILDTYPE", "NO_ALT"
-                elif snr < args.min_snr:
-                    hap_status, hap_reason = "ARTIFACT", f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)"
+                elif snr < args.min_snr or quality_failures:
+                    failures = ([f"LOW_SNR({snr:.1f}x<{args.min_snr:.1f}x)"] if snr < args.min_snr else [])
+                    hap_status, hap_reason = "ARTIFACT", ";".join(failures + quality_failures)
                 elif af >= args.min_af:
                     hap_status, hap_reason = "DETECTED", "PASS"
                 elif af >= args.subclonal_af:
                     hap_status, hap_reason = "SUBCLONAL", "PASS"
                 else:
                     hap_status, hap_reason = "WILDTYPE", "LOW_AF"
-                three = {"F":"Phe", "L":"Leu", "S":"Ser", "Y":"Tyr", "C":"Cys", "W":"Trp", "P":"Pro", "H":"His", "Q":"Gln", "R":"Arg", "I":"Ile", "M":"Met", "T":"Thr", "N":"Asn", "K":"Lys", "V":"Val", "A":"Ala", "D":"Asp", "E":"Glu", "G":"Gly", "*":"Ter"}
                 record = {
                     "record_type": "CODON_HAPLOTYPE", "panel_sites_expected": panel_sites_expected,
                     "sample": args.sample, "chrom": codon_chrom, "pos": codon_start,
@@ -892,19 +1003,24 @@ def main(argv=None) -> None:
                     "ad_alt_unfiltered": alt_count, "vaf_unfiltered_percent": round(af * 100, 3),
                     "status": hap_status, "filter_reason": hap_reason, "snr": snr, "ad_other": other_codon_alt,
                     "vaf_other_percent": round(other_codon_alt / codon_depth * 100, 3) if codon_depth else 0,
-                    "other_bases": "", "credible_panel_alt_competitors": "", "alt_minor_strand_ratio": round(min(values["fwd"], values["rev"]) / max(alt_count, 1), 3),
-                    "sor": 0, "mean_baseq_ref": 0, "mean_baseq_alt": round(values["bq_sum"] / alt_count, 1),
-                    "kmer_clean_percent": 100, "consequence": consequence, "resistance_class": resistance_class,
+                    "other_bases": "", "credible_panel_alt_competitors": "", **quality,
+                    "mean_baseq_ref": round(ref_values["bq_sum"] / ref_count, 1) if ref_count else "NA",
+                    "consequence": consequence, "resistance_class": resistance_class,
                     "codon_context_status": "RESOLVED", "imatinib": profile.get("Imatinib", "Unknown"),
                     "dasatinib": profile.get("Dasatinib", "Unknown"), "nilotinib": profile.get("Nilotinib", "Unknown"),
                     "bosutinib": profile.get("Bosutinib", "Unknown"), "ponatinib": profile.get("Ponatinib", "Unknown"),
                     "asciminib": profile.get("Asciminib", "Unknown"), "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
                     "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0), "ad_alt_fwd": values["fwd"],
-                    "ad_alt_rev": values["rev"], "n_refskip": 0, "n_deletion": 0, "n_insertion": 0,
+                    "ad_alt_rev": values["rev"], "n_refskip": "NA", "n_deletion": "NA", "n_insertion": "NA",
                 }
+                if hap_status in ("DETECTED", "SUBCLONAL"):
+                    passing_haplotypes += 1
                 if hap_status in ("DETECTED", "SUBCLONAL") or (args.include_artifacts and hap_status == "ARTIFACT"):
                     detected_mutations.append(record)
-            detected_mutations = [r for r in detected_mutations if not (r.get("record_type") == "SITE_AUDIT" and (r["chrom"], r["pos"]) in group_pos)]
+            detected_mutations = [r for r in detected_mutations if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)]
+            for raw in all_results:
+                if (raw["chrom"], raw["pos"]) in group_pos:
+                    raw["codon_context_status"] = "RESOLVED" if passing_haplotypes else "CODON_QC_FAILED"
 
     finally:
         bam.close()
@@ -976,6 +1092,7 @@ def main(argv=None) -> None:
             handle.write('##INFO=<ID=BQ_ALT,Number=1,Type=Float,Description="Mean base quality of ALT reads">\n')
             handle.write('##FILTER=<ID=PASS,Description="All quality filters passed">\n')
             handle.write('##FILTER=<ID=ARTIFACT,Description="Failed error baseline, strand bias, or base quality filters">\n')
+            handle.write('##FILTER=<ID=CODON_CONTEXT_UNRESOLVED,Description="Insufficient evidence to resolve the complete codon">\n')
             handle.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
             handle.write('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total depth">\n')
             handle.write('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths (REF, ALT)">\n')
@@ -986,6 +1103,8 @@ def main(argv=None) -> None:
                 info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
                 gt = "0/1" if rec["status"] in ("DETECTED", "SUBCLONAL") else "./."
                 vcf_filter = "PASS" if rec["status"] in ("DETECTED", "SUBCLONAL") else "ARTIFACT"
+                if rec.get("record_type") == "CODON_CONTEXT_UNRESOLVED":
+                    gt, vcf_filter = "./.", "CODON_CONTEXT_UNRESOLVED"
                 format_val = f"{gt}:{rec['depth']}:{rec['ad_ref']},{rec['ad_alt']}:{af_dec:.4f}"
                 handle.write(f"{rec['chrom']}\t{rec['pos']}\t{rec['mutation']}\t{rec['ref']}\t{rec['alt']}\t.\t{vcf_filter}\t{info_field}\tGT:DP:AD:AF\t{format_val}\n")
 

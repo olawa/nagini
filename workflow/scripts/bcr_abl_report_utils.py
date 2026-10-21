@@ -92,12 +92,15 @@ def panel_assessment(all_sites_rows):
         for row in items:
             status = str(row.get("status", row.get("filter_status", ""))).strip().upper()
             reason = str(row.get("filter_reason", "")).strip().upper()
+            codon_context = str(row.get("codon_context_status", "")).strip().upper()
             depth = row.get("depth", row.get("dp", ""))
             try:
                 depth_ok = float(depth) > 0
             except (TypeError, ValueError):
                 depth_ok = False
-            if status not in {"PASS", "ASSESSED", "DETECTED", "SUBCLONAL", "REFERENCE", "WILDTYPE"} or "LOW_DEPTH" in reason or status == "LOW_DEPTH" or not depth_ok:
+            if (codon_context in {"CODON_CONTEXT_REQUIRED", "CODON_CONTEXT_UNRESOLVED", "CODON_QC_FAILED"}
+                    or status not in {"PASS", "ASSESSED", "DETECTED", "SUBCLONAL", "REFERENCE", "WILDTYPE"}
+                    or "LOW_DEPTH" in reason or not depth_ok):
                 passed = False
                 break
         if passed:

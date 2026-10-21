@@ -2,6 +2,8 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pysam
 
@@ -155,8 +157,8 @@ class TestSweepBcrAblQs(unittest.TestCase):
             self.assertEqual(parsed_args.strand, "both")
 
             # Run main workflow
-            QS.main.__globals__["parse_args"] = lambda: parsed_args
-            QS.main()
+            with patch.object(QS, "parse_args", return_value=parsed_args):
+                QS.main()
 
             self.assertTrue(out_pdf.is_file())
             self.assertGreater(out_pdf.stat().st_size, 5000)
@@ -173,6 +175,114 @@ class TestSweepBcrAblQs(unittest.TestCase):
             self.assertIn("vaf_fwd_percent", tsv_lines[0])
             self.assertIn("alt_minor_strand_ratio", tsv_lines[0])
             self.assertIn("count_del", tsv_lines[0])
+
+    def test_main_summary_tracks_alleles_total_noise_and_valid_deletion_rates(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bed_path = tmp / "panel.bed"
+            bed_path.write_text(
+                "chr9\t100\t101\tNM:c.(949T>C)\tT\tC\tp.Phe317Leu\n"
+                "chr9\t102\t103\tNM:c.(951C>G)\tC\tG\tp.Phe317Leu\n"
+                "chr9\t104\t105\tNM:c.(763T>C)\tT\tC\tp.Glu255Lys\n"
+                "chr9\t104\t105\tNM:c.(763T>C)\tT\tC\tp.Glu255LysDuplicate\n"
+                "chr9\t106\t107\tNM:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+                "chr9\t200\t201\tNM:c.(757A>G)\tA\tG\tp.Tyr253Cys\n"
+            )
+            bam_path = tmp / "summary.bam"
+            header = {"HD": {"VN": "1.0", "SO": "coordinate"}, "SQ": [{"LN": 1000, "SN": "chr9"}]}
+            with pysam.AlignmentFile(str(bam_path), "wb", header=header) as out_bam:
+                for i in range(100):
+                    seq = list("A" * 50)
+                    seq[20] = "C" if i < 20 else "T"  # F317L, 20%
+                    seq[22] = "G" if i < 10 else "C"  # same protein label, 10%
+                    seq[24] = "A" if i < 10 else ("G" if i < 20 else "T")  # 20% total nonref noise
+                    seq[26] = "C"
+                    aln = pysam.AlignedSegment()
+                    aln.query_name = f"r{i}"
+                    if i < 90:
+                        # Delete reference offset 26 (chr9:107).
+                        seq.pop(26)
+                        aln.cigar = ((0, 26), (2, 1), (0, 23))
+                    else:
+                        aln.cigar = ((0, 50),)
+                    aln.query_sequence = "".join(seq)
+                    aln.query_qualities = pysam.qualitystring_to_array("I" * len(seq))
+                    aln.reference_id = 0
+                    aln.reference_start = 80
+                    aln.mapping_quality = 60
+                    aln.set_tag("qs", 25.5, value_type="f")
+                    out_bam.write(aln)
+            pysam.index(str(bam_path))
+
+            args = SimpleNamespace(
+                split_strands=False, bam=bam_path, bed=bed_path, sample="S",
+                min_base_quality=0, min_mapping_quality=0, qs_min=20, qs_max=20,
+                mode="cumulative", strand="all", output_pdf=tmp / "summary.pdf",
+                output_tsv=None, zoom_max=5, color_mode="bases",
+            )
+            captured = []
+            captured_rows = []
+
+            def capture_summary(summaries, sample):
+                captured.extend(summaries)
+                return QS.plt.figure()
+
+            def capture_rows(**kwargs):
+                captured_rows.extend(kwargs["rows"])
+                return None
+
+            with (
+                patch.object(QS, "parse_args", return_value=args),
+                patch.object(QS, "build_summary_figure", side_effect=capture_summary),
+                patch.object(QS, "build_plot_figure", side_effect=capture_rows),
+                patch.object(QS, "PdfPages"),
+            ):
+                QS.main()
+
+            summary = captured[0]
+            self.assertEqual(len(summary["mutation_vafs"]), 2)
+            self.assertEqual(sorted(summary["mutation_vafs"].values()), [10.0, 20.0])
+            self.assertIn("chr9:101 T>C", " ".join(summary["mutation_vafs"]))
+            self.assertIn("chr9:103 C>G", " ".join(summary["mutation_vafs"]))
+            self.assertAlmostEqual(summary["mean_background_noise"], 10.0)
+            self.assertIsNone(summary["mean_background_noise_rev"])
+            self.assertAlmostEqual(summary["mean_del_rate"], 22.5)
+            uncovered = next(row for row in captured_rows if row["pos"] == "201")
+            self.assertEqual(uncovered["status"], "LOW_DEPTH")
+            self.assertEqual(uncovered["filter_reason"], "LOW_DEPTH")
+
+            fig = QS.build_summary_figure([summary], "S")
+            QS.plt.close(fig)
+
+    def test_fractional_qs_uses_bounded_bins_and_exact_cumulative_thresholds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tmp = Path(directory)
+            bam_path = tmp / "fractional.bam"
+            header = {"HD": {"SO": "coordinate"}, "SQ": [{"SN": "chr9", "LN": 300}]}
+            with pysam.AlignmentFile(str(bam_path), "wb", header=header) as output:
+                for index in range(1000):
+                    read = pysam.AlignedSegment()
+                    read.query_name = f"read{index}"
+                    read.query_sequence = "A" * 150
+                    read.query_qualities = [30] * 150
+                    read.reference_id = 0
+                    read.reference_start = 0
+                    read.mapping_quality = 60
+                    read.cigartuples = [(0, 150)]
+                    read.set_tag("qs", 20 + index / 500, "f")
+                    output.write(read)
+            pysam.index(str(bam_path))
+            sites = [{"chrom": "chr9", "pos0": pos, "pos1": pos + 1,
+                      "ref": "G", "alt": "A", "name": "NM:c.(763G>A)",
+                      "mutation": "E255K", "aa_change": "p.Glu255Lys"} for pos in (49, 59)]
+            _, counts = QS.collect_qs_pileup(bam_path, sites, cumulative_thresholds=[20, 21, 22])
+            for pos in (49, 59):
+                self.assertEqual(set(counts[pos]), {20, 21})
+                self.assertEqual(counts[pos][20]["A"], 500)
+                self.assertEqual(counts[pos][21]["A"], 500)
+            bins = QS.make_bins(20, 22, "cumulative")
+            depths = [int(QS.rows_for_bin(sites, counts, bin_def, "S")[0]["depth"]) for bin_def in bins]
+            self.assertEqual(depths, [1000, 500, 0])
 
     def test_detect_genome_build_and_find_bed(self):
         with tempfile.TemporaryDirectory() as tmpdir:

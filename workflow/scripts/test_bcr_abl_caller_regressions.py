@@ -11,6 +11,9 @@ HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location("bcr_abl_branford_caller", HERE / "bcr_abl_branford_caller.py")
 caller = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(caller)
+phaser_spec = importlib.util.spec_from_file_location("bcr_abl_phaser", HERE / "bcr_abl_phaser.py")
+phaser = importlib.util.module_from_spec(phaser_spec)
+phaser_spec.loader.exec_module(phaser)
 
 
 def write_bam(path, rows, length=200):
@@ -49,6 +52,22 @@ def run_caller(tmp, bam, bed_text, extra=()):
 
 
 class CallerRegressions(unittest.TestCase):
+    def test_single_site_variant_copy_is_loadable_by_phaser_and_audit_is_preserved(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            rows = []
+            for i, base in enumerate("A" * 20 + "G" * 80):
+                seq = list("N" * 150); seq[49] = base
+                rows.append({"seq": "".join(seq), "name": f"r{i}"})
+            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            all_rows, variants, _ = run_caller(
+                tmp, bam, "chr9\t49\t50\tNM:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
+            )
+            self.assertEqual(all_rows[0]["record_type"], "SITE_AUDIT")
+            self.assertEqual(variants[0]["record_type"], "SITE_VARIANT")
+            loaded = phaser.load_detected_mutations(tmp / "mutations.tsv")
+            self.assertEqual([(r["mutation"], r["record_type"]) for r in loaded], [("E255K", "SITE_VARIANT")])
+
     def test_two_supported_panel_alt_alleles_do_not_mask_each_other_as_snr_noise(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
@@ -83,13 +102,67 @@ class CallerRegressions(unittest.TestCase):
             )
             all_rows, variants, vcf = run_caller(tmp, bam, bed, ("--reference-fasta", str(fasta)))
             self.assertEqual(len(all_rows), 2)  # nucleotide audit is retained
-            self.assertTrue(all(r["codon_context_status"] == "CODON_CONTEXT_REQUIRED" for r in all_rows))
+            self.assertTrue(all(r["codon_context_status"] == "RESOLVED" for r in all_rows))
             self.assertEqual(len(variants), 1)
             self.assertEqual(variants[0]["record_type"], "CODON_HAPLOTYPE")
             self.assertEqual((variants[0]["mutation"], variants[0]["ref"], variants[0]["alt"]), ("T315V", "ACT", "GTT"))
             self.assertEqual(variants[0]["ad_alt"], "20")
             vcf_rows = [line.split("\t") for line in vcf.read_text().splitlines() if line and not line.startswith("#")]
             self.assertEqual((vcf_rows[0][3], vcf_rows[0][4]), ("ACT", "GTT"))
+
+    def test_supported_independent_codon_haplotypes_do_not_mask_each_other(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            ref = list("N" * 200); ref[99:102] = list("ACT")
+            fasta = tmp / "ref.fa"; fasta.write_text(">chr9\n" + "".join(ref) + "\n"); pysam.faidx(str(fasta))
+            rows = []
+            for codon, count in (("ACT", 60), ("GCT", 20), ("ATT", 20)):
+                for _ in range(count):
+                    seq = list("N" * 150); seq[99:102] = list(codon); rows.append({"seq": "".join(seq)})
+            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bed = (
+                "chr9\t99\t100\tNM_005157.6:c.(943A>G)\tA\tG\tp.Thr315Ala\n"
+                "chr9\t100\t101\tNM_005157.6:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+            )
+            all_rows, variants, _ = run_caller(tmp, bam, bed, ("--reference-fasta", str(fasta)))
+            self.assertEqual([row["status"] for row in all_rows], ["DETECTED", "DETECTED"])
+            self.assertEqual({(row["alt"], row["ad_alt"], row["status"]) for row in variants}, {
+                ("GCT", "20", "DETECTED"), ("ATT", "20", "DETECTED"),
+            })
+
+    def test_three_balanced_panel_alternates_remain_conservative(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            rows = []
+            for i, base in enumerate("T" * 970 + "A" * 10 + "C" * 10 + "G" * 10):
+                seq = list("N" * 150); seq[49] = base
+                rows.append({"seq": "".join(seq), "name": f"r{i}"})
+            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bed = "".join(
+                f"chr9\t49\t50\tNM:c.(949T>{alt})\tT\t{alt}\tp.Phe317{aa}\n"
+                for alt, aa in (("A", "I"), ("C", "L"), ("G", "V"))
+            )
+            all_rows, variants, _ = run_caller(tmp, bam, bed)
+            self.assertEqual([row["status"] for row in all_rows], ["ARTIFACT"] * 3)
+            self.assertTrue(all("LOW_SNR" in row["filter_reason"] for row in all_rows))
+            self.assertEqual(variants, [])
+
+    def test_codon_haplotype_collection_excludes_insertions_and_reference_skips(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # An insertion between target bases makes the aligned bases G-T-T
+            # look like GTT if the inserted query base is silently ignored.
+            insertion = list("N" * 151); insertion[99:103] = list("GATT")
+            # N at the middle target is likewise ambiguous even though both
+            # flanking bases are present in the query.
+            skipped = list("N" * 149); skipped[99] = "G"; skipped[100:102] = list("TT")
+            rows = [
+                {"seq": "".join(insertion), "cigar": [(0, 100), (1, 1), (0, 50)]},
+                {"seq": "".join(skipped), "cigar": [(0, 100), (3, 1), (0, 49)]},
+            ]
+            bam_path = tmp / "reads.bam"; write_bam(bam_path, rows, length=200)
+            with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+                self.assertEqual(caller.collect_codon_haplotypes(bam, "chr9", [99, 100, 101], 12, 1), {})
 
     def test_synonymous_detection_is_auditable_and_not_classed_as_resistance(self):
         with tempfile.TemporaryDirectory() as d:
