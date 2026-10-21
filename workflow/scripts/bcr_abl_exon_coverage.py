@@ -59,51 +59,61 @@ def calculate_exon_coverage(
     max_depth: int = 1_000_000,
     threads: int = 1,
 ) -> List[Dict[str, Any]]:
-    """Calculate depth metrics for each exon in the BED file using single-pass pileup."""
+    """Calculate depth metrics for each exon in the BED file efficiently."""
     bam = pysam.AlignmentFile(str(bam_path), "rb", threads=threads)
     bam_contigs = set(bam.references)
 
-    # Group exons by resolved chromosome
-    chrom_exons: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {}
-    for idx, exon in enumerate(exons):
-        chrom = exon["chrom"]
-        if chrom not in bam_contigs:
-            alt_chrom = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
-            if alt_chrom in bam_contigs:
-                chrom = alt_chrom
-        if chrom not in chrom_exons:
-            chrom_exons[chrom] = []
-        chrom_exons[chrom].append((idx, exon))
-
-    exon_base_depths: Dict[int, Dict[int, int]] = {}
-    exon_covering_reads: Dict[int, set] = {}
-
-    for idx, exon in enumerate(exons):
-        start_0based = exon["start"]
-        end_1based = exon["end"]
-        exon_base_depths[idx] = {pos: 0 for pos in range(start_0based, end_1based)}
-        exon_covering_reads[idx] = set()
-
+    results = []
     try:
-        for chrom, exon_list in chrom_exons.items():
-            if chrom not in bam_contigs or not exon_list:
+        for exon in exons:
+            orig_chrom = exon["chrom"]
+            chrom = orig_chrom
+            if chrom not in bam_contigs:
+                alt_chrom = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
+                if alt_chrom in bam_contigs:
+                    chrom = alt_chrom
+
+            start_0based = exon["start"]
+            end_1based = exon["end"]
+            length = end_1based - start_0based
+            exon_name = exon["name"]
+
+            if chrom not in bam_contigs or length <= 0:
+                results.append({
+                    "sample": sample,
+                    "exon": exon_name,
+                    "chrom": orig_chrom,
+                    "start": start_0based + 1,
+                    "end": end_1based,
+                    "length_bp": length,
+                    "mean_depth": 0.0,
+                    "median_depth": 0.0,
+                    "min_depth": 0,
+                    "max_depth": 0,
+                    "pct_gte_100x": 0.0,
+                    "pct_gte_500x": 0.0,
+                    "pct_gte_1000x": 0.0,
+                    "spanning_reads": 0,
+                })
                 continue
 
-            min_start = min(e["start"] for _, e in exon_list)
-            max_end = max(e["end"] for _, e in exon_list)
+            # 1. Count unique reads overlapping the exon interval
+            # Only inspected once per exon (avoids millions of query_name string allocations per base)
+            spanning_qnames = set()
+            for aln in bam.fetch(chrom, start_0based, end_1based):
+                if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail:
+                    continue
+                if (aln.mapping_quality or 0) < min_mapq:
+                    continue
+                spanning_qnames.add(aln.query_name)
+            spanning_reads_count = len(spanning_qnames)
 
-            # Map reference positions to list of exon indices
-            pos_to_exons: Dict[int, List[int]] = {}
-            for e_idx, e in exon_list:
-                for p in range(e["start"], e["end"]):
-                    if p not in pos_to_exons:
-                        pos_to_exons[p] = []
-                    pos_to_exons[p].append(e_idx)
-
+            # 2. Targeted pileup strictly across the exon window (start_0based to end_1based)
+            depth_by_pos = {p: 0 for p in range(start_0based, end_1based)}
             for column in bam.pileup(
                 chrom,
-                min_start,
-                max_end,
+                start_0based,
+                end_1based,
                 truncate=True,
                 stepper="nofilter",
                 max_depth=max_depth,
@@ -111,13 +121,10 @@ def calculate_exon_coverage(
                 ignore_overlaps=False,
             ):
                 pos = column.reference_pos
-                if pos not in pos_to_exons:
+                if pos not in depth_by_pos:
                     continue
 
-                target_exons = pos_to_exons[pos]
                 valid_depth = 0
-                read_names = []
-
                 for read in column.pileups:
                     aln = read.alignment
                     if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail:
@@ -128,54 +135,41 @@ def calculate_exon_coverage(
                         continue
                     if read.is_del or read.query_position is None:
                         continue
-
                     valid_depth += 1
-                    read_names.append(aln.query_name)
 
-                for e_idx in target_exons:
-                    exon_base_depths[e_idx][pos] = valid_depth
-                    for qname in read_names:
-                        exon_covering_reads[e_idx].add(qname)
+                depth_by_pos[pos] = valid_depth
 
+            depth_values = list(depth_by_pos.values())
+            if not depth_values:
+                depth_values = [0]
+
+            mean_d = sum(depth_values) / len(depth_values)
+            median_d = statistics.median(depth_values)
+            min_d = min(depth_values)
+            max_d = max(depth_values)
+
+            gte_100 = sum(1 for d in depth_values if d >= 100) / len(depth_values) * 100.0
+            gte_500 = sum(1 for d in depth_values if d >= 500) / len(depth_values) * 100.0
+            gte_1000 = sum(1 for d in depth_values if d >= 1000) / len(depth_values) * 100.0
+
+            results.append({
+                "sample": sample,
+                "exon": exon_name,
+                "chrom": orig_chrom,
+                "start": start_0based + 1,  # 1-based start
+                "end": end_1based,
+                "length_bp": length,
+                "mean_depth": round(mean_d, 1),
+                "median_depth": round(float(median_d), 1),
+                "min_depth": min_d,
+                "max_depth": max_d,
+                "pct_gte_100x": round(gte_100, 1),
+                "pct_gte_500x": round(gte_500, 1),
+                "pct_gte_1000x": round(gte_1000, 1),
+                "spanning_reads": spanning_reads_count,
+            })
     finally:
         bam.close()
-
-    results = []
-    for idx, exon in enumerate(exons):
-        start_0based = exon["start"]
-        end_1based = exon["end"]
-        length = end_1based - start_0based
-        exon_name = exon["name"]
-
-        depth_values = list(exon_base_depths[idx].values())
-        if not depth_values:
-            depth_values = [0]
-
-        mean_d = sum(depth_values) / len(depth_values)
-        median_d = statistics.median(depth_values)
-        min_d = min(depth_values)
-        max_d = max(depth_values)
-
-        gte_100 = sum(1 for d in depth_values if d >= 100) / len(depth_values) * 100.0
-        gte_500 = sum(1 for d in depth_values if d >= 500) / len(depth_values) * 100.0
-        gte_1000 = sum(1 for d in depth_values if d >= 1000) / len(depth_values) * 100.0
-
-        results.append({
-            "sample": sample,
-            "exon": exon_name,
-            "chrom": exon["chrom"],
-            "start": start_0based + 1,  # 1-based start
-            "end": end_1based,
-            "length_bp": length,
-            "mean_depth": round(mean_d, 1),
-            "median_depth": round(float(median_d), 1),
-            "min_depth": min_d,
-            "max_depth": max_d,
-            "pct_gte_100x": round(gte_100, 1),
-            "pct_gte_500x": round(gte_500, 1),
-            "pct_gte_1000x": round(gte_1000, 1),
-            "spanning_reads": len(exon_covering_reads[idx]),
-        })
 
     return results
 

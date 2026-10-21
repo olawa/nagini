@@ -311,12 +311,12 @@ rule bcr_abl_bcftools_pileup:
             "benchmarks/bcr_abl_bcftools_pileup/{sample}_{type}.tsv",
             config.get("bcr_abl", {}).get("benchmark_repeats", 1),
         )
-    threads: config.get("bcr_abl", {}).get("threads", 2)
+    threads: config.get("bcr_abl", {}).get("threads", 4)
     resources:
         mem_mb=config.get("bcr_abl", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("bcr_abl", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("bcr_abl", {}).get("partition", config["default_resources"]["partition"]),
-        threads=config.get("bcr_abl", {}).get("threads", 2),
+        threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcftools", {}).get("container", "docker://hydragenetics/common:3.1.1")
@@ -327,12 +327,12 @@ rule bcr_abl_bcftools_pileup:
     shell:
         """
         exec > {log} 2>&1
-        bcftools mpileup -Ou -f {input.ref} -R {input.bed} \
+        bcftools mpileup --threads {threads} -Ou -B -f {input.ref} -R {input.bed} \
             -d {params.max_depth} -q {params.min_mapq} -Q {params.min_baseq} \
             -a FORMAT/AD,FORMAT/DP {params.extra} {input.bam} | \
-        bcftools call -mv -P {params.prior} -Oz -o {output.vcf}
+        bcftools call --threads {threads} -mv -P {params.prior} -Oz -o {output.vcf}
 
-        bcftools index -t {output.vcf}
+        bcftools index -t --threads {threads} {output.vcf}
         """
 
 
