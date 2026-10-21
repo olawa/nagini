@@ -108,15 +108,28 @@ def find_bed_file(build: str) -> Optional[Path]:
     return None
 
 
+def empty_qs_counts() -> Dict[str, int]:
+    return {
+        "A": 0, "C": 0, "G": 0, "T": 0,
+        "A_fwd": 0, "A_rev": 0,
+        "C_fwd": 0, "C_rev": 0,
+        "G_fwd": 0, "G_rev": 0,
+        "T_fwd": 0, "T_rev": 0,
+        "del": 0, "del_fwd": 0, "del_rev": 0,
+        "ins": 0, "ins_fwd": 0, "ins_rev": 0,
+        "total": 0, "total_fwd": 0, "total_rev": 0,
+    }
+
+
 def collect_qs_pileup(
     bam_path: Path,
     sites: List[Dict[str, Any]],
     min_base_quality: int = 0,
     min_mapping_quality: int = 0,
 ) -> Tuple[str, Dict[int, Dict[Optional[int], Dict[str, int]]]]:
-    """Collect base counts for each genomic position stratified by integer read QS."""
+    """Collect base and indel counts for each genomic position stratified by integer read QS and strand."""
     by_pos: Dict[int, Dict[Optional[int], Dict[str, int]]] = {
-        s["pos0"]: defaultdict(lambda: {"A": 0, "C": 0, "G": 0, "T": 0, "total": 0})
+        s["pos0"]: defaultdict(empty_qs_counts)
         for s in sites
     }
     target_pos = set(by_pos.keys())
@@ -150,31 +163,37 @@ def collect_qs_pileup(
             if pos0 not in target_pos:
                 continue
 
-            best_by_read: Dict[Tuple[str, bool, bool], Tuple[Tuple[int, int], Any, str]] = {}
+            best_by_read: Dict[Tuple[str, bool, bool], Tuple[Tuple[int, int], Any, str, str, bool]] = {}
             for read in col.pileups:
                 aln = read.alignment
                 if aln.is_unmapped or aln.is_duplicate or aln.is_qcfail or aln.is_secondary:
                     continue
                 if (aln.mapping_quality or 0) < min_mapping_quality:
                     continue
-                if read.is_del or read.is_refskip:
+                if read.is_refskip:
                     continue
+
+                strand = "rev" if aln.is_reverse else "fwd"
+                key = (aln.query_name, aln.is_read1, aln.is_read2)
+                rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0))
+
+                if read.is_del or read.query_position is None:
+                    if key not in best_by_read or rank < best_by_read[key][0]:
+                        best_by_read[key] = (rank, aln, "DEL", strand, False)
+                    continue
+
                 qpos = read.query_position
-                if qpos is None:
-                    continue
                 if aln.query_qualities is not None and aln.query_qualities[qpos] < min_base_quality:
                     continue
                 base = aln.query_sequence[qpos].upper()
                 if base not in ("A", "C", "G", "T"):
                     continue
 
-                # Deduplicate supplementary / split alignments of the same read
-                key = (aln.query_name, aln.is_read1, aln.is_read2)
-                rank = (0 if not aln.is_supplementary else 1, -(aln.mapping_quality or 0))
+                has_ins = bool(getattr(read, "indel", 0) > 0)
                 if key not in best_by_read or rank < best_by_read[key][0]:
-                    best_by_read[key] = (rank, aln, base)
+                    best_by_read[key] = (rank, aln, base, strand, has_ins)
 
-            for _, aln, base in best_by_read.values():
+            for _, aln, base, strand, has_ins in best_by_read.values():
                 qs_int: Optional[int] = None
                 for tag_name in ("qs", "QS"):
                     if aln.has_tag(tag_name):
@@ -195,9 +214,19 @@ def collect_qs_pileup(
                         pass
 
                 counts = by_pos[pos0][qs_int]
-                counts[base] += 1
-                counts["total"] += 1
-                total_reads_seen += 1
+                if base == "DEL":
+                    counts["del"] += 1
+                    counts[f"del_{strand}"] += 1
+                else:
+                    counts[base] += 1
+                    counts[f"{base}_{strand}"] += 1
+                    counts["total"] += 1
+                    counts[f"total_{strand}"] += 1
+                    if has_ins:
+                        counts["ins"] += 1
+                        counts[f"ins_{strand}"] += 1
+                    total_reads_seen += 1
+
                 if qs_int is not None:
                     qs_values.append(qs_int)
 
@@ -260,6 +289,7 @@ def rows_for_bin(
     by_pos: Dict[int, Dict[Optional[int], Dict[str, int]]],
     bin_def: Dict[str, Any],
     sample: str,
+    strand: str = "all",
 ) -> List[Dict[str, str]]:
     rows = []
     filter_fn = bin_def["filter_fn"]
@@ -268,23 +298,80 @@ def rows_for_bin(
         pos0 = s["pos0"]
         counts_for_pos = by_pos.get(pos0, {})
 
-        c_a = sum(c["A"] for q, c in counts_for_pos.items() if filter_fn(q))
-        c_c = sum(c["C"] for q, c in counts_for_pos.items() if filter_fn(q))
-        c_g = sum(c["G"] for q, c in counts_for_pos.items() if filter_fn(q))
-        c_t = sum(c["T"] for q, c in counts_for_pos.items() if filter_fn(q))
-        depth = c_a + c_c + c_g + c_t
+        c_a_fwd = sum(c.get("A_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_a_rev = sum(c.get("A_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_a = c_a_fwd + c_a_rev
+
+        c_c_fwd = sum(c.get("C_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_c_rev = sum(c.get("C_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_c = c_c_fwd + c_c_rev
+
+        c_g_fwd = sum(c.get("G_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_g_rev = sum(c.get("G_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_g = c_g_fwd + c_g_rev
+
+        c_t_fwd = sum(c.get("T_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_t_rev = sum(c.get("T_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_t = c_t_fwd + c_t_rev
+
+        c_del_fwd = sum(c.get("del_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_del_rev = sum(c.get("del_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_del = c_del_fwd + c_del_rev
+
+        c_ins_fwd = sum(c.get("ins_fwd", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_ins_rev = sum(c.get("ins_rev", 0) for q, c in counts_for_pos.items() if filter_fn(q))
+        c_ins = c_ins_fwd + c_ins_rev
+
+        depth_fwd = c_a_fwd + c_c_fwd + c_g_fwd + c_t_fwd
+        depth_rev = c_a_rev + c_c_rev + c_g_rev + c_t_rev
+        depth_all = depth_fwd + depth_rev
 
         ref = s["ref"]
         alt = s["alt"]
-        base_counts = {"A": c_a, "C": c_c, "G": c_g, "T": c_t}
-        ad_ref = base_counts.get(ref, 0)
-        ad_alt = base_counts.get(alt, 0)
 
-        vaf_pct = (ad_alt / depth * 100.0) if depth > 0 else 0.0
+        base_counts_all = {"A": c_a, "C": c_c, "G": c_g, "T": c_t}
+        base_counts_fwd = {"A": c_a_fwd, "C": c_c_fwd, "G": c_g_fwd, "T": c_t_fwd}
+        base_counts_rev = {"A": c_a_rev, "C": c_c_rev, "G": c_g_rev, "T": c_t_rev}
+
+        ad_ref_all = base_counts_all.get(ref, 0)
+        ad_alt_all = base_counts_all.get(alt, 0)
+        ad_ref_fwd = base_counts_fwd.get(ref, 0)
+        ad_alt_fwd = base_counts_fwd.get(alt, 0)
+        ad_ref_rev = base_counts_rev.get(ref, 0)
+        ad_alt_rev = base_counts_rev.get(alt, 0)
+
+        vaf_all_pct = (ad_alt_all / depth_all * 100.0) if depth_all > 0 else 0.0
+        vaf_fwd_pct = (ad_alt_fwd / depth_fwd * 100.0) if depth_fwd > 0 else 0.0
+        vaf_rev_pct = (ad_alt_rev / depth_rev * 100.0) if depth_rev > 0 else 0.0
+
+        alt_minor_strand_ratio = round(min(ad_alt_fwd, ad_alt_rev) / max(ad_alt_all, 1), 3)
+        r1 = (ad_alt_fwd + 1) * (ad_ref_rev + 1)
+        r2 = (ad_alt_rev + 1) * (ad_ref_fwd + 1)
+        sor = round(math.log(max(r1 / r2, r2 / r1)), 2)
+
+        if strand == "fwd":
+            plot_depth = depth_fwd
+            p_a, p_c, p_g, p_t = c_a_fwd, c_c_fwd, c_g_fwd, c_t_fwd
+            ad_ref = ad_ref_fwd
+            ad_alt = ad_alt_fwd
+            vaf_pct = vaf_fwd_pct
+        elif strand == "rev":
+            plot_depth = depth_rev
+            p_a, p_c, p_g, p_t = c_a_rev, c_c_rev, c_g_rev, c_t_rev
+            ad_ref = ad_ref_rev
+            ad_alt = ad_alt_rev
+            vaf_pct = vaf_rev_pct
+        else:
+            plot_depth = depth_all
+            p_a, p_c, p_g, p_t = c_a, c_c, c_g, c_t
+            ad_ref = ad_ref_all
+            ad_alt = ad_alt_all
+            vaf_pct = vaf_all_pct
 
         r = {
             "record_type": "SITE_AUDIT",
             "sample": sample,
+            "strand": strand.upper(),
             "mutation": s["mutation"],
             "aa_change": s["aa_change"],
             "name": s["name"],
@@ -292,18 +379,42 @@ def rows_for_bin(
             "pos": str(s["pos1"]),
             "ref": ref,
             "alt": alt,
-            "depth": str(depth),
-            "count_A": str(c_a),
-            "count_C": str(c_c),
-            "count_G": str(c_g),
-            "count_T": str(c_t),
-            "pct_A": f"{(c_a / depth * 100.0) if depth > 0 else 0.0:.2f}",
-            "pct_C": f"{(c_c / depth * 100.0) if depth > 0 else 0.0:.2f}",
-            "pct_G": f"{(c_g / depth * 100.0) if depth > 0 else 0.0:.2f}",
-            "pct_T": f"{(c_t / depth * 100.0) if depth > 0 else 0.0:.2f}",
+            "depth": str(plot_depth),
+            "depth_fwd": str(depth_fwd),
+            "depth_rev": str(depth_rev),
+            "count_A": str(p_a),
+            "count_C": str(p_c),
+            "count_G": str(p_g),
+            "count_T": str(p_t),
+            "count_A_fwd": str(c_a_fwd),
+            "count_A_rev": str(c_a_rev),
+            "count_C_fwd": str(c_c_fwd),
+            "count_C_rev": str(c_c_rev),
+            "count_G_fwd": str(c_g_fwd),
+            "count_G_rev": str(c_g_rev),
+            "count_T_fwd": str(c_t_fwd),
+            "count_T_rev": str(c_t_rev),
+            "count_del": str(c_del),
+            "count_del_fwd": str(c_del_fwd),
+            "count_del_rev": str(c_del_rev),
+            "count_ins": str(c_ins),
+            "count_ins_fwd": str(c_ins_fwd),
+            "count_ins_rev": str(c_ins_rev),
+            "pct_A": f"{(p_a / plot_depth * 100.0) if plot_depth > 0 else 0.0:.2f}",
+            "pct_C": f"{(p_c / plot_depth * 100.0) if plot_depth > 0 else 0.0:.2f}",
+            "pct_G": f"{(p_g / plot_depth * 100.0) if plot_depth > 0 else 0.0:.2f}",
+            "pct_T": f"{(p_t / plot_depth * 100.0) if plot_depth > 0 else 0.0:.2f}",
             "ad_ref": str(ad_ref),
+            "ad_ref_fwd": str(ad_ref_fwd),
+            "ad_ref_rev": str(ad_ref_rev),
             "ad_alt": str(ad_alt),
+            "ad_alt_fwd": str(ad_alt_fwd),
+            "ad_alt_rev": str(ad_alt_rev),
             "vaf_percent": f"{vaf_pct:.2f}",
+            "vaf_fwd_percent": f"{vaf_fwd_pct:.2f}",
+            "vaf_rev_percent": f"{vaf_rev_pct:.2f}",
+            "alt_minor_strand_ratio": f"{alt_minor_strand_ratio:.3f}",
+            "sor": f"{sor:.2f}",
             "status": "DETECTED" if vaf_pct >= 1.0 else ("SUBCLONAL" if vaf_pct >= 0.2 else "NEGATIVE"),
             "filter_reason": "PASS" if vaf_pct >= 0.2 else "NOISE",
             "qs_bin": bin_def["label"],
@@ -317,47 +428,73 @@ def build_summary_figure(
     bin_summaries: List[Dict[str, Any]],
     sample: str,
 ) -> plt.Figure:
-    """Build multi-panel summary curve across QS bins."""
+    """Build multi-panel summary curve across QS bins with strand and indel metrics."""
     labels = [b["short_label"] for b in bin_summaries]
     x = np.arange(len(labels))
     depths = [b["median_depth"] for b in bin_summaries]
+    depths_fwd = [b.get("median_depth_fwd", 0.0) for b in bin_summaries]
+    depths_rev = [b.get("median_depth_rev", 0.0) for b in bin_summaries]
+
     noises = [b["mean_background_noise"] for b in bin_summaries]
+    noises_fwd = [b.get("mean_background_noise_fwd", 0.0) for b in bin_summaries]
+    noises_rev = [b.get("mean_background_noise_rev", 0.0) for b in bin_summaries]
+    del_rates = [b.get("mean_del_rate", 0.0) for b in bin_summaries]
+    ins_rates = [b.get("mean_ins_rate", 0.0) for b in bin_summaries]
 
     mut_vafs: Dict[str, List[float]] = {}
+    mut_vafs_fwd: Dict[str, List[float]] = {}
+    mut_vafs_rev: Dict[str, List[float]] = {}
     for b in bin_summaries:
         for mut_name, vaf in b["mutation_vafs"].items():
             mut_vafs.setdefault(mut_name, []).append(vaf)
+        for mut_name, vaf in b.get("mutation_vafs_fwd", {}).items():
+            mut_vafs_fwd.setdefault(mut_name, []).append(vaf)
+        for mut_name, vaf in b.get("mutation_vafs_rev", {}).items():
+            mut_vafs_rev.setdefault(mut_name, []).append(vaf)
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(max(14, len(labels) * 0.45), 10), sharex=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(max(14, len(labels) * 0.45), 10.5), sharex=True)
     fig.suptitle(f"BCR-ABL1 Kinase Domain | Quality Score (QS) Sweep Summary ({sample})", fontsize=14, fontweight="bold", y=0.98)
 
     # 1. Median Depth vs QS
-    ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth across Sites")
-    ax1.fill_between(x, depths, color="#3470a3", alpha=0.15)
+    ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth (Combined)")
+    ax1.fill_between(x, depths, color="#3470a3", alpha=0.12)
+    ax1.plot(x, depths_fwd, marker=".", color="#0288d1", linewidth=1.5, linestyle="--", label="Forward Strand (+)")
+    ax1.plot(x, depths_rev, marker=".", color="#1a237e", linewidth=1.5, linestyle=":", label="Reverse Strand (-)")
     ax1.set_ylabel("Median Depth (x)", fontsize=11, fontweight="bold")
     ax1.grid(True, linestyle="--", alpha=0.5)
     import matplotlib.ticker as ticker
     ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{int(y):,}"))
     ax1.set_title("Sequencing Coverage Retention across QS Bins", fontsize=11, loc="left", fontweight="semibold")
-    ax1.legend(loc="upper right", framealpha=0.9)
+    ax1.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
-    # 2. Mean Background Noise (%) vs QS
-    ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.2, label="Mean Non-Ref Noise (%) on Negative Sites")
+    # 2. Mean Background Noise (%) vs QS (Split per strand + indels)
+    ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.5, label="Mean Non-Ref Noise (%) Combined")
+    ax2.plot(x, noises_fwd, marker="^", color="#0288d1", linewidth=1.6, linestyle="--", label="Forward Strand (+) Noise (%)")
+    ax2.plot(x, noises_rev, marker="v", color="#2e7d32", linewidth=1.6, linestyle="--", label="Reverse Strand (-) Noise (%)")
+    if any(r > 0 for r in del_rates):
+        ax2.plot(x, del_rates, marker="x", color="#757575", linewidth=1.2, linestyle=":", label="Mean Deletion Rate (%)")
+    if any(r > 0 for r in ins_rates):
+        ax2.plot(x, ins_rates, marker="+", color="#8e24aa", linewidth=1.2, linestyle=":", label="Mean Insertion Rate (%)")
     ax2.axhline(1.0, color="gray", linestyle=":", linewidth=1, label="1.0% Threshold")
     ax2.axhline(0.2, color="lightgray", linestyle=":", linewidth=0.8, label="0.2% Subclonal")
-    ax2.set_ylabel("Background Noise (%)", fontsize=11, fontweight="bold")
-    max_noise = max(noises) if noises else 0.5
+    ax2.set_ylabel("Background Rate (%)", fontsize=11, fontweight="bold")
+    all_noise_pts = noises + noises_fwd + noises_rev + del_rates + ins_rates
+    max_noise = max(all_noise_pts) if all_noise_pts else 0.5
     ax2.set_ylim(0, max(1.5, max_noise * 1.25))
     ax2.grid(True, linestyle="--", alpha=0.5)
-    ax2.set_title("Background Substitution Noise across Negative Sites", fontsize=11, loc="left", fontweight="semibold")
-    ax2.legend(loc="upper right", framealpha=0.9)
+    ax2.set_title("Background Noise & Strand Bias across Negative Sites", fontsize=11, loc="left", fontweight="semibold")
+    ax2.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     # 3. Detected Mutations VAF (%) vs QS
     colors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628"]
     if mut_vafs:
         for idx, (m_name, v_list) in enumerate(mut_vafs.items()):
             col = colors[idx % len(colors)]
-            ax3.plot(x, v_list, marker="^", color=col, linewidth=2.2, label=f"{m_name} VAF (%)")
+            ax3.plot(x, v_list, marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
+            if m_name in mut_vafs_fwd:
+                ax3.plot(x, mut_vafs_fwd[m_name], color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
+            if m_name in mut_vafs_rev:
+                ax3.plot(x, mut_vafs_rev[m_name], color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
     else:
         ax3.text(0.5, 0.5, "No variants with VAF >= 1.0% detected in sample", ha="center", va="center", transform=ax3.transAxes)
 
@@ -368,7 +505,7 @@ def build_summary_figure(
     ax3.grid(True, linestyle="--", alpha=0.5)
     ax3.set_title("Detected Resistance Mutation Stability across QS Bins", fontsize=11, loc="left", fontweight="semibold")
     if mut_vafs:
-        ax3.legend(loc="upper right", framealpha=0.9)
+        ax3.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     ax3.set_xticks(x)
     ax3.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
@@ -399,11 +536,26 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--min-mapping-quality", type=int, default=0, help="Minimum mapping quality (default: 0)")
     parser.add_argument("--zoom-max", type=float, default=5.0, help="Y-axis maximum for background zoom panel (default: 5.0)")
     parser.add_argument("--color-mode", choices=["bases", "relative"], default="bases", help="Coloring mode for bar plots")
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--strand", choices=["all", "both", "fwd", "rev"], default="all",
+        help="Strand breakdown for stacked bar pages: 'all' (combined only), 'both' (combined, fwd, and rev), "
+             "'fwd' (forward strand only), or 'rev' (reverse strand only) (default: 'all')"
+    )
+    parser.add_argument(
+        "--split-strands", action="store_true", default=False,
+        help="Shortcut to output separate forward (+) and reverse (-) stacked bar pages for all bins (equivalent to --strand both)"
+    )
+    parsed = parser.parse_args(argv)
+    if parsed.split_strands:
+        parsed.strand = "both"
+    return parsed
 
 
 def main():
     args = parse_args()
+    if args.split_strands:
+        args.strand = "both"
+
     if not args.bam.is_file():
         sys.exit(f"Error: BAM file not found: {args.bam}")
 
@@ -459,14 +611,14 @@ def main():
     bins = make_bins(args.qs_min, args.qs_max, args.mode)
     print(f"[Sweep] Evaluating {len(bins)} QS bins ({args.mode} mode)...", file=sys.stderr)
 
-    bin_data: List[Tuple[Dict[str, Any], List[Dict[str, str]]]] = []
     bin_summaries: List[Dict[str, Any]] = []
     all_tsv_rows: List[Dict[str, str]] = []
+    pages_to_render: List[Tuple[Dict[str, Any], str, List[Dict[str, str]]]] = []
 
     # Identify primary mutations across the whole sample (to track on summary curve)
     # First check an unconstrained pool
     all_reads_fn = lambda q: True
-    baseline_rows = rows_for_bin(sites, by_pos, {"filter_fn": all_reads_fn, "label": "ALL", "type": "all"}, sample)
+    baseline_rows = rows_for_bin(sites, by_pos, {"filter_fn": all_reads_fn, "label": "ALL", "type": "all"}, sample, strand="all")
     candidate_mutations: Set[str] = {
         r["mutation"] for r in baseline_rows
         if float(r["vaf_percent"]) >= 1.0
@@ -475,21 +627,61 @@ def main():
         candidate_mutations = {r["mutation"] for r in baseline_rows if float(r["vaf_percent"]) >= 0.5}
 
     for b in bins:
-        rows = rows_for_bin(sites, by_pos, b, sample)
-        depths = [float(r["depth"]) for r in rows]
-        med_depth = float(np.median(depths)) if depths else 0.0
+        rows_all = rows_for_bin(sites, by_pos, b, sample, strand="all")
+        rows_fwd = rows_for_bin(sites, by_pos, b, sample, strand="fwd")
+        rows_rev = rows_for_bin(sites, by_pos, b, sample, strand="rev")
+
+        depths_all = [float(r["depth"]) for r in rows_all]
+        depths_fwd = [float(r["depth_fwd"]) for r in rows_all]
+        depths_rev = [float(r["depth_rev"]) for r in rows_all]
+
+        med_depth_all = float(np.median(depths_all)) if depths_all else 0.0
+        med_depth_fwd = float(np.median(depths_fwd)) if depths_fwd else 0.0
+        med_depth_rev = float(np.median(depths_rev)) if depths_rev else 0.0
 
         # Background noise on non-candidate sites
-        non_candidate_noises = [
-            float(r["vaf_percent"]) for r in rows
+        non_candidate_noises_all = [
+            float(r["vaf_percent"]) for r in rows_all
             if r["mutation"] not in candidate_mutations
         ]
-        mean_noise = float(np.mean(non_candidate_noises)) if non_candidate_noises else 0.0
+        non_candidate_noises_fwd = [
+            float(r["vaf_fwd_percent"]) for r in rows_all
+            if r["mutation"] not in candidate_mutations
+        ]
+        non_candidate_noises_rev = [
+            float(r["vaf_rev_percent"]) for r in rows_all
+            if r["mutation"] not in candidate_mutations
+        ]
+
+        mean_noise_all = float(np.mean(non_candidate_noises_all)) if non_candidate_noises_all else 0.0
+        mean_noise_fwd = float(np.mean(non_candidate_noises_fwd)) if non_candidate_noises_fwd else 0.0
+        mean_noise_rev = float(np.mean(non_candidate_noises_rev)) if non_candidate_noises_rev else 0.0
+
+        del_rates = [
+            (float(r["count_del"]) / float(r["depth"]) * 100.0) if float(r["depth"]) > 0 else 0.0
+            for r in rows_all
+        ]
+        ins_rates = [
+            (float(r["count_ins"]) / float(r["depth"]) * 100.0) if float(r["depth"]) > 0 else 0.0
+            for r in rows_all
+        ]
+        mean_del_rate = float(np.mean(del_rates)) if del_rates else 0.0
+        mean_ins_rate = float(np.mean(ins_rates)) if ins_rates else 0.0
 
         # VAF of tracked candidate mutations
-        mut_vafs = {
+        mut_vafs_all = {
             r["mutation"]: float(r["vaf_percent"])
-            for r in rows
+            for r in rows_all
+            if r["mutation"] in candidate_mutations
+        }
+        mut_vafs_fwd = {
+            r["mutation"]: float(r["vaf_fwd_percent"])
+            for r in rows_all
+            if r["mutation"] in candidate_mutations
+        }
+        mut_vafs_rev = {
+            r["mutation"]: float(r["vaf_rev_percent"])
+            for r in rows_all
             if r["mutation"] in candidate_mutations
         }
 
@@ -497,13 +689,36 @@ def main():
             "label": b["label"],
             "short_label": b["short_label"],
             "type": b["type"],
-            "median_depth": med_depth,
-            "mean_background_noise": mean_noise,
-            "mutation_vafs": mut_vafs,
+            "median_depth": med_depth_all,
+            "median_depth_fwd": med_depth_fwd,
+            "median_depth_rev": med_depth_rev,
+            "mean_background_noise": mean_noise_all,
+            "mean_background_noise_fwd": mean_noise_fwd,
+            "mean_background_noise_rev": mean_noise_rev,
+            "mean_del_rate": mean_del_rate,
+            "mean_ins_rate": mean_ins_rate,
+            "mutation_vafs": mut_vafs_all,
+            "mutation_vafs_fwd": mut_vafs_fwd,
+            "mutation_vafs_rev": mut_vafs_rev,
         }
         bin_summaries.append(bin_summary)
-        bin_data.append((b, rows))
-        all_tsv_rows.extend(rows)
+
+        if args.strand == "all":
+            pages_to_render.append((b, "Combined", rows_all))
+            all_tsv_rows.extend(rows_all)
+        elif args.strand == "both":
+            pages_to_render.append((b, "Combined", rows_all))
+            pages_to_render.append((b, "Forward Strand (+)", rows_fwd))
+            pages_to_render.append((b, "Reverse Strand (-)", rows_rev))
+            all_tsv_rows.extend(rows_all)
+            all_tsv_rows.extend(rows_fwd)
+            all_tsv_rows.extend(rows_rev)
+        elif args.strand == "fwd":
+            pages_to_render.append((b, "Forward Strand (+)", rows_fwd))
+            all_tsv_rows.extend(rows_fwd)
+        elif args.strand == "rev":
+            pages_to_render.append((b, "Reverse Strand (-)", rows_rev))
+            all_tsv_rows.extend(rows_rev)
 
     # Generate multi-page PDF
     args.output_pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -513,10 +728,10 @@ def main():
         pdf.savefig(summary_fig, dpi=300)
         plt.close(summary_fig)
 
-        for b, rows in bin_data:
+        for b, page_strand_label, rows in pages_to_render:
             med_depth = int(np.median([float(r["depth"]) for r in rows]))
-            title = f"BCR-ABL1 Kinase Domain ({sample}) | {b['label']} | Median Depth: {med_depth:,}x"
-            print(f"[PDF] Rendering page: {b['label']} (Median Depth {med_depth:,}x)...", file=sys.stderr)
+            title = f"BCR-ABL1 Kinase Domain ({sample}) | {b['label']} ({page_strand_label}) | Median Depth: {med_depth:,}x"
+            print(f"[PDF] Rendering page: {b['label']} ({page_strand_label}, Depth {med_depth:,}x)...", file=sys.stderr)
 
             fig = build_plot_figure(
                 rows=rows,
@@ -536,10 +751,20 @@ def main():
     # Optional TSV output
     if args.output_tsv:
         headers = [
-            "sample", "qs_bin", "qs_type", "mutation", "aa_change", "chrom", "pos", "ref", "alt",
-            "depth", "count_A", "count_C", "count_G", "count_T",
+            "sample", "qs_bin", "qs_type", "strand", "mutation", "aa_change", "chrom", "pos", "ref", "alt",
+            "depth", "depth_fwd", "depth_rev",
+            "count_A", "count_A_fwd", "count_A_rev",
+            "count_C", "count_C_fwd", "count_C_rev",
+            "count_G", "count_G_fwd", "count_G_rev",
+            "count_T", "count_T_fwd", "count_T_rev",
+            "count_del", "count_del_fwd", "count_del_rev",
+            "count_ins", "count_ins_fwd", "count_ins_rev",
             "pct_A", "pct_C", "pct_G", "pct_T",
-            "ad_ref", "ad_alt", "vaf_percent", "status", "filter_reason"
+            "ad_ref", "ad_ref_fwd", "ad_ref_rev",
+            "ad_alt", "ad_alt_fwd", "ad_alt_rev",
+            "vaf_percent", "vaf_fwd_percent", "vaf_rev_percent",
+            "alt_minor_strand_ratio", "sor",
+            "status", "filter_reason"
         ]
         args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
         with args.output_tsv.open("w") as handle:

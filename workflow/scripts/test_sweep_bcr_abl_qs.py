@@ -67,7 +67,7 @@ class TestSweepBcrAblQs(unittest.TestCase):
                 a2.set_tag("qs", 22.1, value_type="f")
                 out_bam.write(a2)
 
-                # Read 3: covers pos 100 with G (alt), qs = 32.8 (int 32 -> >30)
+                # Read 3: covers pos 100 with G (alt) on REVERSE strand, qs = 32.8 (int 32 -> >30)
                 a3 = pysam.AlignedSegment()
                 a3.query_name = "r3"
                 seq3 = list("A" * 50)
@@ -78,18 +78,36 @@ class TestSweepBcrAblQs(unittest.TestCase):
                 a3.reference_start = 90
                 a3.cigar = ((0, 50),)
                 a3.mapping_quality = 60
+                a3.flag = 16  # reverse strand
                 a3.set_tag("qs", 32.8, value_type="f")
                 out_bam.write(a3)
+
+                # Read 4: covers pos 100 with a deletion, qs = 22.0
+                a4 = pysam.AlignedSegment()
+                a4.query_name = "r4"
+                a4.query_sequence = "A" * 49
+                a4.query_qualities = pysam.qualitystring_to_array("I" * 49)
+                a4.reference_id = 0
+                a4.reference_start = 90
+                # deletion of 1bp at reference pos 100 (offset 10)
+                a4.cigar = ((0, 10), (2, 1), (0, 39))
+                a4.mapping_quality = 60
+                a4.set_tag("qs", 22.0, value_type="f")
+                out_bam.write(a4)
 
             pysam.index(str(bam_path))
 
             chrom, by_pos = QS.collect_qs_pileup(bam_path, sites)
             self.assertEqual(chrom, "chr9")
             pos100 = by_pos[100]
-            # Verify stratification
+            # Verify stratification and strand counts
             self.assertEqual(pos100[19]["A"], 1)
+            self.assertEqual(pos100[19]["A_fwd"], 1)
             self.assertEqual(pos100[22]["G"], 1)
+            self.assertEqual(pos100[22]["G_fwd"], 1)
+            self.assertEqual(pos100[22]["del"], 1)
             self.assertEqual(pos100[32]["G"], 1)
+            self.assertEqual(pos100[32]["G_rev"], 1)
 
             # Test bins
             bins = QS.make_bins(qs_min=20, qs_max=30, mode="binned")
@@ -100,11 +118,22 @@ class TestSweepBcrAblQs(unittest.TestCase):
 
             # Test rows_for_bin
             bin_22 = [b for b in bins if b["label"] == "QS = 22"][0]
-            rows_22 = QS.rows_for_bin(sites, by_pos, bin_22, "TEST_SAMPLE")
+            rows_22 = QS.rows_for_bin(sites, by_pos, bin_22, "TEST_SAMPLE", strand="all")
             site100_r22 = [r for r in rows_22 if r["pos"] == "101"][0]
             self.assertEqual(site100_r22["depth"], "1")
             self.assertEqual(site100_r22["count_G"], "1")
+            self.assertEqual(site100_r22["count_G_fwd"], "1")
+            self.assertEqual(site100_r22["count_G_rev"], "0")
+            self.assertEqual(site100_r22["count_del"], "1")
             self.assertEqual(site100_r22["vaf_percent"], "100.00")
+            self.assertEqual(site100_r22["vaf_fwd_percent"], "100.00")
+            self.assertEqual(site100_r22["vaf_rev_percent"], "0.00")
+
+            # Test rows_for_bin with strand="fwd" and strand="rev"
+            rows_22_fwd = QS.rows_for_bin(sites, by_pos, bin_22, "TEST_SAMPLE", strand="fwd")
+            self.assertEqual(rows_22_fwd[0]["depth"], "1")
+            rows_22_rev = QS.rows_for_bin(sites, by_pos, bin_22, "TEST_SAMPLE", strand="rev")
+            self.assertEqual(rows_22_rev[0]["depth"], "0")
 
             # Test PDF and TSV generation
             out_pdf = tmp / "output_sweep.pdf"
@@ -118,10 +147,12 @@ class TestSweepBcrAblQs(unittest.TestCase):
                 "--qs-min", "20",
                 "--qs-max", "25",
                 "--mode", "both",
+                "--split-strands",
                 "--sample", "TEST_SAMPLE",
             ]
             parsed_args = QS.parse_args(argv)
             self.assertEqual(parsed_args.sample, "TEST_SAMPLE")
+            self.assertEqual(parsed_args.strand, "both")
 
             # Run main workflow
             QS.main.__globals__["parse_args"] = lambda: parsed_args
@@ -138,6 +169,10 @@ class TestSweepBcrAblQs(unittest.TestCase):
             tsv_lines = out_tsv.read_text().splitlines()
             self.assertGreater(len(tsv_lines), 5)
             self.assertIn("qs_bin", tsv_lines[0])
+            self.assertIn("strand", tsv_lines[0])
+            self.assertIn("vaf_fwd_percent", tsv_lines[0])
+            self.assertIn("alt_minor_strand_ratio", tsv_lines[0])
+            self.assertIn("count_del", tsv_lines[0])
 
     def test_detect_genome_build_and_find_bed(self):
         with tempfile.TemporaryDirectory() as tmpdir:

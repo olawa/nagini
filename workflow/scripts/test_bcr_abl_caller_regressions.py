@@ -131,5 +131,35 @@ class CallerRegressions(unittest.TestCase):
                     caller.main()
 
 
+    def test_indel_handling_and_reporting(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            rows = []
+            # 20 reference reads (G at pos 50, 0-based 49)
+            for _ in range(20):
+                seq = list("N" * 150)
+                seq[49] = "G"
+                rows.append({"seq": "".join(seq), "cigar": [(0, 150)]})
+            # 5 reads with a 2bp deletion spanning pos 50 (cigar: 48M 2D 100M)
+            for _ in range(5):
+                seq = list("N" * 148)
+                rows.append({"seq": "".join(seq), "cigar": [(0, 48), (2, 2), (0, 100)]})
+            # 6 reads with a 3bp insertion after pos 50 (cigar: 50M 3I 97M -> 150 bp query)
+            for _ in range(6):
+                seq = list("N" * 150)
+                seq[49] = "G"
+                rows.append({"seq": "".join(seq), "cigar": [(0, 50), (1, 3), (0, 97)]})
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
+            all_rows, _, _ = run_caller(
+                tmp, bam, "chr9\t49\t50\tNM:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
+            )
+            self.assertEqual(len(all_rows), 1)
+            # 20 ref + 6 with ins = 26 base calls at pos 50
+            self.assertEqual(int(all_rows[0]["depth"]), 26)
+            self.assertEqual(int(all_rows[0]["n_deletion"]), 5)
+            self.assertEqual(int(all_rows[0]["n_insertion"]), 6)
+
+
 if __name__ == "__main__":
     unittest.main()

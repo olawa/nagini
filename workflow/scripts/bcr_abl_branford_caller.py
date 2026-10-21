@@ -336,6 +336,7 @@ def count_positions_batch(
         counts.update({
             "refskip": 0,
             "deletion": 0,
+            "insertion": 0,
             "low_baseq": 0,
             "base_qual_sum": {b: 0 for b in BASES},
             "base_qual_count": {b: 0 for b in BASES},
@@ -415,6 +416,8 @@ def count_positions_batch(
             if base not in BASES:
                 continue
             counts["unfiltered"][base] += 1
+            if getattr(read, "indel", 0) > 0:
+                counts["insertion"] += 1
 
             if min_baseq > 0 and bq < min_baseq:
                 counts["low_baseq"] += 1
@@ -558,7 +561,7 @@ def main(argv=None) -> None:
                 for pos_0based in pos_set:
                     c: Dict[str, Any] = {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")}
                     c.update({
-                        "refskip": 0, "deletion": 0, "low_baseq": 0,
+                        "refskip": 0, "deletion": 0, "insertion": 0, "low_baseq": 0,
                         "base_qual_sum": {b: 0 for b in BASES},
                         "base_qual_count": {b: 0 for b in BASES},
                         "kmer_clean_count": {b: 0 for b in BASES},
@@ -758,6 +761,7 @@ def main(argv=None) -> None:
                 "ad_alt_rev": ad_alt_rev,
                 "n_refskip": counts.get("refskip", 0),
                 "n_deletion": counts.get("deletion", 0),
+                "n_insertion": counts.get("insertion", 0),
             }
             all_results.append(record)
 
@@ -896,7 +900,7 @@ def main(argv=None) -> None:
                     "bosutinib": profile.get("Bosutinib", "Unknown"), "ponatinib": profile.get("Ponatinib", "Unknown"),
                     "asciminib": profile.get("Asciminib", "Unknown"), "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
                     "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0), "ad_alt_fwd": values["fwd"],
-                    "ad_alt_rev": values["rev"], "n_refskip": 0, "n_deletion": 0,
+                    "ad_alt_rev": values["rev"], "n_refskip": 0, "n_deletion": 0, "n_insertion": 0,
                 }
                 if hap_status in ("DETECTED", "SUBCLONAL") or (args.include_artifacts and hap_status == "ARTIFACT"):
                     detected_mutations.append(record)
@@ -922,7 +926,7 @@ def main(argv=None) -> None:
         "alt_minor_strand_ratio", "sor",
         "mean_baseq_ref", "mean_baseq_alt", "kmer_clean_percent",
         "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib", "asciminib",
-        "ad_ref_fwd", "ad_ref_rev", "ad_alt_fwd", "ad_alt_rev", "n_refskip", "n_deletion",
+        "ad_ref_fwd", "ad_ref_rev", "ad_alt_fwd", "ad_alt_rev", "n_refskip", "n_deletion", "n_insertion",
     ]
 
     # Write All Sites TSV
