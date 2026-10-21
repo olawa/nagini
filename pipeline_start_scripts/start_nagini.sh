@@ -75,6 +75,7 @@ filter_reads=""
 merged_fastq=""
 barcode_map_origin=""
 enable_rindels=false
+enable_vardictrust=false
 filter_qv=""
 filter_len=""
 filter_binary=""
@@ -137,6 +138,8 @@ Options:
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
   --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
+  --enable-rindels              Enable Rindels caller for BCR-ABL1.
+  --enable-vardictrust          Enable VarDictRust caller for BCR-ABL1 target exons.
   --clairs-to-platform MODEL    ClairS-TO platform model (auto-selected from basecalling model if omitted).
   --clairs-to-container IMAGE   Override default ClairS-TO container image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
@@ -364,6 +367,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --enable-rindels|--rindels)
             enable_rindels=true
+            shift 1
+            ;;
+        --enable-vardictrust|--vardictrust)
+            enable_vardictrust=true
             shift 1
             ;;
         --clairs-to-platform)
@@ -634,11 +641,10 @@ field_if "library type" "$library_type"
 field_if "sample type" "$sample_type"
 field_if "reference build" "$reference_build"
 if [[ "$assay" == "bcr_abl" ]]; then
-    if [[ "$enable_rindels" == "true" ]]; then
-        caller_display="Branford Pileup Caller + Rindels"
-    else
-        caller_display="Branford Pileup Caller (ABL1 KD panel, fast pileup)"
-    fi
+    callers=("Branford Pileup Caller")
+    [[ "$enable_rindels" == "true" ]] && callers+=("Rindels")
+    [[ "$enable_vardictrust" == "true" ]] && callers+=("VarDictRust")
+    caller_display=$(IFS=" + "; echo "${callers[*]}")
 elif [[ "$assay" == "adaptive_cnv_sv" ]]; then
     caller_display="None (CNV/SV only)"
 else
@@ -696,6 +702,7 @@ prepare_cmd=(
 [[ -n "$bed_file" ]] && prepare_cmd+=(--bed-file "$bed_file")
 [[ -n "$small_variant_caller" ]] && prepare_cmd+=(--small-variant-caller "$small_variant_caller")
 [[ "$enable_rindels" == "true" ]] && prepare_cmd+=(--enable-rindels)
+[[ "$enable_vardictrust" == "true" ]] && prepare_cmd+=(--enable-vardictrust)
 [[ -n "$clairs_to_platform" ]] && prepare_cmd+=(--clairs-to-platform "$clairs_to_platform")
 [[ -n "$clairs_to_container" ]] && prepare_cmd+=(--clairs-to-container "$clairs_to_container")
 [[ -n "$cores" ]] && prepare_cmd+=(--cores "$cores")

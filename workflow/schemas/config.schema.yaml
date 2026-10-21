@@ -158,6 +158,9 @@ properties:
       enable_rindels:
         type: boolean
         description: 'enable rindels (default: False)'
+      enable_vardictrust:
+        type: boolean
+        description: 'enable vardictrust (default: False)'
       exons_bed:
         type: string
         description: 'exons bed (default: '''')'
@@ -930,6 +933,29 @@ properties:
         description: number of times the benchmark should be repeated
     additionalProperties: true
     description: settings for VEP annotation
+  vardictrust:
+    type: object
+    description: settings for vardictrust
+    properties:
+      container:
+        type: string
+        description: name or path to docker/singularity container
+      min_af:
+        type: number
+        description: minimum allele frequency threshold
+      min_base_quality:
+        type: number
+        description: minimum base quality threshold
+      max_mismatches:
+        type: integer
+        description: maximum mismatches per read
+      threads:
+        type: integer
+        description: number of threads
+      extra:
+        type: string
+        description: additional command line arguments
+    additionalProperties: true
 additionalProperties: true
 definitions:
   tool_config:

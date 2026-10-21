@@ -485,6 +485,7 @@ CONFIG_FLAG_CONDITIONS = {
     "cnv_calling",
     "enable_rindels",
     "enable_bcftools_pileup",
+    "enable_vardictrust",
 }
 
 

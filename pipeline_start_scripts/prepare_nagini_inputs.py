@@ -251,6 +251,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Enable Rindels variant caller for BCR-ABL1.",
     )
+    parser.add_argument(
+        "--enable-vardictrust",
+        action="store_true",
+        default=False,
+        help="Enable VarDictRust variant caller for BCR-ABL1 target exons.",
+    )
     parser.add_argument("--tumor-content", default=None)
     parser.add_argument(
         "--no-check-references",
@@ -1928,6 +1934,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     if getattr(args, "enable_rindels", False):
         config["enable_rindels"] = True
         config.setdefault("bcr_abl", {})["enable_rindels"] = True
+
+    if getattr(args, "enable_vardictrust", False):
+        config["enable_vardictrust"] = True
+        config.setdefault("bcr_abl", {})["enable_vardictrust"] = True
 
     clairs_to_platform = getattr(args, "clairs_to_platform", "")
     if not clairs_to_platform:

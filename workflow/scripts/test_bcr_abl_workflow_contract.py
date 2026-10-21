@@ -44,6 +44,19 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertEqual(scope["get_summary_report_inputs"](None)["bcr_abl_all_sites"], [expected])
         self.assertIn("bcr_abl_all_sites", scope["_SUMMARY_OPTIONAL_KEYS"])
 
+    def test_vardictrust_rules_and_contract(self):
+        import nagini_routing
+        self.assertIn("enable_vardictrust", nagini_routing.CONFIG_FLAG_CONDITIONS)
+
+        bcr_smk = (ROOT / "workflow/rules/bcr_abl.smk").read_text()
+        self.assertIn("rule bcr_abl_vardictrust:", bcr_smk)
+        self.assertIn("rule bcr_abl_vardictrust_sort_index:", bcr_smk)
+        self.assertIn("quay.io/biocontainers/vardictrust", bcr_smk)
+
+        output_files = (ROOT / "config/output_files.yaml").read_text()
+        self.assertIn("snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz", output_files)
+        self.assertIn("when: \"enable_vardictrust\"", output_files)
+
 
 if __name__ == "__main__":
     unittest.main()

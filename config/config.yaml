@@ -327,6 +327,14 @@ bcftools_norm_mutect2:
   container: "docker://hydragenetics/common:3.1.1"
   extra: "--multiallelics -both --check-ref w"
 
+vardictrust:
+  container: "docker://quay.io/biocontainers/vardictrust:1.0.2--hfa8f182_0"
+  min_af: 0.15
+  min_base_quality: 12.0
+  max_mismatches: 150
+  threads: 4
+  extra: ""
+
 # VEP is optional because its offline cache must match the selected reference.
 # The normalized filtered VCF is used in the report when this is false.
 annotate_small_variants_with_vep: false
@@ -434,6 +442,7 @@ bcr_abl:
   # value than read_filter.min_qv can be tried by rerunning only the caller and
   # what follows it; reads read_filter already removed cannot be brought back.
   min_read_qs: 0
+  enable_vardictrust: false
 
 annotate_small_variants: false
 annotate_svs: false

@@ -379,6 +379,102 @@ rule bcr_abl_rindels:
         """
 
 
+rule bcr_abl_vardictrust:
+    """Run VarDictRust on BCR-ABL1 target exons with ONT-tuned parameters."""
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+        bed=lambda wildcards: _bcr_abl_exons_bed(),
+    output:
+        vcf=temp("snv_indels/vardictrust/{sample}_{type}.bcr_abl.raw.vcf"),
+    params:
+        min_af=lambda wildcards: get_assay_setting(
+            wildcards.sample,
+            "bcr_abl",
+            "vardict_min_af",
+            config.get("vardictrust", {}).get(
+                "min_af",
+                config.get("bcr_abl", {}).get("vardict_min_af", 0.15),
+            ),
+        ),
+        min_baseq=lambda wildcards: config.get("vardictrust", {}).get("min_base_quality", 12.0),
+        max_mismatches=lambda wildcards: config.get("vardictrust", {}).get("max_mismatches", 150),
+        col_chr=config.get("vardictrust", {}).get("col_chr", 1),
+        col_start=config.get("vardictrust", {}).get("col_start", 2),
+        col_end=config.get("vardictrust", {}).get("col_end", 3),
+        extra=lambda wildcards: config.get("vardictrust", {}).get("extra", ""),
+    log:
+        "logs/bcr_abl_vardictrust/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_vardictrust/{sample}_{type}.tsv",
+            config.get("bcr_abl_vardictrust", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("vardictrust", {}).get("threads", 4)
+    resources:
+        mem_mb=config.get("vardictrust", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("vardictrust", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("vardictrust", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("vardictrust", {}).get("threads", 4),
+        time=config.get("vardictrust", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("vardictrust", {}).get("container", "docker://quay.io/biocontainers/vardictrust:1.0.2--hfa8f182_0")
+    message:
+        "{rule}: call BCR-ABL1 target exons with VarDictRust for {wildcards.sample}_{wildcards.type}"
+    shell:
+        """
+        exec 2> {log}
+        vardictrust \
+            -G {input.ref} \
+            -b {input.bam} \
+            -N {wildcards.sample}_{wildcards.type} \
+            -c {params.col_chr} -S {params.col_start} -E {params.col_end} \
+            -f {params.min_af} \
+            -q {params.min_baseq} \
+            -m {params.max_mismatches} \
+            -U \
+            --fisher \
+            --threads {threads} \
+            {params.extra} \
+            {input.bed} > {output.vcf}
+        """
+
+
+rule bcr_abl_vardictrust_sort_index:
+    """Sort, compress and index VarDictRust VCF."""
+    input:
+        vcf="snv_indels/vardictrust/{sample}_{type}.bcr_abl.raw.vcf",
+    output:
+        vcf="snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz",
+        tbi="snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz.tbi",
+    log:
+        "logs/bcr_abl_vardictrust_sort_index/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcr_abl_vardictrust_sort_index/{sample}_{type}.tsv",
+            config.get("bcr_abl_vardictrust_sort_index", {}).get("benchmark_repeats", 1),
+        )
+    threads: 2
+    resources:
+        mem_mb=config["default_resources"]["mem_mb"],
+        mem_per_cpu=config["default_resources"]["mem_per_cpu"],
+        partition=config["default_resources"]["partition"],
+        threads=2,
+        time=config["default_resources"]["time"],
+    container:
+        config.get("bcftools", {}).get("container", "docker://hydragenetics/common:3.1.1")
+    message:
+        "{rule}: sort and index VarDictRust VCF for {wildcards.sample}_{wildcards.type}"
+    shell:
+        """
+        exec > {log} 2>&1
+        bcftools sort -Oz -o {output.vcf} {input.vcf}
+        bcftools index -t {output.vcf}
+        """
+
+
+
 
 
 

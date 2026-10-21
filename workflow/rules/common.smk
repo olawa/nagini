@@ -1357,6 +1357,7 @@ _PIPELINE_CONDITIONS = {
     "savana_enabled": lambda: any(savana_enabled(s) for s in get_samples(samples)),
     "enable_bcftools_pileup": lambda: bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda: bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
+    "enable_vardictrust": lambda: bool(config.get("bcr_abl", {}).get("enable_vardictrust", False) or config.get("enable_vardictrust", False)),
 }
 
 _SAMPLE_CONDITIONS = {
@@ -1386,6 +1387,7 @@ _SAMPLE_CONDITIONS = {
     "rindels_sv": sample_has_rindels_sv,
     "enable_bcftools_pileup": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", False) or config.get("enable_bcftools_pileup", False)),
     "enable_rindels": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False)),
+    "enable_vardictrust": lambda s: sample_has_assay_module(s, "bcr_abl") and bool(config.get("bcr_abl", {}).get("enable_vardictrust", False) or config.get("enable_vardictrust", False)),
 }
 
 
