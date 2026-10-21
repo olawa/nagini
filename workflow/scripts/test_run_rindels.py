@@ -185,6 +185,19 @@ class BcrAblTest(unittest.TestCase):
         with self.assertRaises(rr.RindelsError):
             rr.run_bcr_abl(self.args, run=Recorder(codes={"rindels": 3}), which=have("rindels", "bcftools"))
 
+    def test_ensure_compressed_vcf_compresses_raw_vcf_when_gz_is_empty(self):
+        # Simulate rindels creating 0-byte vcf.gz and populating raw vcf
+        gz_vcf = Path(self.args.vcf)
+        gz_vcf.write_bytes(b"")  # 0 bytes
+        raw_vcf = gz_vcf.with_suffix("")  # strip .gz -> .vcf
+        raw_vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\nchr9\t100\n")
+
+        rec = Recorder(creates=[])
+        rr.ensure_compressed_vcf(str(gz_vcf), run=rec, which=have("bcftools"))
+        # Verify bcftools view -Oz was called or gzip populated the gz file
+        self.assertTrue(gz_vcf.exists())
+        self.assertGreater(gz_vcf.stat().st_size, 0)
+
 
 class CliTest(unittest.TestCase):
     def test_main_reports_a_missing_binary_with_status_one(self):

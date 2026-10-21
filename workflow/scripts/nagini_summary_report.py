@@ -478,6 +478,10 @@ def build_summary_report(
             ("bcr_abl_bcftools_vcf", "bcftools"),
         ):
             c_vcf = s.get(caller_key, "")
+            if c_vcf and c_vcf.endswith(".gz") and (not os.path.isfile(c_vcf) or os.path.getsize(c_vcf) == 0):
+                uncompressed = c_vcf[:-3]
+                if os.path.isfile(uncompressed) and os.path.getsize(uncompressed) > 0:
+                    c_vcf = uncompressed
             if c_vcf and os.path.exists(c_vcf):
                 _, c_snvs, c_name = parse_small_variant_vcf(c_vcf, default_caller=default_caller_name)
                 for v in c_snvs:

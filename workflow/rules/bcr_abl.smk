@@ -363,6 +363,8 @@ rule bcr_abl_rindels:
         partition=config.get("bcr_abl_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
         threads=config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
         time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
+    conda:
+        "../../envs/nagini.yaml"
     message:
         "{rule}: run Rindels in BCR-ABL1 mode for {wildcards.sample}_{wildcards.type}"
     shell:

@@ -75,6 +75,7 @@ def cnv_command(args: argparse.Namespace) -> List[str]:
 def run_cnv(args: argparse.Namespace, run: Callable = subprocess.run, which=shutil.which) -> None:
     check_binary(args.binary, which)
     run_checked(run, cnv_command(args))
+    ensure_compressed_vcf(args.vcf, run, which)
 
     # Rindels skips the ASCAT segmentation when it finds fewer than 100
     # heterozygous sites, a legitimate outcome for a shallow or genomically
@@ -149,6 +150,41 @@ def bcr_abl_command(args: argparse.Namespace) -> List[str]:
     return command
 
 
+def ensure_compressed_vcf(vcf: str, run: Callable, which: Callable[[str], Optional[str]]) -> None:
+    """Ensure that if a .vcf.gz was requested, it is non-empty and properly compressed.
+
+    If Rindels falls back to writing an uncompressed .vcf because bgzip is missing or failed,
+    it can leave behind a 0-byte .vcf.gz while .vcf has the variant records. If so, compress
+    the uncompressed .vcf into .vcf.gz.
+    """
+    if not vcf or not vcf.endswith(".gz"):
+        return
+
+    uncompressed = vcf[:-3]
+    vcf_empty = (not os.path.exists(vcf)) or os.path.getsize(vcf) == 0
+    raw_exists = os.path.exists(uncompressed) and os.path.getsize(uncompressed) > 0
+
+    if vcf_empty and raw_exists:
+        print(f"Rindels left uncompressed VCF at {uncompressed}; compressing to {vcf}...", flush=True)
+        if which("bcftools"):
+            res = run(["bcftools", "view", "-Oz", "-o", vcf, uncompressed])
+            if getattr(res, "returncode", 0) == 0 and os.path.exists(vcf) and os.path.getsize(vcf) > 0:
+                return
+        if which("bgzip"):
+            try:
+                res = run(["bgzip", "-f", uncompressed])
+                bgz_out = f"{uncompressed}.gz"
+                if os.path.exists(bgz_out) and bgz_out != vcf:
+                    os.replace(bgz_out, vcf)
+                if os.path.exists(vcf) and os.path.getsize(vcf) > 0:
+                    return
+            except Exception:
+                pass
+        import gzip
+        with open(uncompressed, "rb") as f_in, gzip.open(vcf, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+
 def index_vcf(vcf: str, run: Callable, which: Callable[[str], Optional[str]]) -> None:
     """Index the VCF if bcftools or tabix is available.  The index is optional
     and nothing downstream needs it, so a failure is a warning."""
@@ -170,6 +206,7 @@ def index_vcf(vcf: str, run: Callable, which: Callable[[str], Optional[str]]) ->
 def run_bcr_abl(args: argparse.Namespace, run: Callable = subprocess.run, which=shutil.which) -> None:
     check_binary(args.binary, which)
     run_checked(run, bcr_abl_command(args))
+    ensure_compressed_vcf(args.vcf, run, which)
     index_vcf(args.vcf, run, which)
 
 

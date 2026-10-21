@@ -188,7 +188,16 @@ def parse_small_variant_vcf(path, default_caller=""):
     if not path or not os.path.exists(path):
         return columns, records, (detected_caller or "ClairS-TO")
 
-    with open_text(path) as handle:
+    actual_path = str(path)
+    if actual_path.endswith(".gz") and os.path.getsize(actual_path) == 0:
+        uncompressed = actual_path[:-3]
+        if os.path.isfile(uncompressed) and os.path.getsize(uncompressed) > 0:
+            actual_path = uncompressed
+
+    if os.path.getsize(actual_path) == 0:
+        return columns, records, (detected_caller or "ClairS-TO")
+
+    with open_text(actual_path) as handle:
         for line in handle:
             if line.startswith("##"):
                 line_lower = line.lower()
@@ -937,9 +946,15 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         _, vardict_snvs, _ = parse_small_variant_vcf(bcr_abl_vardictrust_vcf, default_caller="VarDictRust")
         other_caller_snvs.extend(vardict_snvs)
 
-    if bcr_abl_rindels_vcf and os.path.isfile(bcr_abl_rindels_vcf):
-        _, rindels_snvs, _ = parse_small_variant_vcf(bcr_abl_rindels_vcf, default_caller="Rindels")
-        other_caller_snvs.extend(rindels_snvs)
+    if bcr_abl_rindels_vcf:
+        r_vcf = bcr_abl_rindels_vcf
+        if (not os.path.isfile(r_vcf) or os.path.getsize(r_vcf) == 0) and r_vcf.endswith(".gz"):
+            uncompressed = r_vcf[:-3]
+            if os.path.isfile(uncompressed) and os.path.getsize(uncompressed) > 0:
+                r_vcf = uncompressed
+        if os.path.isfile(r_vcf):
+            _, rindels_snvs, _ = parse_small_variant_vcf(r_vcf, default_caller="Rindels")
+            other_caller_snvs.extend(rindels_snvs)
 
     if bcr_abl_bcftools_vcf and os.path.isfile(bcr_abl_bcftools_vcf):
         _, bcftools_snvs, _ = parse_small_variant_vcf(bcr_abl_bcftools_vcf, default_caller="bcftools")
