@@ -54,6 +54,25 @@ import nagini_routing
 hydra_min_version("3.3.0")
 min_version("7.8.0")
 
+# Snakemake 7, until hydra-genetics moves on. Snakemake 7 also predates PEP 701:
+# on Python 3.12+ its parser re-emits every f-string in a .smk file with spaces
+# between the tokens, so f"dir/{x}.ext" becomes " dir/ x .ext " and the run
+# fails much later as a missing input nobody can place. Stop here instead.
+# The messages use % formatting so they read correctly on that interpreter.
+import snakemake as _snakemake
+
+if int(_snakemake.__version__.split(".")[0]) != 7:
+    raise WorkflowError(
+        "nagini runs on Snakemake 7 until hydra-genetics moves; this is Snakemake %s."
+        % _snakemake.__version__
+    )
+if sys.version_info >= (3, 12):
+    raise WorkflowError(
+        "Snakemake 7 cannot parse nagini's rule files on Python %s: it mangles every "
+        "f-string in a .smk file. Run it on Python 3.11 (envs/nagini.yaml pins it)."
+        % sys.version.split()[0]
+    )
+
 
 if not workflow.overwrite_configfiles:
     sys.exit("Pass a config file with --configfile or --configfiles.")
