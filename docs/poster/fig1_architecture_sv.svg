@@ -22,7 +22,7 @@
   <!-- assay switch -->
   <rect x="640" y="26" width="320" height="52" rx="8" fill="#eef4fc" stroke="#2a78d6" stroke-width="2"/>
   <text x="658" y="47" class="mono" fill="#2a78d6" font-weight="700">assay: bcr_abl</text>
-  <text x="658" y="66" class="sub">40 jobb · 18 regler  (WGS-vägen: 70)</text>
+  <text x="658" y="66" class="sub">41 jobb · 20 regler  (WGS-vägen: 72)</text>
 
   <!-- ingest column -->
   <text x="40" y="112" class="hdr">INLÄSNING</text>
@@ -127,5 +127,5 @@
 
   <text x="40" y="716" class="hdr">SAMMA KOD I DRIFT</text>
   <text x="40" y="742" class="sub">Analysen i den här figuren är inte en avgrening av nagini — det är nagini, med en assay vald.</text>
-  <text x="40" y="762" class="sub">Samma regler, samma containrar och samma referenser som WGS- och adaptive-vägarna, på marvin och miarka.</text>
+  <text x="40" y="762" class="sub">Samma regler, samma containrar och samma referenser som WGS- och adaptive-vägarna.</text>
 </svg>
