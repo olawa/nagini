@@ -28,8 +28,8 @@ eftersom vilka två element som helst kan jämföras på en poster.
     -n
 ```
 
-Ger 40 jobb och 18 regler, varav fem BCR-ABL-specifika. Samma kommando utan
-`docs/poster/example/config.yaml` ger 70 jobb — WGS-vägen. Det är hela skillnaden,
+Ger 41 jobb och 20 regler, varav fem BCR-ABL-specifika. Samma kommando utan
+`docs/poster/example/config.yaml` ger 72 jobb — WGS-vägen. Det är hela skillnaden,
 och den ligger i `assay`-kolumnen i `units.tsv`, inte i koden.
 
 ## Vad som ska stå på postern

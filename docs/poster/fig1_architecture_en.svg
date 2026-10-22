@@ -22,7 +22,7 @@
   <!-- assay switch -->
   <rect x="640" y="26" width="320" height="52" rx="8" fill="#eef4fc" stroke="#2a78d6" stroke-width="2"/>
   <text x="658" y="47" class="mono" fill="#2a78d6" font-weight="700">assay: bcr_abl</text>
-  <text x="658" y="66" class="sub">40 jobs · 18 rules  (WGS route: 70)</text>
+  <text x="658" y="66" class="sub">41 jobs · 20 rules  (WGS route: 72)</text>
 
   <!-- ingest column -->
   <text x="40" y="112" class="hdr">INPUT</text>
@@ -127,5 +127,5 @@
 
   <text x="40" y="716" class="hdr">THE CODE THAT RUNS IN PRODUCTION</text>
   <text x="40" y="742" class="sub">The analysis in this figure is not a branch of nagini — it is nagini, with one assay selected.</text>
-  <text x="40" y="762" class="sub">Same rules, same containers and same references as the WGS and adaptive routes, on marvin and miarka.</text>
+  <text x="40" y="762" class="sub">Same rules, same containers and same references as the WGS and adaptive routes.</text>
 </svg>
