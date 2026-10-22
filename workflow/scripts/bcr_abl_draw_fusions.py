@@ -51,6 +51,28 @@ PROTEIN_DOMAIN_CANDIDATES = (
 )
 
 
+# Arriba names its database files after the assembly. The image ships both
+# builds side by side, so a candidate list ordered hg19-first silently gave an
+# hg38 run hg19 cytobands and protein domains.
+BUILD_TOKENS = {
+    "hg19": ("hg19", "grch37", "hs37d5"),
+    "hg38": ("hg38", "grch38"),
+}
+
+
+def candidates_for_build(candidates: Sequence[str], build: str) -> List[str]:
+    """The candidates named for this assembly, in their original order.
+
+    An unknown build gets none: no reference file beats one from the wrong
+    assembly, because the plot then simply omits that panel.
+    """
+
+    tokens = BUILD_TOKENS.get(str(build).strip().lower())
+    if not tokens:
+        return []
+    return [c for c in candidates if any(t in os.path.basename(c).lower() for t in tokens)]
+
+
 def is_nonempty(path: str) -> bool:
     return os.path.isfile(path) and os.path.getsize(path) > 0
 
@@ -152,8 +174,10 @@ def draw_fusion_plots(
     log(f"Running BCR-ABL1 fusion plot for {args.sample}...")
 
     draw_cmd = find_draw_command(bundled, isfile, which)
-    cytobands = first_existing(args.cytobands, CYTOBAND_CANDIDATES, isfile)
-    protein_domains = first_existing(args.protein_domains, PROTEIN_DOMAIN_CANDIDATES, isfile)
+    cytobands = first_existing(args.cytobands, candidates_for_build(CYTOBAND_CANDIDATES, args.build), isfile)
+    protein_domains = first_existing(
+        args.protein_domains, candidates_for_build(PROTEIN_DOMAIN_CANDIDATES, args.build), isfile
+    )
     log(f"Draw script: {' '.join(draw_cmd) if draw_cmd else '(none found)'}")
     log(f"Cytobands: {cytobands or '(none)'}")
     log(f"Protein domains: {protein_domains or '(none)'}")

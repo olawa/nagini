@@ -50,6 +50,27 @@ class DiscoveryTest(unittest.TestCase):
     def test_falls_back_to_the_first_existing_candidate(self):
         self.assertEqual(draw.first_existing("a", ["x", "y", "z"], isfile=lambda p: p in {"y", "z"}), "y")
 
+    def test_candidates_follow_the_genome_build(self):
+        """The Arriba image holds both builds; hg19 used to win for hg38 runs
+        only because it was listed first."""
+
+        everything = lambda p: True  # noqa: E731 -- both builds present, as in the image
+        for build, want, never in (("hg38", "hg38", "hg19"), ("hg19", "hg19", "hg38")):
+            cyto = draw.first_existing("", draw.candidates_for_build(draw.CYTOBAND_CANDIDATES, build), everything)
+            dom = draw.first_existing("", draw.candidates_for_build(draw.PROTEIN_DOMAIN_CANDIDATES, build), everything)
+            for chosen in (cyto, dom):
+                self.assertIn(want, chosen.lower(), f"{build}: {chosen}")
+                self.assertNotIn(never, chosen.lower(), f"{build}: {chosen}")
+
+    def test_unknown_build_gets_no_reference_file(self):
+        self.assertEqual(draw.candidates_for_build(draw.CYTOBAND_CANDIDATES, "t2t"), [])
+
+    def test_configured_file_still_wins_regardless_of_build(self):
+        chosen = draw.first_existing(
+            "/my/cytobands.tsv", draw.candidates_for_build(draw.CYTOBAND_CANDIDATES, "hg38"), lambda p: True
+        )
+        self.assertEqual(chosen, "/my/cytobands.tsv")
+
     def test_nothing_found_is_empty(self):
         self.assertEqual(draw.first_existing("", ["x"], isfile=lambda p: False), "")
 
