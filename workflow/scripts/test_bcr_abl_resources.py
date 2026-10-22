@@ -228,6 +228,124 @@ class ExonBedTest(unittest.TestCase):
             self.assertEqual(int(row19[2]) - int(row38[2]), offset)
             self.assertEqual(row19[3], row38[3])
 
+    # Verified against the hg19 sequence on 2026-10-22 (UCSC and Ensembl
+    # GRCh37 agree): AG immediately before each of these exon starts, ATG at
+    # the 1b and BCR exon 1 starts. The file came from pickett with 1-based
+    # starts in the 0-based column, so every exon began one base late.
+    VERIFIED_STARTS_0BASED = {
+        "ABL1_Exon1_NM_007313.2": 133589706,   # ATG
+        "ABL1_Exon2_NM_005157.6": 133729450,   # AG at 133729448-449
+        "ABL1_Exon5_NM_005157.6": 133747515,   # AG at 133747513-514; c.823
+        "BCR_Exon1_NM_004327.4": 23523147,     # ATG
+        "BCR_Exon13_NM_004327.4": 23631703,
+        "BCR_Exon14_NM_004327.4": 23632525,
+    }
+
+    def test_exon_starts_are_zero_based(self):
+        starts = {row[3]: int(row[1]) for row in read_bed(RESOURCES / "bcr_abl1_exons_hg19.bed")}
+        for name, start in self.VERIFIED_STARTS_0BASED.items():
+            self.assertEqual(starts[name], start, f"{name}: BED start must be 0-based")
+
+    def test_codon_276_phase_matches_the_exon_5_boundary(self):
+        """c.826 (first base of codon 276) is 133747518 0-based in the Branford
+        BED. Exon 4 ends at c.822, so exon 5 begins at c.823 -- three bases
+        earlier, 133747515. A one-base error in either file breaks this."""
+
+        exon5 = next(row for row in read_bed(RESOURCES / "bcr_abl1_exons_hg19.bed")
+                     if row[3] == "ABL1_Exon5_NM_005157.6")
+        d276n = next(row for row in read_bed(RESOURCES / "branford_positions_hg19.bed")
+                     if row[3] == "NM_005157.6:c.(826G>A)")
+        self.assertEqual(int(d276n[1]) - int(exon5[1]), 826 - 823)
+
+
+class ExonBoundarySequenceTest(unittest.TestCase):
+    """The check that found the one-base error, run against a local reference
+    where there is one (the workstation has pickett's hg19)."""
+
+    CANDIDATES = (Path.home() / "ref/genomes/hg19_pickett/ref_genome.fa",)
+
+    def test_exon_boundaries_sit_on_canonical_splice_sites(self):
+        fasta_path = next((p for p in self.CANDIDATES if p.is_file()), None)
+        if fasta_path is None:
+            self.skipTest("no local hg19 FASTA available")
+        try:
+            import pysam
+        except ImportError:
+            self.skipTest("pysam is required to read the reference")
+        first = {"ABL1_Exon1_NM_007313.2", "ABL1_Exon1_NM_005157.6", "BCR_Exon1_NM_004327.4"}
+        last = {"ABL1_Exon11_NM_005157.6"}
+        with pysam.FastaFile(str(fasta_path)) as fasta:
+            contig = lambda c: c if c in fasta.references else c.removeprefix("chr")  # noqa: E731
+            for chrom, start, end, name in (r[:4] for r in read_bed(RESOURCES / "bcr_abl1_exons_hg19.bed")):
+                start, end, c = int(start), int(end), contig(chrom)
+                if name not in first:
+                    self.assertEqual(fasta.fetch(c, start - 2, start).upper(), "AG", f"{name}: no acceptor before {start}")
+                if name not in last:
+                    self.assertIn(fasta.fetch(c, end, end + 2).upper(), ("GT", "GC"), f"{name}: no donor after {end}")
+
+
+class GtfAndJunctionConsistencyTest(unittest.TestCase):
+    """The GTF, the fusion counter and the features JSON all restate the exon
+    BED. They were each one base late at every exon start because each was
+    derived from it; lock them to the corrected BED instead."""
+
+    @staticmethod
+    def _gtf_exons(build):
+        rows = {}
+        for line in (RESOURCES / f"bcr_abl_{build}.gtf").read_text().splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            f = line.split("\t")
+            if f[2] == "exon":
+                rows[(f[0], int(f[4]))] = int(f[3])
+        return rows
+
+    def test_gtf_exon_starts_are_the_bed_starts_plus_one(self):
+        for build in ("hg19", "hg38"):
+            gtf = self._gtf_exons(build)
+            bed = read_bed(RESOURCES / f"bcr_abl1_exons_{build}.bed")
+            matched = 0
+            for chrom, start, end, name in (r[:4] for r in bed):
+                if (chrom, int(end)) in gtf:
+                    matched += 1
+                    self.assertEqual(gtf[(chrom, int(end))], int(start) + 1, f"{build} {name}")
+            self.assertEqual(matched, 14, build)
+
+    def test_fusion_acceptors_are_the_first_base_of_the_abl1_exon(self):
+        bed = {r[3]: (int(r[1]), int(r[2])) for r in read_bed(RESOURCES / "bcr_abl1_exons_hg19.bed")}
+        abl = fusion_counter.KNOWN_JUNCTIONS["hg19"]["abl_exons"]
+        self.assertEqual(abl["a2"], bed["ABL1_Exon2_NM_005157.6"][0] + 1)
+        self.assertEqual(abl["a3"], bed["ABL1_Exon3_NM_005157.6"][0] + 1)
+        bcr = fusion_counter.KNOWN_JUNCTIONS["hg19"]["bcr_exons"]
+        self.assertEqual(bcr["e13"], bed["BCR_Exon13_NM_004327.4"][1])
+        self.assertEqual(bcr["e14"], bed["BCR_Exon14_NM_004327.4"][1])
+
+    def test_features_json_acceptors_agree_with_the_counter(self):
+        import json
+        features = json.loads((RESOURCES / "bcr_abl_features.json").read_text())
+        expected = {
+            build: fusion_counter.KNOWN_JUNCTIONS[build]["abl_exons"] for build in ("hg19", "hg38")
+        }
+        seen = 0
+
+        def walk(node):
+            nonlocal seen
+            if isinstance(node, dict):
+                exon = node.get("abl_exon")
+                for build in ("hg19", "hg38"):
+                    key = f"abl_ref_pos_{build}"
+                    if exon in ("a2", "a3") and key in node:
+                        seen += 1
+                        self.assertEqual(node[key], expected[build][exon], f"{exon} {key}")
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        walk(features)
+        self.assertGreater(seen, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

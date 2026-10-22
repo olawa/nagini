@@ -1,5 +1,21 @@
-Copied verbatim from pickett_bcr_abl_pipeline's
-config/annotations_hg19/bcr_abl1.bed (exon boundaries for ABL1 NM_005157.6/
-NM_007313.2 and BCR NM_004327.4). Shipped here so the bcr_abl assay's
+Exon boundaries for ABL1 NM_005157.6 / NM_007313.2 and BCR NM_004327.4,
+originally copied from pickett_bcr_abl_pipeline's
+config/annotations_hg19/bcr_abl1.bed. Shipped here so the bcr_abl assay's
 reference.design_bed does not depend on pickett's checkout being present at
-runtime. Update by re-copying from pickett if that file changes.
+runtime.
+
+DO NOT re-copy from pickett without checking the start column. Pickett's file
+holds 1-based starts in BED's 0-based start column, so every exon began one
+base late. Corrected here on 2026-10-22 by subtracting 1 from every start;
+ends were already right (the end column is the same number in both
+conventions). Verified against the hg19 sequence (UCSC and Ensembl GRCh37
+agree): AG immediately before all 12 internal exon starts, GT after all 14
+non-final exon ends, and ATG at the ABL1 exon 1b and BCR exon 1 starts. ABL1
+exon 1a cannot be checked this way and was corrected by the same rule.
+
+The same +1 had spread to bcr_abl1_exons_hg38.bed (a fixed-offset copy),
+bcr_abl_hg19.gtf and bcr_abl_hg38.gtf (converted from this file), and the ABL1
+acceptors in bcr_abl_fusion_counter.py and bcr_abl_features.json. All are
+corrected and locked to this file by test_bcr_abl_resources.py.
+
+Pickett still has the error; it should be fixed there too.
