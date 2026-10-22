@@ -384,21 +384,23 @@ def build_comparison(
 
     # Look for summary xlsx if not explicitly provided
     if not summary_xlsx:
-        for candidate_name in ("nagini_summary_report.xlsx",):
-            cand = run_dir / candidate_name
-            if cand.is_file():
-                summary_xlsx = cand
+        cand_dirs = [run_dir, run_dir / "reports", run_dir / "results" / "reports"]
+        for cd in cand_dirs:
+            if not cd.is_dir():
+                continue
+            for cand_name in ("nagini_summary_report.xlsx",):
+                cand = cd / cand_name
+                if cand.is_file():
+                    summary_xlsx = cand
+                    break
+            if summary_xlsx:
                 break
-        if not summary_xlsx:
-            for p in (run_dir / "reports").glob("*_summary_report.xlsx"):
+            for p in sorted(cd.glob("*_summary_report.xlsx")):
                 if p.is_file():
                     summary_xlsx = p
                     break
-            if not summary_xlsx and (run_dir / "results" / "reports").is_dir():
-                for p in (run_dir / "results" / "reports").glob("*_summary_report.xlsx"):
-                    if p.is_file():
-                        summary_xlsx = p
-                        break
+            if summary_xlsx:
+                break
 
     overview_map: Dict[str, Dict[str, Any]] = {}
     excel_variants: List[Dict[str, Any]] = []
@@ -438,6 +440,54 @@ def build_comparison(
         barcode = ov.get("barcode") or sample_mapping.get(sid, {}).get("barcode", "")
         nagini_iso = ov.get("isoform", "")
         nagini_phase = ov.get("phasing", "")
+
+        # Fallback to direct TSV files if not already populated from Excel overview
+        sample_candidates = [f"{sid}_T", sid] if sid else []
+        if not nagini_iso:
+            for sp in sample_candidates:
+                iso_path = run_dir / "reports" / "bcr_abl" / f"{sp}.fusion_isoforms.tsv"
+                if not iso_path.is_file():
+                    iso_path = run_dir / "results" / "reports" / "bcr_abl" / f"{sp}.fusion_isoforms.tsv"
+                if iso_path.is_file():
+                    try:
+                        with open(iso_path, "r", encoding="utf-8") as isof:
+                            reader = csv.DictReader(isof, delimiter="\t")
+                            for ir in reader:
+                                if ir.get("status") == "PRIMARY":
+                                    nagini_iso = ir.get("fusion_isoform", "")
+                                    break
+                    except Exception:
+                        pass
+                if nagini_iso:
+                    break
+
+        if not nagini_phase:
+            for sp in sample_candidates:
+                ph_path = run_dir / "reports" / "bcr_abl" / f"{sp}.compound_phasing.tsv"
+                if not ph_path.is_file():
+                    ph_path = run_dir / "results" / "reports" / "bcr_abl" / f"{sp}.compound_phasing.tsv"
+                if ph_path.is_file():
+                    try:
+                        with open(ph_path, "r", encoding="utf-8") as phf:
+                            reader = csv.DictReader(phf, delimiter="\t")
+                            cis_pairs = []
+                            trans_pairs = []
+                            for pr in reader:
+                                state = pr.get("phase_state", "")
+                                m1 = pr.get("mutation_1", "")
+                                m2 = pr.get("mutation_2", "")
+                                if "CIS" in state.upper():
+                                    cis_pairs.append(f"{m1}+{m2}")
+                                elif "TRANS" in state.upper():
+                                    trans_pairs.append(f"{m1}+{m2}")
+                            if cis_pairs:
+                                nagini_phase = f"CIS ({', '.join(cis_pairs)})"
+                            elif trans_pairs:
+                                nagini_phase = f"TRANS ({', '.join(trans_pairs)})"
+                    except Exception:
+                        pass
+                if nagini_phase:
+                    break
 
         # Look up expected coordinates for this variant
         norm_v = normalize_aa(var_name)
