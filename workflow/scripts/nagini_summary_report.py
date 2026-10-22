@@ -490,7 +490,7 @@ def build_summary_report(
                             "sample": sample_name,
                             "dna_number": dna_number,
                             "type": sample_type,
-                            "gene": v.get("Gene", "") or "ABL1",
+                            "gene": v.get("Gene", "") or ("ABL1" if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("9", "abl1") else ("BCR" if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("22", "bcr") else "")),
                             "chrom": v.get("Chromosome", ""),
                             "pos": v.get("Position", ""),
                             "ref": v.get("Reference", ""),

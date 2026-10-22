@@ -225,6 +225,14 @@ def parse_small_variant_vcf(path, default_caller=""):
                 continue
             chrom, pos, _record_id, ref, alt, qual, filter_value, info_text = fields[:8]
             info = parse_info(info_text)
+
+            # Skip structural variants, breakends, and symbolic non-SNV/indel alleles
+            if (
+                info.get("SVTYPE")
+                or any(b in alt for b in ("[", "]", "<", ">"))
+            ):
+                continue
+
             sample_values = {}
             if len(fields) > 9:
                 sample_values = dict(zip(fields[8].split(":"), fields[9].split(":")))
@@ -290,9 +298,9 @@ def parse_small_variant_vcf(path, default_caller=""):
             gene_name = annotation.get("SYMBOL", annotation.get("Gene_Name", ""))
             if not gene_name:
                 c_clean = str(chrom).removeprefix("chr").lower()
-                if c_clean in ("9", "abl1") or "abl" in path_str:
+                if c_clean in ("9", "abl1"):
                     gene_name = "ABL1"
-                elif c_clean in ("22", "bcr") or "bcr" in path_str:
+                elif c_clean in ("22", "bcr"):
                     gene_name = "BCR"
 
             records.append({

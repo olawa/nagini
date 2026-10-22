@@ -149,7 +149,7 @@ class BcrAblTest(unittest.TestCase):
         self.args = argparse.Namespace(
             binary="rindels", bam="a.bam", ref="r.fa", vcf=str(root / "s.rindels.vcf.gz"),
             haplotypes=str(root / "s.haplotypes.tsv"), genome="hg19", threads=2,
-            extra="--ont --amplicon --bcr-abl",
+            extra="--ont --amplicon --no-sv", bed="",
         )
 
     def tearDown(self):
@@ -158,8 +158,17 @@ class BcrAblTest(unittest.TestCase):
     def test_command(self):
         self.assertEqual(
             rr.bcr_abl_command(self.args),
-            ["rindels", "-b", "a.bam", "-r", "r.fa", "-o", self.args.vcf, "--ont", "--amplicon", "--bcr-abl",
+            ["rindels", "-b", "a.bam", "-r", "r.fa", "-o", self.args.vcf, "--ont", "--amplicon", "--no-sv",
              "--bcr-abl-genome", "hg19", "--write-haplotypes", self.args.haplotypes, "-t", "2"],
+        )
+
+    def test_command_with_bed(self):
+        self.args.bed = "targets.bed"
+        self.assertEqual(
+            rr.bcr_abl_command(self.args),
+            ["rindels", "-b", "a.bam", "-r", "r.fa", "-o", self.args.vcf, "--bed", "targets.bed",
+             "--ont", "--amplicon", "--no-sv", "--bcr-abl-genome", "hg19",
+             "--write-haplotypes", self.args.haplotypes, "-t", "2"],
         )
 
     def test_vcf_is_indexed_with_bcftools_then_tabix(self):

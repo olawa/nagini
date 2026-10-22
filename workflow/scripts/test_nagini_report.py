@@ -152,6 +152,25 @@ class VcfParsingTest(unittest.TestCase):
         self.assertEqual(REPORT.parse_small_variant_vcf("snv_indels/mutect2_postprocess/s.vcf.gz")[2], "Mutect2")
         self.assertEqual(REPORT.parse_small_variant_vcf("snv_indels/clairs_to_postprocess/s.vcf.gz")[2], "ClairS-TO")
 
+    def test_structural_variants_and_breakends_are_filtered(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vcf = Path(tmpdir) / "bcr_abl.vcf"
+            vcf.write_text(
+                "##fileformat=VCFv4.2\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n"
+                "chr9\t133748391\t.\tT\tC\t60\tPASS\tDP=100\tGT:AF:DP:AD\t0/1:0.95:100:5,95\n"
+                "chr1\t10404720\t.\tC\t[chr22:23631746[C\t40\tPASS\tSVTYPE=BND\tGT:DP\t0/1:17\n"
+                "chr1\t28452105\t.\tT\tT]chr22:23631746]\t40\tPASS\t.\tGT:DP\t0/1:123\n"
+                "chr9\t133729451\t.\tC\t<DEL>\t50\tPASS\tSVTYPE=DEL\tGT:DP\t0/1:50\n"
+            )
+            _, records, _ = REPORT.parse_small_variant_vcf(vcf)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["Chromosome"], "chr9")
+            self.assertEqual(records[0]["Position"], 133748391)
+            self.assertEqual(records[0]["Reference"], "T")
+            self.assertEqual(records[0]["Alternate"], "C")
+            self.assertEqual(records[0]["Gene"], "ABL1")
+
 
 @unittest.skipIf(REPORT is None, "xlsxwriter not available")
 class WriterTest(unittest.TestCase):

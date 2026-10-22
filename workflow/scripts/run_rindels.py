@@ -141,6 +141,8 @@ def run_ideogram(args: argparse.Namespace, run: Callable = subprocess.run, which
 # ---------------------------------------------------------------------------
 def bcr_abl_command(args: argparse.Namespace) -> List[str]:
     command = [args.binary, "-b", args.bam, "-r", args.ref, "-o", args.vcf]
+    if getattr(args, "bed", None):
+        command += ["--bed", args.bed]
     command += shlex.split(args.extra or "")
     command += [
         "--bcr-abl-genome", args.genome,
@@ -251,6 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     bcr.add_argument("--vcf", required=True)
     bcr.add_argument("--haplotypes", required=True)
     bcr.add_argument("--genome", required=True)
+    bcr.add_argument("--bed", default="", help="Target BED file (e.g. BCR and ABL1 exons)")
     bcr.add_argument("--threads", type=int, default=1)
     return parser
 

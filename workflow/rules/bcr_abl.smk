@@ -342,13 +342,14 @@ rule bcr_abl_rindels:
         bam="alignment/merged/{sample}_{type}.bam",
         bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
+        bed=lambda wildcards: _bcr_abl_exons_bed(),
     output:
         vcf="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz",
         haplotypes="snv_indels/rindels/{sample}_{type}.haplotypes.tsv",
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         genome=lambda wildcards: "hg19" if "19" in str(config.get("reference_build", "hg19")).lower() else "hg38",
-        extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --bcr-abl"),
+        extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --no-sv"),
     log:
         "logs/bcr_abl_rindels/{sample}_{type}.log",
     benchmark:
@@ -373,6 +374,7 @@ rule bcr_abl_rindels:
             --binary={params.binary:q} \
             --bam {input.bam} \
             --ref {input.ref} \
+            --bed {input.bed} \
             --vcf {output.vcf} \
             --haplotypes {output.haplotypes} \
             --genome {params.genome} \
