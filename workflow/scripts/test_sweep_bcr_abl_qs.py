@@ -7,9 +7,18 @@ from unittest.mock import patch
 
 import pysam
 
-import sweep_bcr_abl_qs as QS
+try:
+    import matplotlib  # noqa: F401  (the sweep and the plotter need it)
+except ImportError:
+    matplotlib = None
+
+if matplotlib is not None:
+    import sweep_bcr_abl_qs as QS
+else:
+    QS = None
 
 
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
 class TestSweepBcrAblQs(unittest.TestCase):
     def test_load_branford_bed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
