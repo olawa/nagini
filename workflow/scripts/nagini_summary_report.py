@@ -753,11 +753,10 @@ def build_summary_report(
     write_xlsx(output_path, sheets)
 
 
-    # Also create unique, analysis-folder named copies so multiple summaries can be opened in Excel simultaneously
+    # Also create unique, analysis-folder named copy so multiple summaries can be opened in Excel simultaneously
     clean_id = clean_analysis_name if (clean_analysis_name and clean_analysis_name.lower() not in {"run", "default", "reports"}) else re.sub(r"[^\w\.-]", "_", display_id)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # Target directories to place named copies in: both the local reports dir and results/reports
+    # Target directories to place named copy in: both the local reports dir and results/reports
     target_dirs = [out_dir]
     results_reports = os.path.join(analysis_dir_abs, "results", "reports")
     if os.path.abspath(results_reports) != os.path.abspath(out_dir):
@@ -766,20 +765,10 @@ def build_summary_report(
     for target_dir in target_dirs:
         try:
             os.makedirs(target_dir, exist_ok=True)
-            # Create both {analysis_folder}_summary_report.xlsx and {analysis_folder}_nagini_summary_report.xlsx
-            for name_pattern in (
-                f"{clean_id}_summary_report.xlsx",
-                f"{clean_id}_nagini_summary_report.xlsx",
-            ):
-                named_file = os.path.join(target_dir, name_pattern)
-                if os.path.abspath(named_file) != os.path.abspath(output_path):
-                    shutil.copyfile(output_path, named_file)
-                    sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
-
-            # Timestamped copy: e.g. {analysis_folder}_summary_20260902_1128.xlsx
-            time_file = os.path.join(target_dir, f"{clean_id}_summary_{timestamp}.xlsx")
-            if os.path.abspath(time_file) != os.path.abspath(output_path):
-                shutil.copyfile(output_path, time_file)
+            named_file = os.path.join(target_dir, f"{clean_id}_summary_report.xlsx")
+            if os.path.abspath(named_file) != os.path.abspath(output_path):
+                shutil.copyfile(output_path, named_file)
+                sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
         except Exception as exc:
             sys.stderr.write(f"Warning: could not create analysis-named summary copy in {target_dir}: {exc}\n")
 

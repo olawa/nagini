@@ -64,7 +64,7 @@ use rule minimap2_align from alignment as alignment_minimap2_fastq_align with:
         query=lambda wildcards: get_fastq_for_alignment(wildcards),
         target=lambda wildcards: get_reference_target_for_unit(wildcards),
     output:
-        bam="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_fastq.bam",
+        bam=temp("alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_fastq.bam"),
     params:
         extra=lambda wildcards: " ".join(
             part
@@ -103,7 +103,7 @@ use rule minimap2_align from alignment as alignment_minimap2_ubam_align with:
         query=lambda wildcards: get_unmapped_bam_for_alignment(wildcards),
         target=lambda wildcards: get_reference_target_for_unit(wildcards),
     output:
-        bam="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_ubam.bam",
+        bam=temp("alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_ubam.bam"),
     params:
         extra=lambda wildcards: " ".join(
             part
@@ -200,7 +200,7 @@ use rule sniffles2_call from cnv_sv as cnv_sv_sniffles2_call with:
         bai="alignment/merged/{sample}_{type}.bam.bai",
         ref=config["reference"]["fasta"],
     output:
-        vcf="cnv_sv/sniffles2_call/{sample}_{type}.vcf",
+        vcf=temp("cnv_sv/sniffles2_call/{sample}_{type}.vcf"),
         snf="cnv_sv/sniffles2_call/{sample}_{type}.snf",
 
 
@@ -270,7 +270,7 @@ use rule savana_ont_to from cnv_sv as cnv_sv_savana_ont_to with:
         ref=config["reference"]["fasta"],
         fai=config["reference"]["fai"],
     output:
-        vcf_somatic="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf",
+        vcf_somatic=temp("cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf"),
         vcf_classified="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.vcf",
         vcf_breakpoints="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.sv_breakpoints.vcf",
         fa="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.inserted_sequences.fa",

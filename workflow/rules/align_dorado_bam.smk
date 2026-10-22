@@ -142,11 +142,11 @@ rule finalize_dorado_bam_alignment:
             "{sample}_{type}_{processing_unit}_{barcode}.unsorted.bam"
         ),
     output:
-        bam=(
+        bam=temp(
             "alignment/units/"
             "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam"
         ),
-        bai=(
+        bai=temp(
             "alignment/units/"
             "{sample}_{type}_{processing_unit}_{barcode}.from_dorado.bam.bai"
         ),

@@ -9,8 +9,8 @@ rule stage_aligned_bam:
     input:
         bam=lambda wildcards: get_unit_input(wildcards, "bam"),
     output:
-        bam="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam",
-        bai="alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam.bai",
+        bam=temp("alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam"),
+        bai=temp("alignment/units/{sample}_{type}_{processing_unit}_{barcode}.from_aligned.bam.bai"),
     params:
         extra=config.get("stage_aligned_bam", {}).get("extra", ""),
         # GATK identifies the sample from the BAM read-group SM tag.  Existing
