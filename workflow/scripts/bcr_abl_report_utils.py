@@ -114,17 +114,34 @@ def panel_assessment(all_sites_rows):
     return {"state": state, "positions": len(by_pos), "callable_positions": callable_count, "expected_positions": expected}
 
 
-def format_vaf(val) -> str:
-    """Format VAF consistently as a percentage string (e.g. '94.60%')."""
+VAF_SCALES = ("fraction", "percent")
+
+
+def format_vaf(val, *, scale: str) -> str:
+    """Format a VAF as a percentage string, e.g. '0.65%'.
+
+    ``scale`` says what the number is, because the value cannot: 0.652 is
+    65.2 % as a fraction and 0.652 % as a percentage. Guessing from the value
+    (anything up to 1 is a fraction) showed every Branford call at or below
+    1 % a hundred times too high -- the caller writes ``vaf_percent``.
+
+    VCF callers report fractions (AF, AD ratio, VD/DP); the Branford caller
+    reports percentages. A value that is already a percentage string is
+    normalised and never rescaled, so formatting a record twice is harmless:
+    the SNV list is formatted in place before the BCR-ABL1 sheet reads it.
+    """
+    if scale not in VAF_SCALES:
+        raise ValueError(f"scale must be one of {VAF_SCALES}, not {scale!r}")
     if val is None or val == "" or str(val).strip() in (".", "-"):
         return "-"
-    raw_str = str(val).rstrip("%").strip()
+    text = str(val).strip()
+    already_percent = text.endswith("%")
     try:
-        f = float(raw_str.split(",")[0])
-        pct = f * 100.0 if f <= 1.0 else f
-        return f"{pct:.2f}%"
+        number = float(text.rstrip("%").strip().split(",")[0])
     except (ValueError, TypeError):
         return str(val)
+    pct = number if already_percent or scale == "percent" else number * 100.0
+    return f"{pct:.2f}%"
 
 
 def calculate_bcr_abl_depth_cutoff(
