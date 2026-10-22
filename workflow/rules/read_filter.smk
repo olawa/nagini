@@ -34,7 +34,7 @@ def get_nanostream_binary():
         resolved = shutil.which(configured)
         if resolved:
             return resolved
-        raise WorkflowError(f"read_filter.binary={configured!r} is not on PATH.")
+        raise WorkflowError(f"read_filter.binary={repr(configured)} is not on PATH.")
 
     for name in ("nanostream", "nanofilter"):
         resolved = shutil.which(name)
