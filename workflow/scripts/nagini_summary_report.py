@@ -7,9 +7,23 @@ import shutil
 import sys
 
 try:
-    from bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+    from bcr_abl_report_utils import (
+        active_resistance_mutations,
+        calculate_bcr_abl_depth_cutoff,
+        format_vaf,
+        is_resistance_associated,
+        panel_assessment,
+        summarize_phasing,
+    )
 except ImportError:
-    from .bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+    from .bcr_abl_report_utils import (
+        active_resistance_mutations,
+        calculate_bcr_abl_depth_cutoff,
+        format_vaf,
+        is_resistance_associated,
+        panel_assessment,
+        summarize_phasing,
+    )
 from datetime import datetime, timezone
 
 from pathlib import Path
@@ -110,6 +124,8 @@ def build_summary_report(
     reference_build: str,
     sample_records: List[Dict[str, Any]],
     design_bed: str = "",
+    bcr_abl_min_relative_depth: float = 0.10,
+    bcr_abl_min_depth: float = 50.0,
 ) -> None:
     """Build the multi-sample workbook."""
     sheets = []
@@ -331,6 +347,7 @@ def build_summary_report(
 
         # Target / Kinase coverage
         kd_depth_str = "N/A"
+        mean_target_dp = 0.0
         if all_sites_rows:
             site_depths = {}
             for row in all_sites_rows:
@@ -341,13 +358,14 @@ def build_summary_report(
                     except (ValueError, TypeError):
                         pass
             if site_depths:
-                kd_depth_str = f"{sum(site_depths.values()) / len(site_depths):.1f}x"
+                mean_target_dp = sum(site_depths.values()) / len(site_depths)
+                kd_depth_str = f"{mean_target_dp:.1f}x"
         elif exon_rows:
             abl_exons = [r for r in exon_rows if "ABL1" in str(r.get("exon", "")).upper()]
             tot_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in abl_exons)
             if tot_len > 0:
-                avg_d = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exons) / tot_len
-                kd_depth_str = f"{avg_d:.1f}x"
+                mean_target_dp = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exons) / tot_len
+                kd_depth_str = f"{mean_target_dp:.1f}x"
         elif not is_bcr_abl and target_cov_path and os.path.exists(target_cov_path):
             # mosdepth --by writes both "total" (whole reference) and
             # "total_region" (inside the BED). Reading the wrong one reported
@@ -441,7 +459,7 @@ def build_summary_report(
                         "pos": r.get("pos", ""),
                         "ref": r.get("ref", ""),
                         "alt": r.get("alt", ""),
-                        "vaf": f"{float(r.get('vaf_percent', r.get('vaf', 0.0))):.2f}%",
+                        "vaf": format_vaf(r.get('vaf_percent', r.get('vaf', 0.0))),
                         "depth": r.get("depth", ""),
                         "alt_reads": r.get("ad_alt", r.get("alt_reads", "")),
                         "consequence": r.get("mutation", ""),
@@ -450,10 +468,22 @@ def build_summary_report(
                         "caller": "Branford",
                     })
 
+        min_depth_cutoff = 0.0
+        if is_bcr_abl and mean_target_dp > 0:
+            min_depth_cutoff = calculate_bcr_abl_depth_cutoff(
+                mean_target_dp, bcr_abl_min_relative_depth, bcr_abl_min_depth
+            )
+
         if snv_vcf_path and os.path.exists(snv_vcf_path):
             _, snvs, caller_name = parse_small_variant_vcf(snv_vcf_path)
             for v in snvs:
                 if v.get("Filter") in {"PASS", "."}:
+                    try:
+                        v_dp = float(str(v.get("Depth", 0)).split(",")[0])
+                    except (ValueError, TypeError):
+                        v_dp = 0.0
+                    if is_bcr_abl and min_depth_cutoff > 0 and v_dp < min_depth_cutoff:
+                        continue
                     all_pass_variants.append({
                         "sample": sample_name,
                         "dna_number": dna_number,
@@ -463,7 +493,7 @@ def build_summary_report(
                         "pos": v.get("Position", ""),
                         "ref": v.get("Reference", ""),
                         "alt": v.get("Alternate", ""),
-                        "vaf": v.get("VAF", ""),
+                        "vaf": format_vaf(v.get("VAF", "")),
                         "depth": v.get("Depth", ""),
                         "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
                         "consequence": v.get("Consequence", ""),
@@ -486,6 +516,12 @@ def build_summary_report(
                 _, c_snvs, c_name = parse_small_variant_vcf(c_vcf, default_caller=default_caller_name)
                 for v in c_snvs:
                     if v.get("Filter") in {"PASS", "."}:
+                        try:
+                            v_dp = float(str(v.get("Depth", 0)).split(",")[0])
+                        except (ValueError, TypeError):
+                            v_dp = 0.0
+                        if is_bcr_abl and min_depth_cutoff > 0 and v_dp < min_depth_cutoff:
+                            continue
                         all_pass_variants.append({
                             "sample": sample_name,
                             "dna_number": dna_number,
@@ -495,7 +531,7 @@ def build_summary_report(
                             "pos": v.get("Position", ""),
                             "ref": v.get("Reference", ""),
                             "alt": v.get("Alternate", ""),
-                            "vaf": v.get("VAF", ""),
+                            "vaf": format_vaf(v.get("VAF", "")),
                             "depth": v.get("Depth", ""),
                             "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
                             "consequence": v.get("Consequence", ""),
@@ -825,12 +861,21 @@ def run_from_snakemake(snakemake):
         })
 
 
+    bcr_abl_min_relative_depth = float(
+        getattr(snakemake.params, "bcr_abl_min_relative_depth", 0.10) or 0.10
+    )
+    bcr_abl_min_depth = float(
+        getattr(snakemake.params, "bcr_abl_min_depth", 50.0) or 50.0
+    )
+
     build_summary_report(
         output_path=snakemake.output.xlsx,
         sequence_id=seq_id,
         reference_build=ref_build,
         sample_records=sample_records,
         design_bed=str(getattr(snakemake.params, "design_bed", "") or ""),
+        bcr_abl_min_relative_depth=bcr_abl_min_relative_depth,
+        bcr_abl_min_depth=bcr_abl_min_depth,
     )
 
 

@@ -18,9 +18,23 @@ from datetime import datetime, timezone
 import sys
 
 try:
-    from bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+    from bcr_abl_report_utils import (
+        active_resistance_mutations,
+        calculate_bcr_abl_depth_cutoff,
+        format_vaf,
+        is_resistance_associated,
+        panel_assessment,
+        summarize_phasing,
+    )
 except ImportError:
-    from .bcr_abl_report_utils import active_resistance_mutations, is_resistance_associated, panel_assessment, summarize_phasing
+    from .bcr_abl_report_utils import (
+        active_resistance_mutations,
+        calculate_bcr_abl_depth_cutoff,
+        format_vaf,
+        is_resistance_associated,
+        panel_assessment,
+        summarize_phasing,
+    )
 
 try:
     import xlsxwriter
@@ -785,13 +799,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                         c_alt = str(cs.get("Alternate", "")).upper()
                         if not c_alt or c_alt == m_alt or m_alt in c_alt:
                             c_caller = cs.get("Caller", "Caller")
-                            raw_vaf = cs.get("VAF", "")
-                            try:
-                                v_float = float(raw_vaf)
-                                v_pct = v_float * 100.0 if v_float <= 1.0 else v_float
-                                v_display = f"{v_pct:.1f}%"
-                            except (ValueError, TypeError):
-                                v_display = str(raw_vaf)
+                            v_display = format_vaf(cs.get("VAF", ""))
                             supporting.append(f"{c_caller} ({v_display})")
                 if supporting:
                     support_display = ", ".join(supporting)
@@ -852,7 +860,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                     (int(v.get("Position", 0)), 0),
                     (v.get("Reference", ""), 0),
                     (v.get("Alternate", ""), 0),
-                    (v.get("VAF", ""), 0),
+                    (format_vaf(v.get("VAF", "")), 0),
                     (v.get("Depth", ""), 0),
                     (v.get("Allele depth", ""), 0),
                     (v.get("Filter", ""), 0),
@@ -945,7 +953,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     cnv_ideogram="",
                     bcr_abl_vardictrust_vcf="",
                     bcr_abl_rindels_vcf="",
-                    bcr_abl_bcftools_vcf=""):
+                    bcr_abl_bcftools_vcf="",
+                    bcr_abl_min_relative_depth=0.10,
+                    bcr_abl_min_depth=50.0):
 
     snv_columns, snvs, detected_caller = parse_small_variant_vcf(snv_vcf, default_caller=caller)
 
@@ -1022,18 +1032,74 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     bcr_abl_phasing_rows = parse_bcr_abl_tsv(bcr_abl_phasing)
     bcr_abl_exon_rows = parse_bcr_abl_tsv(bcr_abl_exon_coverage)
     bcr_abl_all_sites_rows = parse_bcr_abl_tsv(bcr_abl_all_sites)
-    has_bcr_abl = bool(bcr_abl_fusion_rows or bcr_abl_mutation_rows or bcr_abl_phasing_rows or bcr_abl_exon_rows or bcr_abl_all_sites_rows or any(os.path.exists(p) for p in (bcr_abl_fusion, bcr_abl_mutations, bcr_abl_phasing, bcr_abl_exon_coverage, bcr_abl_all_sites) if p))
+    has_bcr_abl = bool(
+        bcr_abl_fusion_rows
+        or bcr_abl_mutation_rows
+        or bcr_abl_phasing_rows
+        or bcr_abl_exon_rows
+        or bcr_abl_all_sites_rows
+        or any(
+            os.path.exists(p)
+            for p in (
+                bcr_abl_fusion,
+                bcr_abl_mutations,
+                bcr_abl_phasing,
+                bcr_abl_exon_coverage,
+                bcr_abl_all_sites,
+            )
+            if p
+        )
+    )
+
+    kd_depth_label = "Mean depth at unique ABL1 resistance panel sites"
+    kd_val = 0.0
+    if bcr_abl_all_sites_rows:
+        depths = {}
+        for row in bcr_abl_all_sites_rows:
+            pos = str(row.get("pos", row.get("position", "")))
+            if pos:
+                try:
+                    depths.setdefault(
+                        f"{row.get('chrom', '')}:{pos}",
+                        float(row.get("depth", row.get("dp", 0)) or 0),
+                    )
+                except (TypeError, ValueError):
+                    pass
+        kd_val = sum(depths.values()) / len(depths) if depths else 0.0
+    elif bcr_abl_exon_rows:
+        abl_exon_rows = [r for r in bcr_abl_exon_rows if "ABL1" in str(r.get("exon", "")).upper()]
+        kd_depth_label = "Mean depth across ABL1 exons (panel-site depth unavailable)"
+        total_exon_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in abl_exon_rows)
+        if total_exon_len > 0:
+            avg_exon_cov = sum(
+                float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0)))
+                for r in abl_exon_rows
+            ) / total_exon_len
+            kd_val = avg_exon_cov
+
+    min_depth_cutoff = 0.0
+    if has_bcr_abl and kd_val > 0:
+        min_depth_cutoff = calculate_bcr_abl_depth_cutoff(
+            kd_val, bcr_abl_min_relative_depth, bcr_abl_min_depth
+        )
+
+    if has_bcr_abl and min_depth_cutoff > 0:
+        def _passes_depth(var_record):
+            try:
+                dp = float(str(var_record.get("Depth", 0)).split(",")[0])
+            except (ValueError, TypeError):
+                dp = 0.0
+            return dp >= min_depth_cutoff
+
+        other_caller_snvs = [v for v in other_caller_snvs if _passes_depth(v)]
+        snvs = [v for v in snvs if _passes_depth(v)]
 
     branford_snvs = []
     if has_bcr_abl and bcr_abl_mutation_rows:
         for r in bcr_abl_mutation_rows:
             st = str(r.get("status", "")).upper()
             if st in ("DETECTED", "SUBCLONAL") or float(r.get("vaf_percent", 0.0) or 0.0) > 0:
-                try:
-                    vaf_f = float(r.get("vaf_percent", 0.0)) / 100.0
-                    vaf_str = f"{vaf_f:.3f}"
-                except (ValueError, TypeError):
-                    vaf_str = str(r.get("vaf_percent", ""))
+                vaf_str = format_vaf(r.get("vaf_percent", ""))
                 branford_snvs.append({
                     "Caller": "Branford Pileup Caller",
                     "Chromosome": str(r.get("chrom", "chr9")),
@@ -1056,6 +1122,12 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     "ClinVar_Disease": "Chronic Myeloid Leukemia",
                     "ClinVar_Review": "",
                 })
+
+    if has_bcr_abl:
+        for v in other_caller_snvs:
+            v["VAF"] = format_vaf(v.get("VAF", ""))
+        for v in snvs:
+            v["VAF"] = format_vaf(v.get("VAF", ""))
 
     all_snvs = list(snvs) + branford_snvs + other_caller_snvs
     if all_snvs:
@@ -1219,31 +1291,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         target_enrich_str = "N/A"
         enrich_status, enrich_style = ("INFO", 0)
 
-    kd_depth_label = "Mean depth at unique ABL1 resistance panel sites"
-    if bcr_abl_all_sites_rows:
-        depths = {}
-        for row in bcr_abl_all_sites_rows:
-            pos = str(row.get("pos", row.get("position", "")))
-            if pos:
-                try:
-                    depths.setdefault(f"{row.get('chrom', '')}:{pos}", float(row.get("depth", row.get("dp", 0)) or 0))
-                except (TypeError, ValueError):
-                    pass
-        kd_val = sum(depths.values()) / len(depths) if depths else 0
-        kd_depth_str = f"{kd_val:.1f}x" if depths else "N/A"
-        kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4)) if depths else ("INFO", 0)
-    elif bcr_abl_exon_rows:
-        abl_exon_rows = [r for r in bcr_abl_exon_rows if "ABL1" in str(r.get("exon", "")).upper()]
-        kd_depth_label = "Mean depth across ABL1 exons (panel-site depth unavailable)"
-        total_exon_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in abl_exon_rows)
-        if total_exon_len > 0:
-            avg_exon_cov = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exon_rows) / total_exon_len
-            kd_depth_str = f"{avg_exon_cov:.1f}x"
-            kd_val = avg_exon_cov
-            kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
-        else:
-            kd_depth_str = "N/A"
-            kd_status, kd_style = ("INFO", 0)
+    if kd_val > 0:
+        kd_depth_str = f"{kd_val:.1f}x"
+        kd_status, kd_style = ("PASS", 5) if kd_val >= 100.0 else (("BORDERLINE", 6) if kd_val >= 20.0 else ("LOW", 4))
     else:
         kd_depth_str = "N/A"
         kd_status, kd_style = ("INFO", 0)
@@ -1674,6 +1724,12 @@ def run_from_snakemake(snakemake):
         bcr_abl_rindels_vcf=_first_or_str(getattr(snakemake.input, "bcr_abl_rindels_vcf", "")),
         bcr_abl_bcftools_vcf=_first_or_str(getattr(snakemake.input, "bcr_abl_bcftools_vcf", "")),
         cnv_tsv=_first_or_str(getattr(snakemake.input, "cnv", "")),
+        bcr_abl_min_relative_depth=float(
+            getattr(snakemake.params, "bcr_abl_min_relative_depth", 0.10) or 0.10
+        ),
+        bcr_abl_min_depth=float(
+            getattr(snakemake.params, "bcr_abl_min_depth", 50.0) or 50.0
+        ),
     )
 
 
@@ -1711,6 +1767,8 @@ def main():
     parser.add_argument("--bcr-abl-rindels-vcf", default="")
     parser.add_argument("--bcr-abl-bcftools-vcf", default="")
     parser.add_argument("--cnv-tsv", default="")
+    parser.add_argument("--bcr-abl-min-relative-depth", type=float, default=0.10)
+    parser.add_argument("--bcr-abl-min-depth", type=float, default=50.0)
     args = parser.parse_args()
     generate_report(
         args.output, args.sample, args.sample_type, args.reference_build, args.annotation,
@@ -1734,6 +1792,8 @@ def main():
         rindels_translocations_tsv=args.rindels_translocations_tsv,
         savana_sv_tsv=args.savana_sv_tsv,
         savana_translocations_tsv=args.savana_translocations_tsv,
+        bcr_abl_min_relative_depth=args.bcr_abl_min_relative_depth,
+        bcr_abl_min_depth=args.bcr_abl_min_depth,
     )
 
 

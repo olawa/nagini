@@ -113,3 +113,30 @@ def panel_assessment(all_sites_rows):
     state = "ASSESSED" if complete else ("INCOMPLETE" if callable_count < len(by_pos) else "COMPLETENESS_UNVERIFIED")
     return {"state": state, "positions": len(by_pos), "callable_positions": callable_count, "expected_positions": expected}
 
+
+def format_vaf(val) -> str:
+    """Format VAF consistently as a percentage string (e.g. '94.60%')."""
+    if val is None or val == "" or str(val).strip() in (".", "-"):
+        return "-"
+    raw_str = str(val).rstrip("%").strip()
+    try:
+        f = float(raw_str.split(",")[0])
+        pct = f * 100.0 if f <= 1.0 else f
+        return f"{pct:.2f}%"
+    except (ValueError, TypeError):
+        return str(val)
+
+
+def calculate_bcr_abl_depth_cutoff(
+    mean_target_dp: float,
+    min_relative_depth: float = 0.10,
+    min_depth_floor: float = 50.0,
+) -> float:
+    """Calculate minimum variant depth cutoff based on mean amplicon/target depth."""
+    if mean_target_dp <= 0:
+        return 0.0
+    rel_cutoff = mean_target_dp * float(min_relative_depth)
+    floor = min(float(min_depth_floor), mean_target_dp * 0.5)
+    return max(floor, rel_cutoff)
+
+

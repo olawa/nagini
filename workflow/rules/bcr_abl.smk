@@ -349,7 +349,10 @@ rule bcr_abl_rindels:
     params:
         binary=lambda wildcards: _find_rindels_binary(),
         genome=lambda wildcards: "hg19" if "19" in str(config.get("reference_build", "hg19")).lower() else "hg38",
-        extra=lambda wildcards: config.get("rindels", {}).get("extra", "--ont --amplicon --no-sv"),
+        extra=lambda wildcards: config.get("bcr_abl", {}).get(
+            "rindels_extra",
+            config.get("rindels", {}).get("extra", "--ont --amplicon --no-sv --min-depth 50"),
+        ),
     log:
         "logs/bcr_abl_rindels/{sample}_{type}.log",
     benchmark:

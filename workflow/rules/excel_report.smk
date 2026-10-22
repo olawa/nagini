@@ -45,6 +45,8 @@ rule nagini_excel_report:
         clairs_to_platform=lambda wildcards: config.get("clairs_to_call", {}).get("platform", ""),
         barcode=get_sample_barcode_name,
         dna_number=lambda wildcards: get_sample_dna_number(wildcards.sample),
+        bcr_abl_min_relative_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_relative_depth", 0.10),
+        bcr_abl_min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50.0),
     log:
         "logs/nagini_excel_report/{sample}_{type}.log",
     benchmark:
@@ -274,6 +276,8 @@ rule nagini_summary_excel_report:
         bcr_abl_vardictrust_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_vardictrust_vcfs"),
         bcr_abl_rindels_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_rindels_vcfs"),
         bcr_abl_bcftools_vcf_paths=lambda wildcards: get_summary_report_paths("bcr_abl_bcftools_vcfs"),
+        bcr_abl_min_relative_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_relative_depth", 0.10),
+        bcr_abl_min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50.0),
     log:
         "logs/nagini_summary_excel_report/summary.log",
     benchmark:

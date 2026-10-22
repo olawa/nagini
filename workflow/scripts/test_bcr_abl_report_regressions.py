@@ -165,6 +165,66 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertIn("bcftools", pass_var_txt)
             self.assertIn("Rindels", pass_var_txt)
 
+    def test_low_depth_caller_filtering_and_vaf_formatting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            muts = self._write(
+                root, "mut.tsv",
+                "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\tref\talt\tdepth\tad_alt\tvaf_percent\n"
+                "M351T\tp.Met351Thr\tMISSENSE\tCURATED_RESISTANCE\tDETECTED\tchr9\t133748391\tT\tC\t10000\t9500\t95.00\n"
+            )
+            sites = self._write(
+                root, "sites.tsv",
+                "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\n"
+                "chr9\t133748391\tPASS\t10000\tNONE\t1\n"
+            )
+            rindels = self._write(
+                root, "rindels.vcf",
+                "##fileformat=VCFv4.2\n"
+                "##source=rindels\n"
+                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n"
+                "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Depth\">\n"
+                "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">\n"
+                "##FORMAT=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
+                "chr9\t133748391\t.\tT\tC\t100\tPASS\t.\tGT:DP:AD:AF\t0/1:10000:500,9500:0.950\n"
+                "chr9\t133755936\t.\tC\tCT\t20\tPASS\t.\tGT:DP:AD:AF\t0/1:20:4,16:0.800\n"
+            )
+
+            # Test individual report filters out the 20x call (cutoff is 1000x at 10000x mean depth)
+            out_sample = root / "sample.xlsx"
+            report.generate_report(
+                str(out_sample), "S1", "T", "hg19", "", "", "", "", "", "", "",
+                bcr_abl_mutations=muts,
+                bcr_abl_all_sites=sites,
+                bcr_abl_rindels_vcf=rindels,
+                bcr_abl_min_relative_depth=0.10,
+                bcr_abl_min_depth=50.0,
+            )
+            self.assertTrue(out_sample.exists())
+            snv_txt = self._sheet_text(out_sample, "SNVs and indels")
+            self.assertIn("133748391", snv_txt)
+            self.assertNotIn("133755936", snv_txt)
+            self.assertIn("95.00%", snv_txt)
+
+            # Test summary report also filters out 20x call and formats VAF as %
+            out_summary = root / "summary.xlsx"
+            summary.build_summary_report(
+                str(out_summary), "RUN_01", "hg19", [{
+                    "sample": "S1", "type": "T", "assay": "bcr_abl",
+                    "bcr_abl_mutations": muts,
+                    "bcr_abl_all_sites": sites,
+                    "bcr_abl_rindels_vcf": rindels,
+                }],
+                bcr_abl_min_relative_depth=0.10,
+                bcr_abl_min_depth=50.0,
+            )
+            self.assertTrue(out_summary.exists())
+            pass_var_txt = self._sheet_text(out_summary, "PASS Variants")
+            self.assertIn("133748391", pass_var_txt)
+            self.assertNotIn("133755936", pass_var_txt)
+            self.assertIn("95.00%", pass_var_txt)
+
 
 if __name__ == "__main__":
     unittest.main()
