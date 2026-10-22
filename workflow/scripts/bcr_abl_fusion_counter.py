@@ -23,14 +23,19 @@ import pysam
 # acceptor). An "abl_exons" value is the first base of that ABL1 exon (the
 # acceptor site).
 #
-# hg19 values are derived directly from pickett_bcr_abl_pipeline's
-# config/annotations_hg19/bcr_abl1.bed (the exon BED already used for
-# Illumina BCR-ABL1 reporting at CGU), which gives:
+# hg19 values, 1-based, checked against the reference sequence (UCSC and
+# Ensembl GRCh37 agree): every acceptor is preceded by AG, every donor
+# followed by GT.
 #   BCR exon 1  (NM_004327.4)  chr22:23523148-23524426  -> donor  23524426
 #   BCR exon 13 (NM_004327.4)  chr22:23631704-23631808  -> donor  23631808
 #   BCR exon 14 (NM_004327.4)  chr22:23632526-23632600  -> donor  23632600
-#   ABL1 exon 2 (NM_005157.6)  chr9:133729451-133729624 -> acceptor 133729452
-#   ABL1 exon 3 (NM_005157.6)  chr9:133730188-133730483 -> acceptor 133730189
+#   ABL1 exon 2 (NM_005157.6)  chr9:133729451-133729624 -> acceptor 133729451
+#   ABL1 exon 3 (NM_005157.6)  chr9:133730188-133730483 -> acceptor 133730188
+#
+# The acceptors were one base late until 2026-10-22. They came from pickett's
+# exon BED, whose start column holds 1-based coordinates; adding one to
+# "convert" them made the acceptor the exon's second base. Donors come from the
+# end column, which is the same number in both conventions, so they were right.
 #
 # The previous table had e13/e14 swapped (e13 carried exon 14's donor and vice
 # versa) and abl a2/a3 swapped, with a2 additionally off by ~140 kb (it
@@ -60,8 +65,8 @@ _BCR_EXONS_HG19 = {
     "e19": 23653987,  # UNVERIFIED: not present in pickett's exon BED.
 }
 _ABL_EXONS_HG19 = {
-    "a2": 133729452,
-    "a3": 133730189,
+    "a2": 133729451,
+    "a3": 133730188,
 }
 
 KNOWN_JUNCTIONS = {
@@ -367,7 +372,7 @@ def write_arriba_tsv(
         bcr_pos_list = [e["bcr_pos"] for e in evs]
         abl_pos_list = [e["abl_pos"] for e in evs]
         bcr_pos = sorted(bcr_pos_list)[len(bcr_pos_list) // 2] if bcr_pos_list else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso.split("a")[0], 23632600)
-        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get("a" + iso.split("a")[1] if "a" in iso else "a2", 133729452)
+        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get("a" + iso.split("a")[1] if "a" in iso else "a2", 133729451)
         bcr_exon = evs[0]["bcr_exon"] if evs else (iso.split("a")[0] if "a" in iso else "e14")
         abl_exon = evs[0]["abl_exon"] if evs else ("a" + iso.split("a")[1] if "a" in iso else "a2")
 
