@@ -8,9 +8,18 @@ import pysam
 
 import bcr_abl_branford_caller as caller
 from bcr_abl_read_quality import ReadQualityFilter
-import sweep_bcr_abl_qs as sweep
+try:
+    import matplotlib  # noqa: F401  (the sweep and the plotter need it)
+except ImportError:
+    matplotlib = None
+
+if matplotlib is not None:
+    import sweep_bcr_abl_qs as sweep
+else:
+    sweep = None
 
 
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
 class SweepCallerParityTests(unittest.TestCase):
     def compare_counts(self, records, min_baseq):
         with tempfile.TemporaryDirectory() as directory:

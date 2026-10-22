@@ -28,7 +28,12 @@ try:
     import numpy as np
     import pysam
 except ImportError as err:
-    sys.exit(f"Error: missing required package ({err}). Ensure pysam, matplotlib, and numpy are installed.")
+    # Raise, do not sys.exit: a SystemExit at import time aborts a whole pytest
+    # session with INTERNALERROR and zero tests run, where an ImportError only
+    # fails the modules that import this one.
+    raise ImportError(
+        f"missing required package ({err}). Ensure pysam, matplotlib, and numpy are installed."
+    ) from err
 
 from plot_branford_background import build_plot_figure, BASE_COLORS, STATUS_COLORS
 from bcr_abl_read_quality import ReadQualityFilter

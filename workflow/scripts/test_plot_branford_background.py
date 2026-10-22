@@ -2,9 +2,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import plot_branford_background as PBB
+try:
+    import matplotlib  # noqa: F401  (the sweep and the plotter need it)
+except ImportError:
+    matplotlib = None
+
+if matplotlib is not None:
+    import plot_branford_background as PBB
+else:
+    PBB = None
 
 
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
 class TestPlotBranfordBackground(unittest.TestCase):
     def test_load_all_sites_and_write_tsv_and_plot(self):
         with tempfile.TemporaryDirectory() as tmpdir:
