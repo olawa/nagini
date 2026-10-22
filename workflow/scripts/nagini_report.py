@@ -799,7 +799,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                         c_alt = str(cs.get("Alternate", "")).upper()
                         if not c_alt or c_alt == m_alt or m_alt in c_alt:
                             c_caller = cs.get("Caller", "Caller")
-                            v_display = format_vaf(cs.get("VAF", ""))
+                            v_display = format_vaf(cs.get("VAF", ""), scale="fraction")
                             supporting.append(f"{c_caller} ({v_display})")
                 if supporting:
                     support_display = ", ".join(supporting)
@@ -860,7 +860,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                     (int(v.get("Position", 0)), 0),
                     (v.get("Reference", ""), 0),
                     (v.get("Alternate", ""), 0),
-                    (format_vaf(v.get("VAF", "")), 0),
+                    (format_vaf(v.get("VAF", ""), scale="fraction"), 0),
                     (v.get("Depth", ""), 0),
                     (v.get("Allele depth", ""), 0),
                     (v.get("Filter", ""), 0),
@@ -1099,7 +1099,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         for r in bcr_abl_mutation_rows:
             st = str(r.get("status", "")).upper()
             if st in ("DETECTED", "SUBCLONAL") or float(r.get("vaf_percent", 0.0) or 0.0) > 0:
-                vaf_str = format_vaf(r.get("vaf_percent", ""))
+                vaf_str = format_vaf(r.get("vaf_percent", ""), scale="percent")
                 branford_snvs.append({
                     "Caller": "Branford Pileup Caller",
                     "Chromosome": str(r.get("chrom", "chr9")),
@@ -1113,21 +1113,24 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     "Allele depth": r.get("ad_alt", ""),
                     "Gene": "ABL1",
                     "Consequence": r.get("aa_change", r.get("mutation", "")),
-                    "Impact": "MODERATE",
+                    "Impact": "",
                     "HGVSc": "",
                     "HGVSp": r.get("aa_change", ""),
                     "Existing variation": r.get("mutation", ""),
                     "gnomAD_AF": "",
-                    "ClinVar_Significance": r.get("tki_resistance", "Resistance mutation"),
-                    "ClinVar_Disease": "Chronic Myeloid Leukemia",
+                    # Left empty: this row comes from the Branford caller,
+                    # not from ClinVar. The caller's own classification and
+                    # the TKI profile are on the BCR-ABL1 sheet.
+                    "ClinVar_Significance": "",
+                    "ClinVar_Disease": "",
                     "ClinVar_Review": "",
                 })
 
     if has_bcr_abl:
         for v in other_caller_snvs:
-            v["VAF"] = format_vaf(v.get("VAF", ""))
+            v["VAF"] = format_vaf(v.get("VAF", ""), scale="fraction")
         for v in snvs:
-            v["VAF"] = format_vaf(v.get("VAF", ""))
+            v["VAF"] = format_vaf(v.get("VAF", ""), scale="fraction")
 
     all_snvs = list(snvs) + branford_snvs + other_caller_snvs
     if all_snvs:
