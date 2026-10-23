@@ -306,14 +306,6 @@ files:
     input: "snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
     output: "results/snv_indels/rindels/{sample}_{type}.rindels.vcf.gz"
     when: "enable_rindels"
-  - name: BCR-ABL1 VarDictRust VCF
-    input: "snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz"
-    output: "results/snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz"
-    when: "enable_vardictrust"
-  - name: BCR-ABL1 VarDictRust VCF index
-    input: "snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz.tbi"
-    output: "results/snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz.tbi"
-    when: "enable_vardictrust"
   - name: MultiQC Nanopore report
     input: "qc/multiqc/multiqc_nanopore.html"
 

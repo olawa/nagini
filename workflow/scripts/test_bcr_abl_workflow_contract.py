@@ -50,19 +50,21 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("bcr_abl_rindels_vcfs", scope["_SUMMARY_OPTIONAL_KEYS"])
         self.assertIn("bcr_abl_bcftools_vcfs", scope["_SUMMARY_OPTIONAL_KEYS"])
 
-    def test_vardictrust_rules_and_contract(self):
+    def test_orthogonal_callers_rules_and_contract(self):
         import nagini_routing
-        self.assertIn("enable_vardictrust", nagini_routing.CONFIG_FLAG_CONDITIONS)
+        self.assertNotIn("enable_vardictrust", nagini_routing.CONFIG_FLAG_CONDITIONS)
         self.assertIn("enable_all_callers", nagini_routing.CONFIG_FLAG_CONDITIONS)
+        self.assertIn("enable_rindels", nagini_routing.CONFIG_FLAG_CONDITIONS)
+        self.assertIn("enable_bcftools_pileup", nagini_routing.CONFIG_FLAG_CONDITIONS)
 
         bcr_smk = (ROOT / "workflow/rules/bcr_abl.smk").read_text()
-        self.assertIn("rule bcr_abl_vardictrust:", bcr_smk)
-        self.assertIn("rule bcr_abl_vardictrust_sort_index:", bcr_smk)
-        self.assertIn("quay.io/biocontainers/vardictrust", bcr_smk)
+        self.assertNotIn("rule bcr_abl_vardictrust:", bcr_smk)
+        self.assertIn("rule bcr_abl_bcftools_pileup:", bcr_smk)
+        self.assertIn("rule bcr_abl_rindels:", bcr_smk)
 
         output_files = (ROOT / "config/output_files.yaml").read_text()
-        self.assertIn("snv_indels/vardictrust/{sample}_{type}.bcr_abl.vcf.gz", output_files)
-        self.assertIn("when: \"enable_vardictrust\"", output_files)
+        self.assertNotIn("snv_indels/vardictrust/", output_files)
+        self.assertIn("snv_indels/rindels/{sample}_{type}.rindels.vcf.gz", output_files)
 
 
 if __name__ == "__main__":

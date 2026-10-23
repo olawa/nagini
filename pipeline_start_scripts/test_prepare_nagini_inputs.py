@@ -816,7 +816,7 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         self.assertEqual(config["small_variant_caller"], "clairs_to")
         self.assertEqual(config["clairs_to_call"]["platform"], "ont_r10_dorado_sup_5khz_ssrs")
 
-    def test_runtime_config_records_enable_vardictrust(self):
+    def test_runtime_config_records_enable_bcftools_pileup(self):
         pipeline_root = Path(__file__).parents[1]
         args = type("Args", (), {})()
         args.base_config = pipeline_root / "config/config.yaml"
@@ -838,14 +838,14 @@ class PrepareNaginiInputsTest(unittest.TestCase):
         args.small_variant_caller = ""
         args.clairs_to_platform = ""
         args.clairs_to_container = ""
-        args.enable_vardictrust = True
+        args.enable_bcftools_pileup = True
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
             config = yaml.safe_load(runtime.read_text())
 
-        self.assertTrue(config["enable_vardictrust"])
-        self.assertTrue(config["bcr_abl"]["enable_vardictrust"])
+        self.assertTrue(config["enable_bcftools_pileup"])
+        self.assertTrue(config["bcr_abl"]["enable_bcftools_pileup"])
 
     def test_runtime_config_records_enable_all_callers(self):
         pipeline_root = Path(__file__).parents[1]
@@ -877,7 +877,6 @@ class PrepareNaginiInputsTest(unittest.TestCase):
 
         self.assertTrue(config["enable_all_callers"])
         self.assertTrue(config["bcr_abl"]["enable_all_callers"])
-        self.assertTrue(config["enable_vardictrust"])
         self.assertTrue(config["enable_rindels"])
         self.assertTrue(config["enable_bcftools_pileup"])
 
