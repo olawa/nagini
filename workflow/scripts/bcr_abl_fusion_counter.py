@@ -8,13 +8,30 @@ junction isoforms (e14a2/b3a2, e13a2/b2a2, e1a2, e19a2, and atypical variants).
 
 import argparse
 import json
+import math
 import os
+import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import pysam
+
+try:
+    from bcr_abl_read_quality import mean_read_quality, QS_TAG
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from bcr_abl_read_quality import mean_read_quality, QS_TAG
+    except ImportError:
+        QS_TAG = "qs"
+        def mean_read_quality(qualities):
+            if not qualities:
+                return None
+            mean_error = sum(10.0 ** (-q / 10.0) for q in qualities) / len(qualities)
+            return -10.0 * math.log10(mean_error) if mean_error > 0 else float(max(qualities))
+
 
 # Exon-junction coordinates (1-based genomic position of the splice site).
 #
@@ -141,61 +158,122 @@ def assign_exon(pos: int, exon_map: Dict[str, int], tolerance: int) -> Optional[
     return best_exon
 
 
+def compute_n50(lengths: Sequence[int]) -> int:
+    """Calculate N50 read length across a sequence of lengths."""
+    if not lengths:
+        return 0
+    sorted_lens = sorted(lengths, reverse=True)
+    half_total = sum(sorted_lens) / 2.0
+    cum = 0
+    for l in sorted_lens:
+        cum += l
+        if cum >= half_total:
+            return l
+    return sorted_lens[-1]
+
+
 def extract_fusion_events(
     bam_path: Path, build: str, tolerance: int, min_mapq: int, threads: int = 1
-) -> Tuple[Dict[str, int], List[Dict[str, Any]], int]:
-    """Inspect reads for chimeric BCR-ABL1 alignments and identify junction isoforms."""
+) -> Tuple[Dict[str, int], List[Dict[str, Any]], int, Dict[str, Any]]:
+    """Inspect reads for chimeric BCR-ABL1 alignments, quantify isoforms, and compute read stats."""
     coords = KNOWN_JUNCTIONS[build]
     bcr_chroms = coords["bcr_chroms"]
     abl_chroms = coords["abl_chroms"]
     bcr_exons = coords["bcr_exons"]
     abl_exons = coords["abl_exons"]
 
+    bcr_start_bound = 20_000_000
+    bcr_end_bound = 26_000_000
+    abl_start_bound = 128_000_000 if build == "hg38" else 130_000_000
+    abl_end_bound = 136_000_000
+
     bam = pysam.AlignmentFile(str(bam_path), "rb", threads=threads)
     read_segments: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-
-
+    primary_reads: Dict[str, Tuple[int, Optional[float]]] = {}
+    on_target_read_names: Set[str] = set()
     total_reads_scanned = 0
+
     try:
-        # Fetch alignments from BCR and ABL1 regions
-        active_contigs = set(bam.references)
-        query_regions = []
-        for chrom in bcr_chroms:
-            if chrom in active_contigs:
-                query_regions.append((chrom, 20_000_000, 26_000_000))
-        for chrom in abl_chroms:
-            if chrom in active_contigs:
-                query_regions.append((chrom, 128_000_000 if build == "hg38" else 130_000_000, 136_000_000))
+        for aln in bam.fetch(until_eof=True):
+            total_reads_scanned += 1
+            qname = aln.query_name
 
-        seen_alignments = set()
-        for chrom, start, end in query_regions:
-            for aln in bam.fetch(chrom, start, end):
-                if aln.is_unmapped or aln.is_duplicate or (aln.mapping_quality or 0) < min_mapq:
-                    continue
-                
-                aln_key = (aln.query_name, aln.reference_name, aln.reference_start, aln.is_supplementary)
-                if aln_key in seen_alignments:
-                    continue
-                seen_alignments.add(aln_key)
-                total_reads_scanned += 1
+            # Primary alignment represents the unique sequenced read
+            if not aln.is_secondary and not aln.is_supplementary:
+                qlen = aln.infer_query_length()
+                if not qlen:
+                    qlen = len(aln.query_sequence) if aln.query_sequence else aln.query_length
+                if qlen:
+                    qs = None
+                    if aln.has_tag(QS_TAG):
+                        try:
+                            qs = float(aln.get_tag(QS_TAG))
+                        except (ValueError, TypeError):
+                            qs = None
+                    if qs is None and aln.query_qualities is not None and len(aln.query_qualities) > 0:
+                        qs = mean_read_quality(aln.query_qualities)
+                    primary_reads[qname] = (qlen, qs)
 
-                is_bcr = aln.reference_name in bcr_chroms
-                is_abl = aln.reference_name in abl_chroms
-                if not (is_bcr or is_abl):
-                    continue
+            if aln.is_unmapped or aln.is_duplicate or (aln.mapping_quality or 0) < min_mapq:
+                continue
 
-                read_segments[aln.query_name].append({
-                    "chrom": aln.reference_name,
-                    "start": aln.reference_start + 1,  # 1-based
-                    "end": aln.reference_end,
-                    "is_reverse": aln.is_reverse,
-                    "mapq": aln.mapping_quality,
-                    "is_bcr": is_bcr,
-                    "is_abl": is_abl,
-                    "cigar": aln.cigarstring,
-                })
+            ref_name = aln.reference_name
+            ref_start = aln.reference_start
+            ref_end = aln.reference_end or ref_start
+
+            is_bcr = (ref_name in bcr_chroms) and (bcr_start_bound <= ref_end and ref_start <= bcr_end_bound)
+            is_abl = (ref_name in abl_chroms) and (abl_start_bound <= ref_end and ref_start <= abl_end_bound)
+
+            if not (is_bcr or is_abl):
+                continue
+
+            on_target_read_names.add(qname)
+            read_segments[qname].append({
+                "chrom": ref_name,
+                "start": ref_start + 1,  # 1-based
+                "end": ref_end,
+                "is_reverse": aln.is_reverse,
+                "mapq": aln.mapping_quality,
+                "is_bcr": is_bcr,
+                "is_abl": is_abl,
+                "cigar": aln.cigarstring,
+            })
     finally:
         bam.close()
+
+    all_lengths: List[int] = []
+    all_accuracies: List[float] = []
+    on_target_lengths: List[int] = []
+    on_target_accuracies: List[float] = []
+
+    for qname, (qlen, qs) in primary_reads.items():
+        all_lengths.append(qlen)
+        acc = ((1.0 - 10.0 ** (-qs / 10.0)) * 100.0) if qs is not None else None
+        if acc is not None:
+            all_accuracies.append(acc)
+        if qname in on_target_read_names:
+            on_target_lengths.append(qlen)
+            if acc is not None:
+                on_target_accuracies.append(acc)
+
+    for qname in on_target_read_names:
+        if qname not in primary_reads:
+            seg_len = max((s["end"] - s["start"] + 1) for s in read_segments[qname]) if read_segments[qname] else 0
+            if seg_len:
+                on_target_lengths.append(seg_len)
+                all_lengths.append(seg_len)
+
+    read_stats = {
+        "total_reads": len(all_lengths),
+        "yield_gb": sum(all_lengths) / 1e9,
+        "mean_q": round(sum(all_accuracies) / len(all_accuracies), 2) if all_accuracies else 0.0,
+        "n50_bp": compute_n50(all_lengths),
+        "median_bp": round(float(statistics.median(all_lengths)), 2) if all_lengths else 0.0,
+        "on_target_reads": len(on_target_lengths),
+        "on_target_accuracy": round(sum(on_target_accuracies) / len(on_target_accuracies), 2) if on_target_accuracies else 0.0,
+        "on_target_n50_bp": compute_n50(on_target_lengths),
+        "on_target_median_bp": round(float(statistics.median(on_target_lengths)), 2) if on_target_lengths else 0.0,
+    }
 
     isoform_counts: Dict[str, int] = defaultdict(int)
     raw_events: List[Dict[str, Any]] = []
@@ -247,7 +325,8 @@ def extract_fusion_events(
             "abl_exon": assigned_abl_exon or "unknown",
         })
 
-    return isoform_counts, raw_events, total_reads_scanned
+    return isoform_counts, raw_events, total_reads_scanned, read_stats
+
 
 
 def write_outputs(
@@ -257,6 +336,7 @@ def write_outputs(
     output_path: Path,
     json_path: Optional[Path],
     build: str,
+    read_stats: Optional[Dict[str, Any]] = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     total_fusion_reads = sum(isoform_counts.values())
@@ -323,6 +403,13 @@ def write_outputs(
         handle.write(f"# sample={sample}\n")
         handle.write(f"# genome_build={build}\n")
         handle.write(f"# total_fusion_reads={total_fusion_reads}\n")
+        if read_stats:
+            for k in (
+                "total_reads", "yield_gb", "mean_q", "n50_bp", "median_bp",
+                "on_target_reads", "on_target_accuracy", "on_target_n50_bp", "on_target_median_bp"
+            ):
+                if k in read_stats:
+                    handle.write(f"# {k}={read_stats[k]}\n")
         handle.write("\t".join(headers) + "\n")
         for row in rows:
             handle.write("\t".join(str(row[h]) for h in headers) + "\n")
@@ -335,11 +422,13 @@ def write_outputs(
             "genome_build": build,
             "total_fusion_reads": total_fusion_reads,
             "primary_isoform": primary_isoform,
+            "read_stats": read_stats or {},
             "isoforms": rows,
             "raw_event_count": len(raw_events),
         }
         with json_path.open("w") as handle:
             json.dump(summary_payload, handle, indent=2)
+
 
 
 def write_arriba_tsv(
@@ -425,10 +514,9 @@ def main(argv=None) -> None:
     build = detect_genome_build(bam, args.genome_build)
     bam.close()
 
-    isoform_counts, raw_events, total_scanned = extract_fusion_events(
+    isoform_counts, raw_events, total_scanned, read_stats = extract_fusion_events(
         args.bam, build, args.tolerance, args.min_mapq, threads=getattr(args, "threads", 1)
     )
-
 
     write_outputs(
         args.sample,
@@ -437,7 +525,9 @@ def main(argv=None) -> None:
         args.output,
         args.json_output,
         build,
+        read_stats=read_stats,
     )
+
     if args.arriba_output:
         write_arriba_tsv(
             args.sample,

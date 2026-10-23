@@ -11,7 +11,9 @@ import bisect
 import collections
 import csv
 import gzip
+import json
 import os
+
 import re
 from datetime import datetime, timezone
 
@@ -722,8 +724,83 @@ def write_xlsx(path, sheets):
         workbook.close()
 
 
+_THREE_TO_ONE = {
+    "Ala": "A", "Arg": "R", "Asn": "N", "Asp": "D", "Cys": "C",
+    "Glu": "E", "Gln": "Q", "Gly": "G", "His": "H", "Ile": "I",
+    "Leu": "L", "Lys": "K", "Met": "M", "Phe": "F", "Pro": "P",
+    "Ser": "S", "Thr": "T", "Trp": "W", "Tyr": "Y", "Val": "V",
+    "Ter": "*",
+}
+
+
+def normalize_aa_notation(s: str) -> str:
+    """Normalize amino acid change notation (e.g. p.Thr315Ile -> T315I, p.Glu255Lys -> E255K)."""
+    if not s:
+        return ""
+    clean = str(s).strip()
+    m = re.match(r"^(?:p\.)?([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2})$", clean)
+    if m:
+        ref, pos, alt = m.groups()
+        return f"{_THREE_TO_ONE.get(ref, ref)}{pos}{_THREE_TO_ONE.get(alt, alt)}"
+    m2 = re.match(r"^(?:p\.)?([A-Z])(\d+)([A-Z])$", clean)
+    if m2:
+        return f"{m2.group(1)}{m2.group(2)}{m2.group(3)}"
+    return clean
+
+
+def _match_caller_variant_to_branford(caller_variant: Dict[str, Any], branford_row: Dict[str, Any]) -> bool:
+    """Check if an orthogonal caller SNV matches a Branford mutation call.
+
+    Handles:
+    1. Exact coordinate and alternate allele match.
+    2. Codon haplotype / MNV span: e.g. Branford calls T315I at 133748282 (ACT>ATT),
+       while orthogonal callers (VarDict, bcftools, Rindels) call the SNV at 133748283 (C>T).
+    3. Consequence / amino acid notation match (e.g. p.Thr315Ile vs T315I).
+    """
+    try:
+        m_pos = int(branford_row.get("pos", 0) or 0)
+    except (ValueError, TypeError):
+        m_pos = 0
+    m_ref = str(branford_row.get("ref", "")).upper().strip()
+    m_alt = str(branford_row.get("alt", "")).upper().strip()
+    m_mut = str(branford_row.get("mutation", "")).strip()
+    m_aa = str(branford_row.get("aa_change", "")).strip()
+
+    try:
+        c_pos = int(caller_variant.get("Position", 0) or 0)
+    except (ValueError, TypeError):
+        c_pos = 0
+    c_ref = str(caller_variant.get("Reference", "")).upper().strip()
+    c_alt = str(caller_variant.get("Alternate", "")).upper().strip()
+    c_hgvsp = str(caller_variant.get("HGVSp", "")).strip()
+
+    # 1. Exact coordinate match
+    if c_pos == m_pos and m_pos > 0:
+        if not c_alt or not m_alt or c_alt == m_alt or m_alt in c_alt or c_alt in m_alt:
+            return True
+
+    # 2. Codon haplotype / MNV span match
+    if len(m_ref) > 1 and len(m_ref) == len(m_alt) and m_pos > 0:
+        if m_pos <= c_pos < m_pos + len(m_ref):
+            offset = c_pos - m_pos
+            expected_ref = m_ref[offset]
+            expected_alt = m_alt[offset]
+            if expected_ref != expected_alt:
+                if not c_alt or c_alt == expected_alt:
+                    return True
+
+    # 3. Amino acid consequence match
+    if c_hgvsp and (m_mut or m_aa):
+        c_norm = normalize_aa_notation(c_hgvsp)
+        if c_norm and (c_norm == normalize_aa_notation(m_mut) or c_norm == normalize_aa_notation(m_aa)):
+            return True
+
+    return False
+
+
 def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None, other_caller_snvs=None):
     layout = [
+
         [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
         [("1. BCR-ABL1 FUSION ISOFORM BREAKDOWN", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
@@ -760,6 +837,8 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
         ("SNR (x)", 1), ("Strand Ratio", 1), ("Mean BaseQ", 1),
         ("Imatinib", 1), ("Dasatinib", 1), ("Nilotinib", 1), ("Bosutinib", 1), ("Ponatinib", 1), ("Asciminib", 1)
     ])
+    matched_caller_variant_ids = set()
+
     if not mutation_rows:
         layout.append([("No candidate variants called", 0)] + [("", 0)] * 18)
     else:
@@ -787,20 +866,13 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
 
             support_display = ""
             if other_caller_snvs:
-                m_pos = int(r.get("pos", 0))
-                m_alt = str(r.get("alt", "")).upper()
                 supporting = []
                 for cs in other_caller_snvs:
-                    try:
-                        c_pos = int(cs.get("Position", 0))
-                    except (ValueError, TypeError):
-                        c_pos = 0
-                    if c_pos == m_pos:
-                        c_alt = str(cs.get("Alternate", "")).upper()
-                        if not c_alt or c_alt == m_alt or m_alt in c_alt:
-                            c_caller = cs.get("Caller", "Caller")
-                            v_display = format_vaf(cs.get("VAF", ""), scale="fraction")
-                            supporting.append(f"{c_caller} ({v_display})")
+                    if _match_caller_variant_to_branford(cs, r):
+                        matched_caller_variant_ids.add(id(cs))
+                        c_caller = cs.get("Caller", "Caller")
+                        v_display = format_vaf(cs.get("VAF", ""), scale="fraction")
+                        supporting.append(f"{c_caller} ({v_display})")
                 if supporting:
                     support_display = ", ".join(supporting)
                 elif mut_status in ("DETECTED", "SUBCLONAL"):
@@ -840,12 +912,23 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                            (float(r.get("vaf_percent", 0) or 0), 0), (r.get("filter_reason", ""), 0)])
 
     if other_caller_snvs:
-        branford_positions = {int(r.get("pos", 0)) for r in (all_sites_rows or mutation_rows) if r.get("pos")}
+        branford_positions = set()
+        for r in (all_sites_rows or mutation_rows):
+            try:
+                p = int(r.get("pos", 0) or 0)
+            except (ValueError, TypeError):
+                p = 0
+            if p:
+                ref_len = len(str(r.get("ref", "")).strip()) or 1
+                for offset in range(ref_len):
+                    branford_positions.add(p + offset)
         additional_exon_variants = [
             v for v in other_caller_snvs
-            if int(v.get("Position", 0)) not in branford_positions
+            if id(v) not in matched_caller_variant_ids
+            and int(v.get("Position", 0) or 0) not in branford_positions
             and str(v.get("Filter", "")).upper() in ("PASS", ".", "PASS_ONLY")
         ]
+
         if additional_exon_variants:
             layout.append([("", 0)] * 10)
             layout.append([("ADDITIONAL ABL1 EXON VARIANTS (OTHER CALLERS)", 3)] + [("", 3)] * 8)
@@ -974,9 +1057,16 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             _, rindels_snvs, _ = parse_small_variant_vcf(r_vcf, default_caller="Rindels")
             other_caller_snvs.extend(rindels_snvs)
 
-    if bcr_abl_bcftools_vcf and os.path.isfile(bcr_abl_bcftools_vcf):
-        _, bcftools_snvs, _ = parse_small_variant_vcf(bcr_abl_bcftools_vcf, default_caller="bcftools")
-        other_caller_snvs.extend(bcftools_snvs)
+    if bcr_abl_bcftools_vcf:
+        b_vcf = bcr_abl_bcftools_vcf
+        if (not os.path.isfile(b_vcf) or os.path.getsize(b_vcf) == 0) and b_vcf.endswith(".gz"):
+            uncompressed = b_vcf[:-3]
+            if os.path.isfile(uncompressed) and os.path.getsize(uncompressed) > 0:
+                b_vcf = uncompressed
+        if os.path.isfile(b_vcf):
+            _, bcftools_snvs, _ = parse_small_variant_vcf(b_vcf, default_caller="bcftools")
+            other_caller_snvs.extend(bcftools_snvs)
+
 
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
@@ -1051,7 +1141,29 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         )
     )
 
+    bcr_read_stats = {}
+    if has_bcr_abl and bcr_abl_fusion:
+        f_json = bcr_abl_fusion.rsplit(".", 1)[0] + ".json"
+        if os.path.isfile(f_json):
+            try:
+                with open(f_json, "r", encoding="utf-8") as f:
+                    bcr_read_stats = json.load(f).get("read_stats", {})
+            except Exception:
+                bcr_read_stats = {}
+        if not bcr_read_stats and os.path.isfile(bcr_abl_fusion):
+            try:
+                with open(bcr_abl_fusion, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if not line.startswith("#"):
+                            break
+                        if "=" in line:
+                            k, v = line[1:].strip().split("=", 1)
+                            bcr_read_stats[k.strip()] = v.strip()
+            except Exception:
+                pass
+
     kd_depth_label = "Mean depth at unique ABL1 resistance panel sites"
+
     kd_val = 0.0
     if bcr_abl_all_sites_rows:
         depths = {}
@@ -1227,6 +1339,28 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     )
     n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
     median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
+
+    if has_bcr_abl and bcr_read_stats:
+        if "yield_gb" in bcr_read_stats and bcr_read_stats["yield_gb"] is not None:
+            yield_gb = f"{float(bcr_read_stats['yield_gb']):.2f}"
+        if "total_reads" in bcr_read_stats and bcr_read_stats["total_reads"] is not None:
+            total_reads = str(bcr_read_stats["total_reads"])
+        if "mean_q" in bcr_read_stats and bcr_read_stats["mean_q"] is not None:
+            mean_q = f"{float(bcr_read_stats['mean_q']):.2f}"
+            read_accuracy_label = "Mean Read Accuracy [%]"
+            read_accuracy_hint = "Accuracy derived from mean read quality (qs)"
+        if "n50_bp" in bcr_read_stats and bcr_read_stats["n50_bp"] is not None:
+            n50_bp = str(int(float(bcr_read_stats["n50_bp"])))
+        if "median_bp" in bcr_read_stats and bcr_read_stats["median_bp"] is not None:
+            median_len = f"{float(bcr_read_stats['median_bp']):.2f}"
+        if "on_target_accuracy" in bcr_read_stats and bcr_read_stats["on_target_accuracy"] is not None:
+            target_accuracy = f"{float(bcr_read_stats['on_target_accuracy']):.2f}"
+            target_accuracy_key = "On-target read accuracy [%]"
+        if "on_target_n50_bp" in bcr_read_stats and bcr_read_stats["on_target_n50_bp"] is not None:
+            target_accuracy_n50 = str(int(float(bcr_read_stats["on_target_n50_bp"])))
+        if "on_target_reads" in bcr_read_stats and bcr_read_stats["on_target_reads"] is not None:
+            target_accuracy_reads = str(bcr_read_stats["on_target_reads"])
+
 
 
     wgs_cov = next(

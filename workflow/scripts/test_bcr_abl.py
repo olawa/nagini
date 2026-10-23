@@ -568,6 +568,30 @@ class TestBcrAblFusionCounter(unittest.TestCase):
         self.assertEqual(FUSION_COUNTER.assign_exon(510, exon_map, tolerance=50), "e13")
         self.assertIsNone(FUSION_COUNTER.assign_exon(750, exon_map, tolerance=50))
 
+    def test_read_stats_computation_on_bam(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bam_path = tmp / "stats_test.bam"
+            reads = [
+                {"name": "r1", "chrom": "chr9", "start": 10, "seq": "A" * 1000, "qual": 25},
+                {"name": "r2", "chrom": "chr9", "start": 20, "seq": "C" * 1500, "qual": 30},
+                {"name": "r3", "chrom": "chr9", "start": 30, "seq": "G" * 2000, "qual": 35},
+                # supplementary alignment of r3 (should NOT count towards total_reads or yield)
+                {"name": "r3", "chrom": "chr9", "start": 40, "seq": "G" * 500, "qual": 35, "supplementary": True},
+            ]
+            create_synthetic_bam(bam_path, reads, [("chr9", 3000)])
+            _, _, total_scanned, stats = FUSION_COUNTER.extract_fusion_events(
+                bam_path=bam_path,
+                build="hg19",
+                tolerance=50,
+                min_mapq=0,
+            )
+            self.assertEqual(stats["total_reads"], 3)
+            self.assertEqual(stats["median_bp"], 1500.0)
+            self.assertEqual(stats["n50_bp"], 1500)
+            self.assertAlmostEqual(stats["yield_gb"], 4500 / 1e9, places=6)
+
+
 
 @unittest.skipIf(REPORT is None or getattr(REPORT, "xlsxwriter", None) is None, "xlsxwriter not available")
 class TestBcrAblReportIntegration(unittest.TestCase):
@@ -775,6 +799,74 @@ class TestBcrAblReport(unittest.TestCase):
 
         self.assertEqual(y253h_row[status_idx][0], "SUBCLONAL")
         self.assertEqual(y253h_row[status_idx][1], 6)
+
+    def test_orthogonal_caller_supports_t315i_mnv(self):
+        if REPORT is None:
+            self.skipTest("nagini_report module could not be imported")
+        fusion_rows = [{"fusion_isoform": "e14a2", "status": "PRIMARY"}]
+        # Branford reports MNV at 133748282 (ACT>ATT)
+        mutation_rows = [
+            {
+                "mutation": "T315I",
+                "aa_change": "p.Thr315Ile",
+                "pos": 133748282,
+                "ref": "ACT",
+                "alt": "ATT",
+                "depth": 46000,
+                "ad_alt": 650,
+                "vaf_percent": 1.41,
+                "status": "DETECTED",
+                "snr": 12.5,
+                "alt_minor_strand_ratio": 0.42,
+                "mean_baseq_alt": 28.4,
+                "imatinib": "Resistant",
+            },
+        ]
+        # Orthogonal callers report SNV at 133748283 (C>T)
+        other_caller_snvs = [
+            {
+                "Caller": "VarDict",
+                "Chrom": "chr9",
+                "Position": 133748283,
+                "Reference": "C",
+                "Alternate": "T",
+                "VAF": 0.014,
+                "Filter": "PASS",
+                "HGVSp": "p.Thr315Ile",
+            },
+            {
+                "Caller": "bcftools",
+                "Chrom": "chr9",
+                "Position": 133748283,
+                "Reference": "C",
+                "Alternate": "T",
+                "VAF": 0.014,
+                "Filter": "PASS",
+            },
+        ]
+
+        layout = REPORT.build_bcr_abl_sheet(
+            sample="TEST_BCR_SAMPLE",
+            fusion_rows=fusion_rows,
+            mutation_rows=mutation_rows,
+            phasing_rows=[],
+            exon_rows=[],
+            other_caller_snvs=other_caller_snvs,
+        )
+
+        sec2_header_row = [row for row in layout if len(row) > 0 and row[0][0] == "Mutation"][0]
+        header_names = [col[0] for col in sec2_header_row]
+        support_idx = header_names.index("Supporting Callers")
+
+        t315i_row = [row for row in layout if len(row) > 0 and row[0][0] == "T315I"][0]
+        support_text = t315i_row[support_idx][0]
+        self.assertIn("VarDict (1.40%)", support_text)
+        self.assertIn("bcftools (1.40%)", support_text)
+        self.assertNotIn("Branford only", support_text)
+
+        # Verify that 133748283 is NOT listed in "ADDITIONAL ABL1 EXON VARIANTS"
+        additional_section = [row for row in layout if len(row) > 0 and "ADDITIONAL ABL1 EXON VARIANTS" in str(row[0][0])]
+        self.assertEqual(len(additional_section), 0)
 
 
 if __name__ == "__main__":

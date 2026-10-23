@@ -33,6 +33,16 @@ class TestCompareBcrAblCallers(unittest.TestCase):
         self.assertIsNone(comp.parse_vaf_percent(""))
         self.assertIsNone(comp.parse_vaf_percent(None))
 
+        # Test sub-1% VAFs with scale="percent" vs scale="fraction"
+        self.assertEqual(comp.parse_vaf_percent("0,652", scale="percent"), 0.65)
+        self.assertEqual(comp.parse_vaf_percent("0,6", scale="percent"), 0.6)
+        self.assertEqual(comp.parse_vaf_percent("0.65", scale="percent"), 0.65)
+        self.assertEqual(comp.parse_vaf_percent("0.65%", scale="percent"), 0.65)
+        self.assertEqual(comp.parse_vaf_percent("0.65%", scale="fraction"), 0.65)
+        self.assertEqual(comp.parse_vaf_percent("0.0065", scale="fraction"), 0.65)
+        self.assertEqual(comp.parse_vaf_percent("0.65", scale="fraction"), 65.0)
+
+
     def test_parse_table6_real_content(self):
         sample_txt = (
             "Tabell 6\t\tNGS Sequel\tNGS Sequel\tNGS Sequel\tNGS MiSeq\tNGS MiSeq\tNGS MiSeq\n"
@@ -157,9 +167,16 @@ class TestCompareBcrAblCallers(unittest.TestCase):
             self.assertIn("94.60%", content)
             self.assertIn("96.30%", content)
 
-            xlsx_out = run_dir / "out.xlsx"
-            comp.write_excel(rows, xlsx_out)
-            self.assertTrue(xlsx_out.is_file())
+            try:
+                import openpyxl
+                has_openpyxl = True
+            except ImportError:
+                has_openpyxl = False
+
+            if has_openpyxl:
+                xlsx_out = run_dir / "out.xlsx"
+                comp.write_excel(rows, xlsx_out)
+                self.assertTrue(xlsx_out.is_file())
 
 
 if __name__ == "__main__":

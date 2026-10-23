@@ -814,18 +814,18 @@ cd "$analysis_dir"
 "${snakemake_cmd[@]}"
 
 analysis_name="$(basename "$analysis_dir")"
-for report_dir in "$analysis_dir/reports" "$analysis_dir/results/reports"; do
-    if [[ -d "$report_dir" && -f "$report_dir/nagini_summary_report.xlsx" ]]; then
-        cp -p "$report_dir/nagini_summary_report.xlsx" "$report_dir/${analysis_name}_summary_report.xlsx" 2>/dev/null || true
-        cp -p "$report_dir/nagini_summary_report.xlsx" "$report_dir/${analysis_name}_nagini_summary_report.xlsx" 2>/dev/null || true
-    fi
-done
+summary_file=""
+if [[ -f "$analysis_dir/reports/${analysis_name}_summary_report.xlsx" ]]; then
+    summary_file="$analysis_dir/reports/${analysis_name}_summary_report.xlsx"
+elif [[ -f "$analysis_dir/reports/nagini_summary_report.xlsx" ]]; then
+    summary_file="$analysis_dir/reports/nagini_summary_report.xlsx"
+fi
 
-if [[ -f "$analysis_dir/results/reports/${analysis_name}_summary_report.xlsx" ]]; then
+if [[ -n "$summary_file" ]]; then
     echo ""
     echo "================================================================================"
     echo "Nagini run complete: $analysis_dir"
-    echo "Summary workbook:    $analysis_dir/results/reports/${analysis_name}_summary_report.xlsx"
+    echo "Summary workbook:    $summary_file"
     echo "================================================================================"
 fi
 
