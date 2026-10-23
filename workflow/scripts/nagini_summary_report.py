@@ -324,9 +324,51 @@ def build_summary_report(
                 "plot_png": s.get("bcr_abl_plot_png", ""),
             })
 
+            # Check if read_stats exist from BCR-ABL1 fusion summary JSON or TSV
+
+            bcr_read_stats = {}
+            if fusion_tsv_path:
+                fusion_json_path = fusion_tsv_path.rsplit(".", 1)[0] + ".json"
+                if os.path.isfile(fusion_json_path):
+                    try:
+                        with open(fusion_json_path, "r", encoding="utf-8") as f:
+                            bcr_read_stats = json.load(f).get("read_stats", {})
+                    except Exception:
+                        bcr_read_stats = {}
+                if not bcr_read_stats and os.path.isfile(fusion_tsv_path):
+                    try:
+                        with open(fusion_tsv_path, "r", encoding="utf-8") as f:
+                            for line in f:
+                                if not line.startswith("#"):
+                                    break
+                                if "=" in line:
+                                    k, v = line[1:].strip().split("=", 1)
+                                    bcr_read_stats[k.strip()] = v.strip()
+                    except Exception:
+                        pass
+
+            if bcr_read_stats:
+                if "yield_gb" in bcr_read_stats and bcr_read_stats["yield_gb"] is not None:
+                    yield_gb = f"{float(bcr_read_stats['yield_gb']):.2f}"
+                if "total_reads" in bcr_read_stats and bcr_read_stats["total_reads"] is not None:
+                    total_reads_str = f"{int(float(bcr_read_stats['total_reads'])):,}"
+                if "mean_q" in bcr_read_stats and bcr_read_stats["mean_q"] is not None:
+                    mean_q = f"{float(bcr_read_stats['mean_q']):.2f}"
+                if "n50_bp" in bcr_read_stats and bcr_read_stats["n50_bp"] is not None:
+                    n50_bp = str(int(float(bcr_read_stats["n50_bp"])))
+                if "median_bp" in bcr_read_stats and bcr_read_stats["median_bp"] is not None:
+                    median_len = f"{float(bcr_read_stats['median_bp']):.2f}"
+                if "on_target_accuracy" in bcr_read_stats and bcr_read_stats["on_target_accuracy"] is not None:
+                    on_target_accuracy = f"{float(bcr_read_stats['on_target_accuracy']):.2f}"
+                if "on_target_n50_bp" in bcr_read_stats and bcr_read_stats["on_target_n50_bp"] is not None:
+                    on_target_n50 = str(int(float(bcr_read_stats["on_target_n50_bp"])))
+                if "on_target_median_bp" in bcr_read_stats and bcr_read_stats["on_target_median_bp"] is not None:
+                    on_target_median = f"{float(bcr_read_stats['on_target_median_bp']):.2f}"
+
 
         total_fusion_reads = sum(int(r.get("read_count", 0)) for r in fusion_rows)
         raw_reads_num = 0
+
         try:
             raw_reads_num = int(float(str(total_reads_str).replace(",", "")))
         except (ValueError, TypeError):
@@ -756,21 +798,13 @@ def build_summary_report(
     # Also create unique, analysis-folder named copy so multiple summaries can be opened in Excel simultaneously
     clean_id = clean_analysis_name if (clean_analysis_name and clean_analysis_name.lower() not in {"run", "default", "reports"}) else re.sub(r"[^\w\.-]", "_", display_id)
 
-    # Target directories to place named copy in: both the local reports dir and results/reports
-    target_dirs = [out_dir]
-    results_reports = os.path.join(analysis_dir_abs, "results", "reports")
-    if os.path.abspath(results_reports) != os.path.abspath(out_dir):
-        target_dirs.append(results_reports)
-
-    for target_dir in target_dirs:
-        try:
-            os.makedirs(target_dir, exist_ok=True)
-            named_file = os.path.join(target_dir, f"{clean_id}_summary_report.xlsx")
-            if os.path.abspath(named_file) != os.path.abspath(output_path):
-                shutil.copyfile(output_path, named_file)
-                sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
-        except Exception as exc:
-            sys.stderr.write(f"Warning: could not create analysis-named summary copy in {target_dir}: {exc}\n")
+    try:
+        named_file = os.path.join(out_dir, f"{clean_id}_summary_report.xlsx")
+        if os.path.abspath(named_file) != os.path.abspath(output_path):
+            shutil.copyfile(output_path, named_file)
+            sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
+    except Exception as exc:
+        sys.stderr.write(f"Warning: could not create analysis-named summary copy in {out_dir}: {exc}\n")
 
 
 

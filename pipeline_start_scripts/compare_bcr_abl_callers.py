@@ -49,15 +49,15 @@ def normalize_aa(s: str) -> str:
     return clean
 
 
-def parse_vaf_percent(val: Any) -> Optional[float]:
+def parse_vaf_percent(val: Any, scale: str = "auto") -> Optional[float]:
     """Parse various VAF formats into a percentage float (0.0 to 100.0).
 
-    Handles:
-    - '96.97%' -> 96.97
-    - '95,3'   -> 95.3
-    - '0.946'  -> 94.6  (fraction <= 1.0 converted to percent)
-    - 0.946    -> 94.6
-    - 96.97    -> 96.97
+    Args:
+        val: Input value (string, float, int, etc.)
+        scale: Scale interpretation when no explicit '%' symbol is present:
+            - 'percent': Value is already in percent (e.g. 0.65 means 0.65%).
+            - 'fraction': Value is a frequency between 0.0 and 1.0 (e.g. 0.0065 means 0.65%).
+            - 'auto': Heuristic: values <= 1.0 are converted from fraction to percent.
     """
     if val is None:
         return None
@@ -73,10 +73,19 @@ def parse_vaf_percent(val: Any) -> Optional[float]:
 
     if is_explicit_percent:
         return round(num, 2)
-    # If it's a fraction between 0.0 and 1.0 (typical VCF AF), convert to percent
-    if 0.0 < num <= 1.0:
-        return round(num * 100.0, 2)
-    return round(num, 2)
+
+    if scale == "percent":
+        return round(num, 2)
+    elif scale == "fraction":
+        if 0.0 <= num <= 1.0:
+            return round(num * 100.0, 2)
+        return round(num, 2)
+    else:  # "auto"
+        # If it's a fraction between 0.0 and 1.0 (typical VCF AF), convert to percent
+        if 0.0 < num <= 1.0:
+            return round(num * 100.0, 2)
+        return round(num, 2)
+
 
 
 def load_branford_bed(bed_path: Path) -> Tuple[Dict[str, Tuple[str, int, str, str]], Dict[Tuple[str, int, str], str]]:
@@ -126,9 +135,10 @@ def parse_table6(path: Path) -> List[Dict[str, Any]]:
         afs_list = [a.strip() for a in re.split(r"[/;\n\s]+", af_s) if a.strip()]
         res = []
         for i, v in enumerate(vars_list):
-            af_val = parse_vaf_percent(afs_list[i]) if i < len(afs_list) else None
+            af_val = parse_vaf_percent(afs_list[i], scale="percent") if i < len(afs_list) else None
             res.append((normalize_aa(v), af_val))
         return res
+
 
     for l in lines[start_idx:]:
         parts = [p.strip() for p in l.split("\t")]
@@ -215,11 +225,11 @@ def parse_vcf_calls(vcf_path: Path, caller_name: str) -> List[Dict[str, Any]]:
                 af = None
                 if "AF" in fmt_map:
                     try:
-                        af = parse_vaf_percent(fmt_map["AF"].split(",")[0])
+                        af = parse_vaf_percent(fmt_map["AF"].split(",")[0], scale="fraction")
                     except (ValueError, IndexError):
                         pass
                 elif "VAF" in fmt_map:
-                    af = parse_vaf_percent(fmt_map["VAF"].split(",")[0])
+                    af = parse_vaf_percent(fmt_map["VAF"].split(",")[0], scale="fraction")
                 elif "AD" in fmt_map and "DP" in fmt_map:
                     try:
                         dp = float(fmt_map["DP"])
@@ -260,7 +270,7 @@ def parse_branford_tsv(tsv_path: Path) -> List[Dict[str, Any]]:
             ref = r.get("ref", "")
             alt = r.get("alt", "")
             aa = normalize_aa(r.get("aa_change", ""))
-            vaf = parse_vaf_percent(r.get("vaf_percent", r.get("vaf", "")))
+            vaf = parse_vaf_percent(r.get("vaf_percent", r.get("vaf", "")), scale="percent")
             status = r.get("status", "")
             calls.append({
                 "caller": "Branford",
@@ -273,6 +283,7 @@ def parse_branford_tsv(tsv_path: Path) -> List[Dict[str, Any]]:
                 "status": status,
             })
     return calls
+
 
 
 def parse_nagini_summary_excel(xlsx_path: Path) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
@@ -343,8 +354,9 @@ def parse_nagini_summary_excel(xlsx_path: Path) -> Tuple[Dict[str, Dict[str, Any
                 pos = 0
             ref = str(row[ref_idx]).strip() if ref_idx is not None and row[ref_idx] else ""
             alt = str(row[alt_idx]).strip() if alt_idx is not None and row[alt_idx] else ""
-            vaf = parse_vaf_percent(row[vaf_idx]) if vaf_idx is not None else None
+            vaf = parse_vaf_percent(row[vaf_idx], scale="percent") if vaf_idx is not None else None
             aa = normalize_aa(row[aa_idx]) if aa_idx is not None and row[aa_idx] else ""
+
 
             variants.append({
                 "dna_number": dna,
@@ -514,6 +526,8 @@ def build_comparison(
                     is_match = True
                 elif pos_exp and c_pos == pos_exp:
                     is_match = True
+                elif pos_exp and c_pos and (c_pos <= pos_exp < c_pos + max(len(ev.get("ref", "") or ""), 1)):
+                    is_match = True
 
                 if is_match:
                     if "branford" in c_caller.lower():
@@ -533,14 +547,18 @@ def build_comparison(
                 b_mut_path = run_dir / "reports" / "bcr_abl" / f"{sample_pref}.branford_mutations.tsv"
                 b_calls = parse_branford_tsv(b_mut_path)
                 for bc in b_calls:
-                    if (norm_v and bc.get("aa") == norm_v) or (pos_exp and bc.get("pos") == pos_exp):
+                    bc_pos = bc.get("pos")
+                    bc_ref = bc.get("ref", "")
+                    if (norm_v and bc.get("aa") == norm_v) or (pos_exp and (bc_pos == pos_exp or (bc_pos and bc_pos <= pos_exp < bc_pos + max(len(bc_ref), 1)))):
                         branford_af = bc.get("vaf")
                         break
             if branford_af is None and pos_exp:
                 b_all_path = run_dir / "reports" / "bcr_abl" / f"{sample_pref}.branford_all_sites.tsv"
                 b_calls = parse_branford_tsv(b_all_path)
                 for bc in b_calls:
-                    if bc.get("pos") == pos_exp and bc.get("alt") == alt_exp:
+                    bc_pos = bc.get("pos")
+                    bc_ref = bc.get("ref", "")
+                    if (bc_pos == pos_exp and bc.get("alt") == alt_exp) or (bc_pos and bc_pos <= pos_exp < bc_pos + max(len(bc_ref), 1)):
                         branford_af = bc.get("vaf")
                         break
 
@@ -551,7 +569,7 @@ def build_comparison(
                     vd_path = run_dir / "snv_indels" / "vardictrust" / f"{sample_pref}.bcr_abl.vcf"
                 vd_calls = parse_vcf_calls(vd_path, "VarDictRust")
                 for vc in vd_calls:
-                    if pos_exp and vc.get("pos") == pos_exp and vc.get("alt") == alt_exp:
+                    if pos_exp and vc.get("pos") == pos_exp and (not alt_exp or vc.get("alt") == alt_exp):
                         vardict_af = vc.get("vaf")
                         break
 
@@ -564,11 +582,21 @@ def build_comparison(
                     r_path = run_dir / "cnv" / "rindels" / f"{sample_pref}.vcf.gz"
                 r_calls = parse_vcf_calls(r_path, "Rindels")
                 for rc in r_calls:
-                    if pos_exp and rc.get("pos") == pos_exp and rc.get("alt") == alt_exp:
+                    if pos_exp and rc.get("pos") == pos_exp and (not alt_exp or rc.get("alt") == alt_exp):
                         rindels_af = rc.get("vaf")
                         break
 
-            # bcftools pileup
+            # bcftools mpileup VCF / pileup TSV
+            if bcftools_af is None:
+                bcf_vcf = run_dir / "snv_indels" / "bcftools_mpileup" / f"{sample_pref}.bcr_abl.vcf.gz"
+                if not bcf_vcf.is_file():
+                    bcf_vcf = run_dir / "snv_indels" / "bcftools_mpileup" / f"{sample_pref}.bcr_abl.vcf"
+                if bcf_vcf.is_file():
+                    bcf_calls = parse_vcf_calls(bcf_vcf, "bcftools")
+                    for bc_call in bcf_calls:
+                        if pos_exp and bc_call.get("pos") == pos_exp and (not alt_exp or bc_call.get("alt") == alt_exp):
+                            bcftools_af = bc_call.get("vaf")
+                            break
             if bcftools_af is None:
                 bcf_path = run_dir / "reports" / "bcr_abl" / f"{sample_pref}.bcftools_pileup.tsv"
                 if bcf_path.is_file():
@@ -580,8 +608,9 @@ def build_comparison(
                             except ValueError:
                                 continue
                             if pos_exp and b_pos == pos_exp:
-                                bcftools_af = parse_vaf_percent(br.get("vaf", br.get("af", "")))
+                                bcftools_af = parse_vaf_percent(br.get("vaf", br.get("af", "")), scale="percent")
                                 break
+
 
         coord_str = f"{chrom_exp}:{pos_exp} {ref_exp}>{alt_exp}" if pos_exp else "-"
 
