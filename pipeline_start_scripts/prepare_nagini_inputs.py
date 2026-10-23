@@ -250,7 +250,7 @@ def parse_args() -> argparse.Namespace:
         "--all-callers",
         action="store_true",
         default=False,
-        help="Enable all variant callers (Branford, VarDictRust, Rindels, bcftools mpileup) for BCR-ABL1.",
+        help="Enable all orthogonal variant callers (Branford, Rindels, bcftools mpileup) for BCR-ABL1.",
     )
     parser.add_argument(
         "--enable-rindels",
@@ -262,7 +262,7 @@ def parse_args() -> argparse.Namespace:
         "--enable-vardictrust",
         action="store_true",
         default=False,
-        help="Enable VarDictRust variant caller for BCR-ABL1 target exons.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--enable-bcftools-pileup",
@@ -1963,8 +1963,6 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         config.setdefault("bcr_abl", {})["enable_all_callers"] = True
         config["enable_rindels"] = True
         config.setdefault("bcr_abl", {})["enable_rindels"] = True
-        config["enable_vardictrust"] = True
-        config.setdefault("bcr_abl", {})["enable_vardictrust"] = True
         config["enable_bcftools_pileup"] = True
         config.setdefault("bcr_abl", {})["enable_bcftools_pileup"] = True
 
@@ -1973,8 +1971,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         config.setdefault("bcr_abl", {})["enable_rindels"] = True
 
     if getattr(args, "enable_vardictrust", False):
-        config["enable_vardictrust"] = True
-        config.setdefault("bcr_abl", {})["enable_vardictrust"] = True
+        sys.stderr.write("Warning: VarDictRust is deprecated and retired for BCR-ABL1; option ignored.\n")
 
     if getattr(args, "enable_bcftools_pileup", False):
         config["enable_bcftools_pileup"] = True

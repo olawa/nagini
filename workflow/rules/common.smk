@@ -1364,17 +1364,10 @@ def bcr_abl_rindels_enabled(sample=None):
 
 
 def bcr_abl_vardictrust_enabled(sample=None):
-    if all_callers_enabled(sample):
-        return True
-    return bool(
-        config.get("bcr_abl", {}).get("enable_vardictrust", False)
-        or config.get("enable_vardictrust", False)
-    )
+    return False
 
 
 def get_report_bcr_abl_vardictrust_vcf(wildcards):
-    if sample_has_assay_module(wildcards.sample, "bcr_abl") and bcr_abl_vardictrust_enabled(wildcards.sample):
-        return get_sample_type_path(wildcards, "snv_indels/vardictrust", ".bcr_abl.vcf.gz")
     return []
 
 

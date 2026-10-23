@@ -75,7 +75,6 @@ filter_reads=""
 merged_fastq=""
 barcode_map_origin=""
 enable_rindels=false
-enable_vardictrust=false
 enable_bcftools_pileup=false
 enable_all_callers=false
 filter_qv=""
@@ -140,9 +139,8 @@ Options:
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
   --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
-  --enable-all-callers          Enable all callers (Branford, VarDictRust, Rindels, bcftools) for BCR-ABL1.
+  --enable-all-callers          Enable all orthogonal callers (Branford, Rindels, bcftools) for BCR-ABL1.
   --enable-rindels              Enable Rindels caller for BCR-ABL1.
-  --enable-vardictrust          Enable VarDictRust caller for BCR-ABL1 target exons.
   --enable-bcftools-pileup      Enable bcftools mpileup caller for BCR-ABL1 target exons.
   --clairs-to-platform MODEL    ClairS-TO platform model (auto-selected from basecalling model if omitted).
   --clairs-to-container IMAGE   Override default ClairS-TO container image.
@@ -372,7 +370,6 @@ while [[ $# -gt 0 ]]; do
         --enable-all-callers|--all-callers)
             enable_all_callers=true
             enable_rindels=true
-            enable_vardictrust=true
             enable_bcftools_pileup=true
             shift 1
             ;;
@@ -381,7 +378,7 @@ while [[ $# -gt 0 ]]; do
             shift 1
             ;;
         --enable-vardictrust|--vardictrust)
-            enable_vardictrust=true
+            echo "Notice: VarDictRust is deprecated and retired for BCR-ABL1; ignoring flag." >&2
             shift 1
             ;;
         --enable-bcftools-pileup|--bcftools-pileup)
@@ -663,7 +660,6 @@ field_if "sample type" "$sample_type"
 field_if "reference build" "$reference_build"
 if [[ "$assay" == "bcr_abl" ]]; then
     callers=("Branford Pileup Caller")
-    [[ "$enable_vardictrust" == "true" ]] && callers+=("VarDictRust")
     [[ "$enable_rindels" == "true" ]] && callers+=("Rindels")
     [[ "$enable_bcftools_pileup" == "true" ]] && callers+=("bcftools")
     caller_display=$(IFS=" + "; echo "${callers[*]}")
@@ -738,7 +734,6 @@ prepare_cmd=(
 [[ -n "$small_variant_caller" ]] && prepare_cmd+=(--small-variant-caller "$small_variant_caller")
 [[ "$enable_all_callers" == "true" ]] && prepare_cmd+=(--enable-all-callers)
 [[ "$enable_rindels" == "true" ]] && prepare_cmd+=(--enable-rindels)
-[[ "$enable_vardictrust" == "true" ]] && prepare_cmd+=(--enable-vardictrust)
 [[ "$enable_bcftools_pileup" == "true" ]] && prepare_cmd+=(--enable-bcftools-pileup)
 [[ -n "$clairs_to_platform" ]] && prepare_cmd+=(--clairs-to-platform "$clairs_to_platform")
 [[ -n "$clairs_to_container" ]] && prepare_cmd+=(--clairs-to-container "$clairs_to_container")
