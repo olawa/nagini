@@ -116,14 +116,19 @@ def load_branford_bed(bed_path: Path) -> Tuple[Dict[str, Tuple[str, int, str, st
 
 
 def parse_table6(path: Path) -> List[Dict[str, Any]]:
-    """Parse Table 6 (precision / clinical validation table with Sequel and MiSeq)."""
+    """Parse Table 6 (precision / clinical validation table with Sequel and MiSeq).
+    Supports either standard 8-column layout (Provnr, ratio, ...),
+    or extended layout with Sample ID / BCRABL-bc column (Provnr, Sample ID, ratio, ...).
+    """
     with open(path, "r", encoding="utf-8") as f:
         lines = [l.strip() for l in f if l.strip()]
 
     start_idx = 0
+    header_cols: List[str] = []
     for idx, l in enumerate(lines):
-        if l.startswith("Provnr") or "aa-variant" in l:
+        if l.startswith("Provnr") or "aa-variant" in l or l.startswith("Sample ID"):
             start_idx = idx + 1
+            header_cols = [c.strip().lower() for c in l.split("\t")]
 
     records: List[Dict[str, Any]] = []
 
@@ -139,19 +144,55 @@ def parse_table6(path: Path) -> List[Dict[str, Any]]:
             res.append((normalize_aa(v), af_val))
         return res
 
+    # Check if header has explicit sample_id column
+    has_sample_col = False
+    sample_col_idx = None
+    for c_idx, h in enumerate(header_cols):
+        if h in ("sample id", "sample_id", "sample", "bcrabl-bc", "bcrabl_bc", "barcode"):
+            has_sample_col = True
+            sample_col_idx = c_idx
+            break
 
     for l in lines[start_idx:]:
         parts = [p.strip() for p in l.split("\t")]
         if len(parts) < 8:
             continue
+
         provnr = parts[0]
-        ratio = parts[1]
-        seq_var_str = parts[2]
-        seq_af_str = parts[3]
-        seq_iso = parts[4].replace("-", "").strip()
-        mis_var_str = parts[5]
-        mis_af_str = parts[6]
-        mis_iso = parts[7].replace("-", "").strip()
+        sample_id = ""
+
+        # Determine column offsets
+        if has_sample_col and sample_col_idx is not None and sample_col_idx < len(parts):
+            sample_id = parts[sample_col_idx]
+            clean_parts = [p for i, p in enumerate(parts) if i != sample_col_idx]
+            ratio = clean_parts[1]
+            seq_var_str = clean_parts[2]
+            seq_af_str = clean_parts[3]
+            seq_iso = clean_parts[4].replace("-", "").strip() if len(clean_parts) > 4 else ""
+            mis_var_str = clean_parts[5] if len(clean_parts) > 5 else ""
+            mis_af_str = clean_parts[6] if len(clean_parts) > 6 else ""
+            mis_iso = clean_parts[7].replace("-", "").strip() if len(clean_parts) > 7 else ""
+        elif len(parts) >= 9 and (parts[1].lower().startswith("bcrabl-") or parts[1].lower().startswith("barcode")):
+            # Auto-detected BCRABL-bc in column 1 (e.g. Provnr \t BCRABL-bc01 \t ratio ...)
+            sample_id = parts[1]
+            ratio = parts[2]
+            seq_var_str = parts[3]
+            seq_af_str = parts[4]
+            seq_iso = parts[5].replace("-", "").strip()
+            mis_var_str = parts[6]
+            mis_af_str = parts[7]
+            mis_iso = parts[8].replace("-", "").strip()
+        else:
+            ratio = parts[1]
+            seq_var_str = parts[2]
+            seq_af_str = parts[3]
+            seq_iso = parts[4].replace("-", "").strip()
+            mis_var_str = parts[5]
+            mis_af_str = parts[6]
+            mis_iso = parts[7].replace("-", "").strip()
+
+            if provnr.lower().startswith("bcrabl-") or provnr.lower().startswith("barcode"):
+                sample_id = provnr
 
         seq_items = dict(split_vars_and_afs(seq_var_str, seq_af_str))
         mis_items = dict(split_vars_and_afs(mis_var_str, mis_af_str))
@@ -160,6 +201,7 @@ def parse_table6(path: Path) -> List[Dict[str, Any]]:
         for v in all_vars:
             records.append({
                 "provnr": provnr,
+                "sample_id": sample_id,
                 "ratio": ratio,
                 "variant": v,
                 "sequel_af": seq_items.get(v),
@@ -171,8 +213,8 @@ def parse_table6(path: Path) -> List[Dict[str, Any]]:
     return records
 
 
-def parse_sample_mapping(run_dir: Path) -> Dict[str, Dict[str, str]]:
-    """Parse samples.tsv and units.tsv to map sample ID to DNA Number and barcode."""
+def parse_sample_mapping(run_dir: Path, custom_map_path: Optional[Path] = None) -> Dict[str, Dict[str, str]]:
+    """Parse samples.tsv, units.tsv, and custom map to map sample ID to DNA Number and barcode."""
     mapping: Dict[str, Dict[str, str]] = {}
 
     samples_file = run_dir / "samples.tsv"
@@ -196,6 +238,43 @@ def parse_sample_mapping(run_dir: Path) -> Dict[str, Dict[str, str]]:
                     mapping[s_id]["barcode"] = bc
                 elif s_id:
                     mapping[s_id] = {"dna_number": "", "sample_id": s_id, "barcode": bc}
+
+    # Check custom map or candidate map files
+    map_candidates = []
+    if custom_map_path and custom_map_path.is_file():
+        map_candidates.append(custom_map_path)
+    else:
+        for c in [
+            run_dir / "sample_map.tsv",
+            run_dir / "barcode_map.tsv",
+            run_dir / "barcode_map.csv",
+            run_dir / "sample_sheet.csv",
+            run_dir / "samples.tsv",
+        ]:
+            if c.is_file() and c not in map_candidates:
+                map_candidates.append(c)
+
+    for mf in map_candidates:
+        try:
+            with open(mf, "r", encoding="utf-8") as f:
+                sample_text = f.read(2048)
+                f.seek(0)
+                delim = "," if ("," in sample_text and "\t" not in sample_text) else "\t"
+                reader = csv.DictReader(f, delimiter=delim)
+                for r in reader:
+                    dna = r.get("dna_number", r.get("patient_id", r.get("lab_id", ""))).strip()
+                    s_id = r.get("sample_id", r.get("sample", "")).strip()
+                    bc = r.get("barcode", "").strip()
+                    if s_id:
+                        if s_id not in mapping:
+                            mapping[s_id] = {"dna_number": dna, "sample_id": s_id, "barcode": bc}
+                        else:
+                            if dna and not mapping[s_id]["dna_number"]:
+                                mapping[s_id]["dna_number"] = dna
+                            if bc and not mapping[s_id]["barcode"]:
+                                mapping[s_id]["barcode"] = bc
+        except Exception:
+            pass
 
     return mapping
 
@@ -379,13 +458,15 @@ def build_comparison(
     summary_xlsx: Optional[Path] = None,
     aa_to_coords: Optional[Dict[str, Tuple[str, int, str, str]]] = None,
     coords_to_aa: Optional[Dict[Tuple[str, int, str], str]] = None,
+    sample_map_path: Optional[Path] = None,
+    variants_tsv_path: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Assemble the unified comparison table across MiSeq, Sequel, and Nagini callers."""
     aa_to_coords = aa_to_coords or {}
     coords_to_aa = coords_to_aa or {}
 
-    # Sample mapping from run_dir
-    sample_mapping = parse_sample_mapping(run_dir)
+    # Sample mapping from run_dir or custom mapping
+    sample_mapping = parse_sample_mapping(run_dir, custom_map_path=sample_map_path)
     dna_to_sid: Dict[str, str] = {}
     sid_to_dna: Dict[str, str] = {}
     for sid, info in sample_mapping.items():
@@ -393,6 +474,58 @@ def build_comparison(
         if dna:
             dna_to_sid[dna] = sid
             sid_to_dna[sid] = dna
+
+    # Load variants_tsv if provided or candidate exists
+    variants_tsv_calls: Dict[Tuple[str, str], Dict[str, float]] = {}
+    cand_variants_tsvs = []
+    if variants_tsv_path and variants_tsv_path.is_file():
+        cand_variants_tsvs.append(variants_tsv_path)
+    else:
+        for c in [
+            run_dir / "bcr_abl_caller_results.tsv",
+            run_dir / "reports" / "bcr_abl" / "caller_results.tsv",
+            Path("references/bcr_abl_caller_results.tsv"),
+            Path("../references/bcr_abl_caller_results.tsv"),
+        ]:
+            if c.is_file():
+                cand_variants_tsvs.append(c)
+
+    for v_tsv in cand_variants_tsvs:
+        try:
+            with open(v_tsv, "r", encoding="utf-8") as vf:
+                reader = csv.DictReader(vf, delimiter="\t")
+                for r in reader:
+                    dna = r.get("DNA Number", "").strip()
+                    sid_r = r.get("Sample ID", "").strip()
+                    caller = r.get("Caller", "").strip()
+                    chrom = r.get("Chr", "").strip()
+                    alt = r.get("Alt", "").strip()
+                    try:
+                        pos = int(r.get("Position", 0))
+                    except ValueError:
+                        pos = 0
+
+                    aa = normalize_aa(r.get("Consequence / AA Change", "").strip())
+                    if not aa and pos:
+                        aa = coords_to_aa.get((chrom, pos, alt), "") or coords_to_aa.get((chrom.removeprefix("chr"), pos, alt), "")
+
+                    vaf = parse_vaf_percent(r.get("VAF", ""))
+                    if dna and sid_r:
+                        dna_to_sid[dna] = sid_r
+                        sid_to_dna[sid_r] = dna
+                    if caller and vaf is not None:
+                        if aa:
+                            if dna:
+                                variants_tsv_calls.setdefault((dna, aa), {})[caller] = vaf
+                            if sid_r:
+                                variants_tsv_calls.setdefault((sid_r, aa), {})[caller] = vaf
+                        if pos:
+                            if dna:
+                                variants_tsv_calls.setdefault((dna, str(pos)), {})[caller] = vaf
+                            if sid_r:
+                                variants_tsv_calls.setdefault((sid_r, str(pos)), {})[caller] = vaf
+        except Exception:
+            pass
 
     # Look for summary xlsx if not explicitly provided
     if not summary_xlsx:
@@ -441,7 +574,9 @@ def build_comparison(
         sequel_iso = tr["sequel_iso"]
 
         # Resolve sample ID and overview info
-        sid = dna_to_sid.get(provnr, "")
+        sid = tr.get("sample_id", "")
+        if not sid:
+            sid = dna_to_sid.get(provnr, "")
         if not sid and provnr in overview_map:
             sid = overview_map[provnr].get("sample_id", "")
         if not sid:
@@ -611,6 +746,26 @@ def build_comparison(
                                 bcftools_af = parse_vaf_percent(br.get("vaf", br.get("af", "")), scale="percent")
                                 break
 
+        # 3. Check variants_tsv_calls if any caller AF is still missing
+        if variants_tsv_calls:
+            matches_to_check = []
+            for k in [
+                (provnr, norm_v), (sid, norm_v),
+                (provnr, str(pos_exp)) if pos_exp else None,
+                (sid, str(pos_exp)) if pos_exp else None,
+            ]:
+                if k and k in variants_tsv_calls:
+                    matches_to_check.append(variants_tsv_calls[k])
+
+            for v_m in matches_to_check:
+                if branford_af is None and "Branford" in v_m:
+                    branford_af = v_m["Branford"]
+                if vardict_af is None and "VarDictRust" in v_m:
+                    vardict_af = v_m["VarDictRust"]
+                if rindels_af is None and "Rindels" in v_m:
+                    rindels_af = v_m["Rindels"]
+                if bcftools_af is None and "bcftools" in v_m:
+                    bcftools_af = v_m["bcftools"]
 
         coord_str = f"{chrom_exp}:{pos_exp} {ref_exp}>{alt_exp}" if pos_exp else "-"
 
@@ -811,6 +966,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to Branford positions BED file (default: workflow/resources/bcr_abl/branford_positions_hg19.bed)"
     )
     parser.add_argument(
+        "--sample-map", "-m", type=Path, default=None,
+        help="Path to sample mapping TSV/CSV (maps DNA number to sample ID or barcode)"
+    )
+    parser.add_argument(
+        "--variants-tsv", "-v", type=Path, default=None,
+        help="Path to caller results TSV (e.g. references/bcr_abl_caller_results.tsv)"
+    )
+    parser.add_argument(
+        "--plot", "-p", type=Path, default=None,
+        help="Path to save publication-ready comparison figure (PNG or SVG)"
+    )
+    parser.add_argument(
         "--output-tsv", "-o", type=Path, default=Path("bcr_abl_caller_comparison.tsv"),
         help="Output TSV path (default: bcr_abl_caller_comparison.tsv)"
     )
@@ -826,6 +993,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not truth_path or not truth_path.is_file():
         candidates = [
             Path("~/data/bcr-abl/table6_precision.txt").expanduser(),
+            Path("references/table6_precision.txt"),
             Path("table6_precision.txt"),
             Path("../table6_precision.txt"),
         ]
@@ -864,6 +1032,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         summary_xlsx=args.summary_xlsx,
         aa_to_coords=aa_to_coords,
         coords_to_aa=coords_to_aa,
+        sample_map_path=args.sample_map,
+        variants_tsv_path=args.variants_tsv,
     )
 
     # Outputs
@@ -877,6 +1047,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[Nagini] Saved Excel comparison table to: {args.output_xlsx}")
     except Exception as exc:
         sys.stderr.write(f"Warning: could not write Excel file: {exc}\n")
+
+    # Generate figure if requested
+    if args.plot:
+        try:
+            try:
+                from pipeline_start_scripts.plot_bcr_abl_technology_comparison import (
+                    build_plot_dataset,
+                    create_comparison_figure,
+                    load_caller_results,
+                )
+            except ModuleNotFoundError:
+                from plot_bcr_abl_technology_comparison import (
+                    build_plot_dataset,
+                    create_comparison_figure,
+                    load_caller_results,
+                )
+            v_path = args.variants_tsv or Path("references/bcr_abl_caller_results.tsv")
+            c_results = load_caller_results(v_path, coords_to_aa=coords_to_aa)
+            plot_dataset = build_plot_dataset(truth_records, c_results)
+            create_comparison_figure(plot_dataset, args.plot)
+        except Exception as exc:
+            sys.stderr.write(f"Warning: could not generate comparison plot: {exc}\n")
 
     return 0
 
