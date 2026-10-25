@@ -568,6 +568,98 @@ class TestBcrAblFusionCounter(unittest.TestCase):
         self.assertEqual(FUSION_COUNTER.assign_exon(510, exon_map, tolerance=50), "e13")
         self.assertIsNone(FUSION_COUNTER.assign_exon(750, exon_map, tolerance=50))
 
+    def test_assign_bcr_exon_minor_breakpoint(self):
+        bcr_exons = FUSION_COUNTER.KNOWN_JUNCTIONS["hg19"]["bcr_exons"]
+        bcr_regions = FUSION_COUNTER.KNOWN_JUNCTIONS["hg19"]["bcr_regions"]
+
+        # Case 1: Exact donor match (23524426)
+        exon, pos = FUSION_COUNTER.assign_bcr_exon(
+            23524426, [{"start": 23524226, "end": 23524426}], bcr_exons, bcr_regions, tolerance=150
+        )
+        self.assertEqual(exon, "e1")
+
+        # Case 2: Soft-clipped BCR segment ending early at 23524270 (156 bp from donor)
+        exon, pos = FUSION_COUNTER.assign_bcr_exon(
+            23524270, [{"start": 23524226, "end": 23524270}], bcr_exons, bcr_regions, tolerance=150
+        )
+        self.assertEqual(exon, "e1")
+        self.assertEqual(pos, 23524426)
+
+    def test_assign_abl_exon_a2_vs_a3(self):
+        abl_exons = FUSION_COUNTER.KNOWN_JUNCTIONS["hg19"]["abl_exons"]
+        abl_regions = FUSION_COUNTER.KNOWN_JUNCTIONS["hg19"]["abl_regions"]
+
+        # Case 1: Exon 3 without Exon 2 (e1a3 / p185)
+        # Alignment starts inside Exon 3 at 133730250 (>150 bp from acceptor 133730188)
+        exon, pos = FUSION_COUNTER.assign_abl_exon(
+            133730250, [{"start": 133730250, "end": 133758000, "blocks": [(133730250, 133730483), (133738150, 133738422)]}],
+            abl_exons, abl_regions, tolerance=150
+        )
+        self.assertEqual(exon, "a3")
+        self.assertEqual(pos, 133730188)
+
+        # Case 2: Exon 2 present (e1a2 / e14a2 / p210)
+        exon, pos = FUSION_COUNTER.assign_abl_exon(
+            133729451, [{"start": 133729451, "end": 133758000, "blocks": [(133729451, 133729624), (133730188, 133730483)]}],
+            abl_exons, abl_regions, tolerance=150
+        )
+        self.assertEqual(exon, "a2")
+        self.assertEqual(pos, 133729451)
+
+    def test_e1a3_fusion_chimeric_bam_calling(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bam_path = tmp / "e1a3_test.bam"
+            out_tsv = tmp / "fusion_summary.tsv"
+            out_json = tmp / "fusion_summary.json"
+
+            # Create synthetic e1a3 chimeric reads:
+            # Segment 1 on chr22: BCR exon 1 (start 23524225, end 23524300, soft-clipped)
+            # Segment 2 on chr9: ABL1 exon 3 (start 133730187, end 133732000)
+            reads = []
+            for i in range(20):
+                reads.append({
+                    "name": f"mol_{i}", "chrom": "chr9", "start": 133730187,
+                    "seq": "A" * 500, "qual": 30, "supplementary": False
+                })
+            for i in range(20):
+                reads.append({
+                    "name": f"mol_{i}", "chrom": "chr22", "start": 23524225,
+                    "seq": "C" * 75, "qual": 30, "supplementary": True
+                })
+
+            refs = [("chr9", 141213431), ("chr22", 51304566)]
+            create_synthetic_bam(bam_path, reads, refs)
+
+            counts, events, scanned, stats = FUSION_COUNTER.extract_fusion_events(
+                bam_path=bam_path, build="hg19", tolerance=150, min_mapq=0
+            )
+
+            self.assertEqual(counts.get("e1a3"), 20)
+            self.assertEqual(counts.get("atypical_bcr_abl", 0), 0)
+            self.assertNotIn("e1a2_candidate", counts)
+
+            FUSION_COUNTER.write_outputs(
+                sample="SAMPLE_BC08",
+                isoform_counts=counts,
+                raw_events=events,
+                output_path=out_tsv,
+                json_path=out_json,
+                build="hg19",
+                read_stats=stats,
+            )
+
+            lines = [l for l in out_tsv.read_text().splitlines() if not l.startswith("#")]
+            header = lines[0].split("\t")
+            row1 = dict(zip(header, lines[1].split("\t")))
+            self.assertEqual(row1["fusion_isoform"], "e1a3")
+            self.assertEqual(row1["bcr_exon"], "e1")
+            self.assertEqual(row1["abl_exon"], "a3")
+            self.assertEqual(row1["protein_form"], "p185")
+            self.assertEqual(row1["cluster"], "m-BCR")
+            self.assertEqual(row1["status"], "PRIMARY")
+            self.assertEqual(row1["read_count"], "20")
+
     def test_read_stats_computation_on_bam(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

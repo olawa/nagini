@@ -86,10 +86,25 @@ _ABL_EXONS_HG19 = {
     "a3": 133730188,
 }
 
+# Genomic bounds for BCR and ABL1 exon bodies / amplicon targets:
+_BCR_EXON_REGIONS_HG19 = {
+    "e1": (23524100, 23524550),   # spans minor primer (23524226) and donor (23524426)
+    "e6": (23595500, 23595800),
+    "e13": (23631650, 23631900),  # spans exon 13 body and donor (23631808)
+    "e14": (23632480, 23632700),  # spans major primer (23632550) and donor (23632600)
+    "e19": (23653850, 23654150),
+}
+_ABL_EXON_REGIONS_HG19 = {
+    "a2": (133729451, 133729624),  # exon 2 body (174 bp)
+    "a3": (133730188, 133730483),  # exon 3 body (296 bp)
+}
+
 KNOWN_JUNCTIONS = {
     "hg19": {
         "bcr_exons": dict(_BCR_EXONS_HG19),
         "abl_exons": dict(_ABL_EXONS_HG19),
+        "bcr_regions": dict(_BCR_EXON_REGIONS_HG19),
+        "abl_regions": dict(_ABL_EXON_REGIONS_HG19),
         "bcr_chroms": {"chr22", "22"},
         "abl_chroms": {"chr9", "9"},
     },
@@ -99,6 +114,14 @@ KNOWN_JUNCTIONS = {
         },
         "abl_exons": {
             name: pos - _CHR9_HG19_TO_HG38_OFFSET for name, pos in _ABL_EXONS_HG19.items()
+        },
+        "bcr_regions": {
+            name: (s - _CHR22_HG19_TO_HG38_OFFSET, e - _CHR22_HG19_TO_HG38_OFFSET)
+            for name, (s, e) in _BCR_EXON_REGIONS_HG19.items()
+        },
+        "abl_regions": {
+            name: (s - _CHR9_HG19_TO_HG38_OFFSET, e - _CHR9_HG19_TO_HG38_OFFSET)
+            for name, (s, e) in _ABL_EXON_REGIONS_HG19.items()
         },
         "bcr_chroms": {"chr22", "22"},
         "abl_chroms": {"chr9", "9"},
@@ -158,6 +181,85 @@ def assign_exon(pos: int, exon_map: Dict[str, int], tolerance: int) -> Optional[
     return best_exon
 
 
+def assign_bcr_exon(
+    bcr_junction_pos: int,
+    bcr_segs: Sequence[Dict[str, Any]],
+    bcr_exons: Dict[str, int],
+    bcr_regions: Dict[str, Tuple[int, int]],
+    tolerance: int,
+) -> Tuple[Optional[str], int]:
+    """Assign BCR exon by junction coordinate or amplicon target region overlap."""
+    matched = assign_exon(bcr_junction_pos, bcr_exons, tolerance)
+    if matched:
+        return matched, bcr_exons.get(matched, bcr_junction_pos)
+
+    bcr_start_pos = min(s["start"] for s in bcr_segs)
+    matched_start = assign_exon(bcr_start_pos, bcr_exons, tolerance)
+    if matched_start:
+        return matched_start, bcr_exons.get(matched_start, bcr_start_pos)
+
+    # Amplicon target region overlap:
+    # For e1 (minor breakpoint), the entire amplicon fragment on BCR is ~200 bp.
+    # Reads with soft-clipping near the chimeric junction or alignment endpoints
+    # within the e1 target window unambiguously derive from e1.
+    for exon_name, (r_start, r_end) in bcr_regions.items():
+        if (r_start - tolerance) <= bcr_junction_pos <= (r_end + tolerance):
+            return exon_name, bcr_exons.get(exon_name, bcr_junction_pos)
+        for s in bcr_segs:
+            s_start, s_end = s["start"], s["end"]
+            overlap = max(0, min(s_end, r_end) - max(s_start, r_start))
+            if overlap >= 30:
+                return exon_name, bcr_exons.get(exon_name, bcr_junction_pos)
+
+    return None, bcr_junction_pos
+
+
+def assign_abl_exon(
+    abl_junction_pos: int,
+    abl_segs: Sequence[Dict[str, Any]],
+    abl_exons: Dict[str, int],
+    abl_regions: Dict[str, Tuple[int, int]],
+    tolerance: int,
+) -> Tuple[Optional[str], int]:
+    """Assign ABL1 exon by junction coordinate and presence/absence of Exon 2 vs Exon 3."""
+    matched = assign_exon(abl_junction_pos, abl_exons, tolerance)
+    if matched:
+        return matched, abl_exons.get(matched, abl_junction_pos)
+
+    abl_end_pos = max(s["end"] for s in abl_segs)
+    matched_end = assign_exon(abl_end_pos, abl_exons, tolerance)
+    if matched_end:
+        return matched_end, abl_exons.get(matched_end, abl_end_pos)
+
+    # Check exon presence across aligned blocks / segments:
+    # ABL1 exon 2 is 174 bp; ABL1 exon 3 is 296 bp.
+    # In e1a3 / e13a3 / e14a3 fusions, exon 2 is deleted/skipped.
+    # In e1a2 / e13a2 / e14a2 fusions, exon 2 is present.
+    a2_start, a2_end = abl_regions.get("a2", (0, 0))
+    a3_start, a3_end = abl_regions.get("a3", (0, 0))
+
+    has_a2_overlap = False
+    has_a3_overlap = False
+
+    for s in abl_segs:
+        blocks = s.get("blocks") or [(s["start"], s["end"])]
+        for b_start, b_end in blocks:
+            if a2_start and max(0, min(b_end, a2_end) - max(b_start, a2_start)) >= 20:
+                has_a2_overlap = True
+            if a3_start and max(0, min(b_end, a3_end) - max(b_start, a3_start)) >= 20:
+                has_a3_overlap = True
+
+    if has_a2_overlap:
+        return "a2", abl_exons.get("a2", abl_junction_pos)
+    if has_a3_overlap:
+        return "a3", abl_exons.get("a3", abl_junction_pos)
+
+    if a3_start and (a3_start - tolerance) <= abl_junction_pos <= (a3_end + tolerance):
+        return "a3", abl_exons.get("a3", abl_junction_pos)
+
+    return None, abl_junction_pos
+
+
 def compute_n50(lengths: Sequence[int]) -> int:
     """Calculate N50 read length across a sequence of lengths."""
     if not lengths:
@@ -181,6 +283,8 @@ def extract_fusion_events(
     abl_chroms = coords["abl_chroms"]
     bcr_exons = coords["bcr_exons"]
     abl_exons = coords["abl_exons"]
+    bcr_regions = coords.get("bcr_regions", {})
+    abl_regions = coords.get("abl_regions", {})
 
     bcr_start_bound = 20_000_000
     bcr_end_bound = 26_000_000
@@ -227,6 +331,13 @@ def extract_fusion_events(
             if not (is_bcr or is_abl):
                 continue
 
+            qstart = aln.query_alignment_start or 0
+            qend = aln.query_alignment_end or 0
+            try:
+                blocks = [(s + 1, e) for s, e in aln.get_blocks()]
+            except Exception:
+                blocks = [(ref_start + 1, ref_end)]
+
             on_target_read_names.add(qname)
             read_segments[qname].append({
                 "chrom": ref_name,
@@ -237,6 +348,9 @@ def extract_fusion_events(
                 "is_bcr": is_bcr,
                 "is_abl": is_abl,
                 "cigar": aln.cigarstring,
+                "qstart": qstart,
+                "qend": qend,
+                "blocks": blocks,
             })
     finally:
         bam.close()
@@ -288,30 +402,36 @@ def extract_fusion_events(
         bcr_segs = [s for s in segments if s["is_bcr"]]
         abl_segs = [s for s in segments if s["is_abl"]]
 
-        # Find closest BCR junction coordinate and ABL junction coordinate
-        bcr_junction_pos = max(s["end"] for s in bcr_segs)
-        abl_junction_pos = min(s["start"] for s in abl_segs)
+        # Select best chimeric junction pair (closest in query alignment space)
+        best_bcr_seg = bcr_segs[0]
+        best_abl_seg = abl_segs[0]
+        if len(bcr_segs) > 1 or len(abl_segs) > 1:
+            min_qdist = float("inf")
+            for b_seg in bcr_segs:
+                for a_seg in abl_segs:
+                    qdist = max(0, b_seg["qstart"] - a_seg["qend"], a_seg["qstart"] - b_seg["qend"])
+                    if qdist < min_qdist:
+                        min_qdist = qdist
+                        best_bcr_seg = b_seg
+                        best_abl_seg = a_seg
 
-        assigned_bcr_exon = assign_exon(bcr_junction_pos, bcr_exons, tolerance)
-        assigned_abl_exon = assign_exon(abl_junction_pos, abl_exons, tolerance)
+        bcr_junction_pos = best_bcr_seg["end"] if not best_bcr_seg["is_reverse"] else best_bcr_seg["start"]
+        abl_junction_pos = best_abl_seg["start"] if not best_abl_seg["is_reverse"] else best_abl_seg["end"]
 
-        if not assigned_bcr_exon:
-            # Check if start coordinate matches an exon
-            bcr_start_pos = min(s["start"] for s in bcr_segs)
-            assigned_bcr_exon = assign_exon(bcr_start_pos, bcr_exons, tolerance)
-            if assigned_bcr_exon:
-                bcr_junction_pos = bcr_start_pos
+        if not bcr_junction_pos:
+            bcr_junction_pos = max(s["end"] for s in bcr_segs)
+        if not abl_junction_pos:
+            abl_junction_pos = min(s["start"] for s in abl_segs)
 
-        if not assigned_abl_exon:
-            abl_end_pos = max(s["end"] for s in abl_segs)
-            assigned_abl_exon = assign_exon(abl_end_pos, abl_exons, tolerance)
-            if assigned_abl_exon:
-                abl_junction_pos = abl_end_pos
+        assigned_bcr_exon, bcr_junction_pos = assign_bcr_exon(
+            bcr_junction_pos, bcr_segs, bcr_exons, bcr_regions, tolerance
+        )
+        assigned_abl_exon, abl_junction_pos = assign_abl_exon(
+            abl_junction_pos, abl_segs, abl_exons, abl_regions, tolerance
+        )
 
         if assigned_bcr_exon and assigned_abl_exon:
             isoform = f"{assigned_bcr_exon}{assigned_abl_exon}"
-        elif assigned_bcr_exon:
-            isoform = f"{assigned_bcr_exon}a2_candidate"
         else:
             isoform = "atypical_bcr_abl"
 
@@ -375,8 +495,13 @@ def write_outputs(
         else:
             status = "LOW_CONFIDENCE"
 
-        bcr_exon = iso.split("a")[0] if "a" in iso else ""
-        abl_exon = "a" + iso.split("a")[1] if "a" in iso else ""
+        if iso.startswith("e") and "a" in iso[1:]:
+            parts = iso.split("a", 1)
+            bcr_exon = parts[0]
+            abl_exon = "a" + parts[1]
+        else:
+            bcr_exon = ""
+            abl_exon = ""
 
         rows.append({
             "sample": sample,
@@ -460,10 +585,12 @@ def write_arriba_tsv(
         evs = events_by_iso.get(iso, [])
         bcr_pos_list = [e["bcr_pos"] for e in evs]
         abl_pos_list = [e["abl_pos"] for e in evs]
-        bcr_pos = sorted(bcr_pos_list)[len(bcr_pos_list) // 2] if bcr_pos_list else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso.split("a")[0], 23632600)
-        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get("a" + iso.split("a")[1] if "a" in iso else "a2", 133729451)
-        bcr_exon = evs[0]["bcr_exon"] if evs else (iso.split("a")[0] if "a" in iso else "e14")
-        abl_exon = evs[0]["abl_exon"] if evs else ("a" + iso.split("a")[1] if "a" in iso else "a2")
+        iso_bcr = iso.split("a", 1)[0] if (iso.startswith("e") and "a" in iso[1:]) else "e14"
+        iso_abl = "a" + iso.split("a", 1)[1] if (iso.startswith("e") and "a" in iso[1:]) else "a2"
+        bcr_pos = sorted(bcr_pos_list)[len(bcr_pos_list) // 2] if bcr_pos_list else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso_bcr, 23632600)
+        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get(iso_abl, 133729451)
+        bcr_exon = evs[0]["bcr_exon"] if evs else iso_bcr
+        abl_exon = evs[0]["abl_exon"] if evs else iso_abl
 
         bcr_chrom = "chr22"
         abl_chrom = "chr9"
