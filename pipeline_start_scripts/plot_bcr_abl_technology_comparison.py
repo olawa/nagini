@@ -543,20 +543,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         description="Plot publication-ready comparison figure across MiSeq, Sequel, and Nagini callers."
     )
     parser.add_argument(
-        "--truth-table", "-t", type=Path, default=Path("references/table6_precision.txt"),
-        help="Path to Table 6 text file (default: references/table6_precision.txt)"
+        "--truth-table", "-t", type=Path, default=None,
+        help="Path to Table 6 text file"
     )
     parser.add_argument(
-        "--variants-tsv", "-v", type=Path, default=Path("references/bcr_abl_caller_results.tsv"),
-        help="Path to caller results TSV (default: references/bcr_abl_caller_results.tsv)"
+        "--variants-tsv", "-v", type=Path, default=None,
+        help="Path to caller results TSV"
     )
     parser.add_argument(
         "--bed", "-b", type=Path, default=Path("workflow/resources/bcr_abl/branford_positions_hg19.bed"),
         help="Path to Branford positions BED (default: workflow/resources/bcr_abl/branford_positions_hg19.bed)"
     )
     parser.add_argument(
-        "--sample-map", "-m", type=Path, default=Path("references/bcr_abl_sample_map.tsv"),
-        help="Path to sample mapping TSV (default: references/bcr_abl_sample_map.tsv)"
+        "--sample-map", "--barcode-map", "-m", type=Path, default=None,
+        help="Path to sample mapping or barcode map TSV/CSV"
     )
     parser.add_argument(
         "--output", "-o", type=Path, default=Path("docs/poster/fig3_technology_comparison.png"),

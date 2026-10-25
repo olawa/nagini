@@ -966,8 +966,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to Branford positions BED file (default: workflow/resources/bcr_abl/branford_positions_hg19.bed)"
     )
     parser.add_argument(
-        "--sample-map", "-m", type=Path, default=None,
-        help="Path to sample mapping TSV/CSV (maps DNA number to sample ID or barcode)"
+        "--sample-map", "--barcode-map", "-m", type=Path, default=None,
+        help="Path to sample mapping or barcode map TSV/CSV (maps DNA number to sample ID or barcode)"
     )
     parser.add_argument(
         "--variants-tsv", "-v", type=Path, default=None,
