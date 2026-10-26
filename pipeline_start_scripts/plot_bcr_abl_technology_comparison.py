@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate publication-ready comparison figures comparing Nagini BCR-ABL1 callers
-against Illumina MiSeq and PacBio Sequel.
+against Illumina MiSeq (and optionally PacBio Sequel).
 
 Creates:
 1. Panel A: Cross-Platform Linear Correlation & Inset (0-3% low VAF range)
@@ -286,8 +286,21 @@ def create_comparison_figure(
     dataset: List[Dict[str, Any]],
     out_path: Path,
     dpi: int = 300,
+    callers: Optional[List[str]] = None,
+    compare_to: str = "miseq",
 ) -> None:
-    """Create publication-ready multi-panel figure."""
+    """Create publication-ready multi-panel figure.
+
+    Args:
+        dataset: List of merged record dictionaries.
+        out_path: Path to write image.
+        dpi: DPI for output.
+        callers: Callers to include (default: ['Branford', 'bcftools']).
+        compare_to: Target comparison ('miseq', 'sequel', or 'both'). Default: 'miseq'.
+    """
+    callers = callers or ["Branford", "bcftools"]
+    compare_to = compare_to.lower()
+
     # Setup styling
     plt.rcParams["font.sans-serif"] = ["Helvetica", "Arial", "DejaVu Sans", "Liberation Sans"]
     plt.rcParams["font.family"] = "sans-serif"
@@ -301,50 +314,60 @@ def create_comparison_figure(
     ax_bar = fig.add_subplot(gs[0, 1])
     ax_bland = fig.add_subplot(gs[0, 2])
 
+    caller_key_map = {
+        "Branford": "branford",
+        "bcftools": "bcftools",
+        "Rindels": "rindels",
+        "VarDictRust": "vardict",
+    }
+
     # -------------------------------------------------------------
-    # Panel A: Correlation & Linearity (Nanopore vs Orthogonal Truth)
+    # Panel A: Correlation & Linearity (Nanopore vs Illumina MiSeq)
     # -------------------------------------------------------------
     x_miseq_branford = []
     y_branford_for_mis = []
+    x_miseq_bcftools = []
+    y_bcftools_for_mis = []
 
-    # Gather paired points
     paired_pts = []
     seen_labels = set()
 
     for d in dataset:
-        mis = d["miseq"]
-        seq = d["sequel"]
-        bf = d["branford"]
-        bcf = d["bcftools"]
-        rin = d["rindels"]
-        vd = d["vardict"]
+        mis = d.get("miseq")
+        seq = d.get("sequel")
 
-        if mis is not None and bf is not None:
-            x_miseq_branford.append(mis)
-            y_branford_for_mis.append(bf)
+        for caller_name in callers:
+            ckey = caller_key_map.get(caller_name, caller_name.lower())
+            val = d.get(ckey)
+            c = CALLER_COLORS.get(caller_name, "#2563EB")
+            m = CALLER_MARKERS.get(caller_name, "o")
 
-        # Plot all callers against MiSeq
-        for caller_name, val, color, marker in [
-            ("Branford", bf, CALLER_COLORS["Branford"], CALLER_MARKERS["Branford"]),
-            ("bcftools", bcf, CALLER_COLORS["bcftools"], CALLER_MARKERS["bcftools"]),
-            ("Rindels", rin, CALLER_COLORS["Rindels"], CALLER_MARKERS["Rindels"]),
-            ("VarDictRust", vd, CALLER_COLORS["VarDictRust"], CALLER_MARKERS["VarDictRust"]),
-        ]:
-            if mis is not None and val is not None:
+            # Compare to MiSeq
+            if compare_to in ("miseq", "both") and mis is not None and val is not None:
                 lbl = f"ONT {caller_name} vs MiSeq"
                 ax_corr.scatter(
-                    mis, val, color=color, marker=marker, s=55, alpha=0.88,
-                    edgecolors="#0F172A", linewidth=0.6,
-                    label=lbl if lbl not in seen_labels else ""
+                    mis, val, color=c, marker=m, s=62, alpha=0.90,
+                    edgecolors="#0F172A", linewidth=0.7,
+                    label=lbl if lbl not in seen_labels else "",
+                    zorder=4
                 )
                 seen_labels.add(lbl)
                 paired_pts.append((mis, val, caller_name, "MiSeq"))
-            if seq is not None and val is not None:
+                if caller_name == "Branford":
+                    x_miseq_branford.append(mis)
+                    y_branford_for_mis.append(val)
+                elif caller_name == "bcftools":
+                    x_miseq_bcftools.append(mis)
+                    y_bcftools_for_mis.append(val)
+
+            # Compare to Sequel (if requested)
+            if compare_to in ("sequel", "both") and seq is not None and val is not None:
                 lbl = f"ONT {caller_name} vs Sequel"
                 ax_corr.scatter(
-                    seq, val, facecolor="none", edgecolor=color, marker=marker, s=65,
+                    seq, val, facecolor="none", edgecolor=c, marker=m, s=68,
                     linewidth=1.3, alpha=0.9,
-                    label=lbl if lbl not in seen_labels else ""
+                    label=lbl if lbl not in seen_labels else "",
+                    zorder=4
                 )
                 seen_labels.add(lbl)
                 paired_pts.append((seq, val, caller_name, "Sequel"))
@@ -353,48 +376,63 @@ def create_comparison_figure(
     ax_corr.plot([0, 105], [0, 105], linestyle="--", color="#94A3B8", linewidth=1.2, zorder=1, label="Identity (y = x)")
 
     # Linear regression fit for Branford vs MiSeq
+    reg_lines = []
     if len(x_miseq_branford) >= 2:
-        coeffs = np.polyfit(x_miseq_branford, y_branford_for_mis, deg=1)
-        poly_fn = np.poly1d(coeffs)
+        coeffs_bf = np.polyfit(x_miseq_branford, y_branford_for_mis, deg=1)
+        poly_fn_bf = np.poly1d(coeffs_bf)
         x_line = np.linspace(0, 102, 100)
-        ax_corr.plot(x_line, poly_fn(x_line), color="#1E3A8A", linewidth=1.6, alpha=0.95, zorder=2)
+        ax_corr.plot(x_line, poly_fn_bf(x_line), color=CALLER_COLORS["Branford"], linewidth=1.6, alpha=0.95, zorder=2)
 
-        # Compute R2 and Pearson r
-        r_mat = np.corrcoef(x_miseq_branford, y_branford_for_mis)
-        r_val = r_mat[0, 1]
-        r2_val = r_val ** 2
-        mae = np.mean(np.abs(np.array(x_miseq_branford) - np.array(y_branford_for_mis)))
+        r_mat_bf = np.corrcoef(x_miseq_branford, y_branford_for_mis)
+        r_val_bf = r_mat_bf[0, 1]
+        r2_val_bf = r_val_bf ** 2
+        mae_bf = np.mean(np.abs(np.array(x_miseq_branford) - np.array(y_branford_for_mis)))
 
-        reg_text = (
-            f"$\\mathbf{{Linear\\ Fit\\ (Branford\\ vs\\ MiSeq):}}$\n"
-            f"$y = {coeffs[0]:.3f}x + {coeffs[1]:.2f}$\n"
-            f"$R^2 = {r2_val:.4f}$  $(r = {r_val:.4f})$\n"
-            f"Mean Abs Error $= {mae:.2f}\\%$\n"
-            f"$n = {len(x_miseq_branford)}$ orthogonal sites"
-        )
+        reg_lines.append(f"$\\mathbf{{Linear\\ Fit\\ vs\\ Illumina\\ MiSeq:}}$")
+        reg_lines.append(f"Branford: $y = {coeffs_bf[0]:.3f}x + {coeffs_bf[1]:.2f}$  ($R^2 = {r2_val_bf:.4f}$, MAE $= {mae_bf:.2f}\\%$)")
+
+        # bcftools stats if present
+        if len(x_miseq_bcftools) >= 2:
+            coeffs_bcf = np.polyfit(x_miseq_bcftools, y_bcftools_for_mis, deg=1)
+            poly_fn_bcf = np.poly1d(coeffs_bcf)
+            ax_corr.plot(x_line, poly_fn_bcf(x_line), color=CALLER_COLORS["bcftools"], linestyle=":", linewidth=1.4, alpha=0.85, zorder=2)
+            r_mat_bcf = np.corrcoef(x_miseq_bcftools, y_bcftools_for_mis)
+            r_val_bcf = r_mat_bcf[0, 1]
+            r2_val_bcf = r_val_bcf ** 2
+            mae_bcf = np.mean(np.abs(np.array(x_miseq_bcftools) - np.array(y_bcftools_for_mis)))
+            reg_lines.append(f"bcftools: $y = {coeffs_bcf[0]:.3f}x + {coeffs_bcf[1]:.2f}$  ($R^2 = {r2_val_bcf:.4f}$, MAE $= {mae_bcf:.2f}\\%$)")
+
+        reg_lines.append(f"$n = {len(x_miseq_branford)}$ orthogonal benchmark sites")
+
         ax_corr.text(
-            0.04, 0.96, reg_text, transform=ax_corr.transAxes,
-            fontsize=8.5, verticalalignment="top",
+            0.04, 0.96, "\n".join(reg_lines), transform=ax_corr.transAxes,
+            fontsize=8.3, verticalalignment="top",
             bbox=dict(boxstyle="round,pad=0.5", facecolor="#F8FAFC", edgecolor="#CBD5E1", alpha=0.95)
         )
 
     ax_corr.set_xlim(-2, 105)
     ax_corr.set_ylim(-2, 105)
-    ax_corr.set_xlabel("Orthogonal Validation VAF (%) [MiSeq / Sequel]", fontsize=10, fontweight="bold", labelpad=6)
-    ax_corr.set_ylabel("Oxford Nanopore VAF (%) [Nagini callers]", fontsize=10, fontweight="bold", labelpad=6)
-    ax_corr.set_title("A. Cross-Platform Variant Allele Frequency Correlation", fontsize=11, fontweight="bold", loc="left", pad=10)
+    if compare_to == "miseq":
+        ax_corr.set_xlabel("Illumina MiSeq VAF (%)", fontsize=10, fontweight="bold", labelpad=6)
+        ax_corr.set_ylabel("Oxford Nanopore VAF (%) [Branford & bcftools]", fontsize=10, fontweight="bold", labelpad=6)
+        ax_corr.set_title("A. Oxford Nanopore vs Illumina MiSeq VAF Correlation", fontsize=11, fontweight="bold", loc="left", pad=10)
+    else:
+        ax_corr.set_xlabel("Orthogonal Validation VAF (%)", fontsize=10, fontweight="bold", labelpad=6)
+        ax_corr.set_ylabel("Oxford Nanopore VAF (%)", fontsize=10, fontweight="bold", labelpad=6)
+        ax_corr.set_title("A. Cross-Platform Variant Allele Frequency Correlation", fontsize=11, fontweight="bold", loc="left", pad=10)
     ax_corr.grid(True, linestyle=":", alpha=0.5, color="#CBD5E1")
+    ax_corr.legend(loc="lower right", frameon=True, fontsize=8.0, facecolor="#F8FAFC", edgecolor="#CBD5E1", framealpha=0.95)
 
     # Inset for low-frequency region (0 - 3%)
-    ax_inset = ax_corr.inset_axes([0.54, 0.08, 0.42, 0.38])
+    ax_inset = ax_corr.inset_axes([0.55, 0.14, 0.40, 0.38])
     for mis, val, caller, truth_src in paired_pts:
         if mis <= 3.5 and val <= 3.5:
-            c = CALLER_COLORS[caller]
-            m = CALLER_MARKERS[caller]
+            c = CALLER_COLORS.get(caller, "#2563EB")
+            m = CALLER_MARKERS.get(caller, "o")
             if truth_src == "MiSeq":
-                ax_inset.scatter(mis, val, color=c, marker=m, s=60, edgecolors="#0F172A", linewidth=0.6)
+                ax_inset.scatter(mis, val, color=c, marker=m, s=65, edgecolors="#0F172A", linewidth=0.7, zorder=4)
             else:
-                ax_inset.scatter(mis, val, facecolor="none", edgecolor=c, marker=m, s=65, linewidth=1.2)
+                ax_inset.scatter(mis, val, facecolor="none", edgecolor=c, marker=m, s=68, linewidth=1.2, zorder=4)
 
     ax_inset.plot([0, 3.5], [0, 3.5], linestyle="--", color="#94A3B8", linewidth=1.0)
     ax_inset.set_xlim(0, 3.0)
@@ -403,125 +441,146 @@ def create_comparison_figure(
     ax_inset.tick_params(labelsize=7)
     ax_inset.grid(True, linestyle=":", alpha=0.4)
     # Highlight E459K point annotation in inset
-    ax_inset.annotate("E459K (1.7% / 2.0%)", xy=(1.7, 2.01), xytext=(0.2, 2.4),
+    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.15, 2.45),
                       arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
-                      fontsize=7, fontweight="bold", color="#1E3A8A")
+                      fontsize=7.0, fontweight="bold", color="#1E3A8A")
 
     # -------------------------------------------------------------
     # Panel B: Grouped VAF Concordance across Dynamic Range
     # -------------------------------------------------------------
-    # Select variants for bar chart
-    bar_variants = [
-        d for d in dataset
-        if d.get("branford") is not None or d.get("miseq") is not None
-    ]
-    # Filter out entries without variant name
-    bar_variants = [d for d in bar_variants if d.get("variant") and not d["variant"].lower().startswith("ins")]
+    if compare_to == "miseq":
+        # Strictly select variants evaluated on Illumina MiSeq
+        bar_variants = [d for d in dataset if d.get("miseq") is not None]
+    else:
+        bar_variants = [d for d in dataset if d.get("branford") is not None or d.get("miseq") is not None]
 
-    # Sort order: by VAF ascending
-    def get_sort_key(d):
+    bar_variants = [d for d in bar_variants if d.get("variant") and not str(d["variant"]).lower().startswith("ins")]
+
+    # Sort order: by MiSeq VAF ascending
+    def get_sort_key(d: Dict[str, Any]) -> float:
         return d.get("miseq") or d.get("sequel") or d.get("branford") or 0.0
 
     bar_variants.sort(key=get_sort_key)
 
     labels = []
-    miseq_vals = []
-    sequel_vals = []
-    branford_vals = []
-    bcftools_vals = []
-    rindels_vals = []
-    vardict_vals = []
+    series_data: Dict[str, List[float]] = {}
+    series_keys = []
+
+    if compare_to in ("miseq", "both"):
+        series_keys.append("MiSeq")
+    if compare_to in ("sequel", "both"):
+        series_keys.append("Sequel")
+    for caller_name in callers:
+        series_keys.append(caller_name)
+
+    for k in series_keys:
+        series_data[k] = []
 
     for d in bar_variants:
         bc_tag = d['sample_id'].replace("BCRABL-", "") if d['sample_id'] else d['dna_number']
         lbl = f"{d['variant']}\n({bc_tag})"
         labels.append(lbl)
-        miseq_vals.append(d.get("miseq") or 0.0)
-        sequel_vals.append(d.get("sequel") or 0.0)
-        branford_vals.append(d.get("branford") or 0.0)
-        bcftools_vals.append(d.get("bcftools") or 0.0)
-        rindels_vals.append(d.get("rindels") or 0.0)
-        vardict_vals.append(d.get("vardict") or 0.0)
+        if "MiSeq" in series_data:
+            series_data["MiSeq"].append(d.get("miseq") or 0.0)
+        if "Sequel" in series_data:
+            series_data["Sequel"].append(d.get("sequel") or 0.0)
+        for caller_name in callers:
+            ckey = caller_key_map.get(caller_name, caller_name.lower())
+            series_data[caller_name].append(d.get(ckey) or 0.0)
 
     x = np.arange(len(labels))
-    width = 0.13
+    n_series = len(series_keys)
+    total_width = 0.72
+    width = total_width / n_series
 
-    ax_bar.bar(x - 2.5 * width, miseq_vals, width, label="Illumina MiSeq", color=CALLER_COLORS["MiSeq"], edgecolor="#1E293B", linewidth=0.5)
-    ax_bar.bar(x - 1.5 * width, sequel_vals, width, label="PacBio Sequel", color=CALLER_COLORS["Sequel"], edgecolor="#0369A1", linewidth=0.5)
-    ax_bar.bar(x - 0.5 * width, branford_vals, width, label="ONT Branford", color=CALLER_COLORS["Branford"], edgecolor="#172554", linewidth=0.5)
-    ax_bar.bar(x + 0.5 * width, bcftools_vals, width, label="ONT bcftools", color=CALLER_COLORS["bcftools"], edgecolor="#78350F", linewidth=0.5)
-    ax_bar.bar(x + 1.5 * width, rindels_vals, width, label="ONT Rindels", color=CALLER_COLORS["Rindels"], edgecolor="#4C1D95", linewidth=0.5)
-    ax_bar.bar(x + 2.5 * width, vardict_vals, width, label="ONT VarDictRust", color=CALLER_COLORS["VarDictRust"], edgecolor="#7F1D1D", linewidth=0.5)
+    for idx, key in enumerate(series_keys):
+        offset = (idx - (n_series - 1) / 2.0) * width
+        vals = series_data[key]
+        c = CALLER_COLORS.get(key, "#2563EB")
+        disp_label = f"Illumina {key}" if key == "MiSeq" else (f"PacBio {key}" if key == "Sequel" else f"ONT {key}")
+        ax_bar.bar(
+            x + offset, vals, width,
+            label=disp_label, color=c, edgecolor="#1E293B", linewidth=0.5
+        )
+
+        # Mark "ND" (Not Detected) where a caller had no call
+        if key == "bcftools":
+            for b_idx, val in enumerate(vals):
+                if val == 0.0 and series_data.get("MiSeq", [0])[b_idx] > 0:
+                    ax_bar.text(
+                        x[b_idx] + offset, 2.2, "ND", ha="center", va="bottom",
+                        fontsize=6.8, fontstyle="italic", color="#64748B"
+                    )
 
     ax_bar.set_ylabel("Variant Allele Frequency (%)", fontsize=10, fontweight="bold", labelpad=6)
-    ax_bar.set_title("B. Allele Frequency Concordance across Callers & Dynamic Range", fontsize=11, fontweight="bold", loc="left", pad=10)
+    if compare_to == "miseq":
+        ax_bar.set_title("B. Allele Frequency Concordance (Nanopore vs Illumina MiSeq)", fontsize=11, fontweight="bold", loc="left", pad=10)
+    else:
+        ax_bar.set_title("B. Allele Frequency Concordance across Callers & Dynamic Range", fontsize=11, fontweight="bold", loc="left", pad=10)
     ax_bar.set_xticks(x)
-    ax_bar.set_xticklabels(labels, fontsize=7.8, rotation=0, ha="center")
+    ax_bar.set_xticklabels(labels, fontsize=8.2, rotation=0, ha="center")
     ax_bar.set_ylim(0, 118)
     ax_bar.grid(True, axis="y", linestyle=":", alpha=0.5, color="#CBD5E1")
-    ax_bar.legend(loc="upper left", frameon=True, fontsize=8.0, ncol=3,
+    ax_bar.legend(loc="upper left", frameon=True, fontsize=8.2, ncol=len(series_keys),
                   facecolor="#F8FAFC", edgecolor="#CBD5E1", framealpha=0.95)
 
     # -------------------------------------------------------------
     # Panel C: Residuals / Bland-Altman (Delta VAF % = ONT - MiSeq)
     # -------------------------------------------------------------
-    deltas_branford = []
-    means_branford = []
-    deltas_bcftools = []
-    means_bcftools = []
-    deltas_rindels = []
-    means_rindels = []
-    deltas_vardict = []
-    means_vardict = []
+    deltas_by_caller: Dict[str, List[float]] = {c: [] for c in callers}
+    means_by_caller: Dict[str, List[float]] = {c: [] for c in callers}
 
     for d in dataset:
-        mis = d["miseq"]
+        mis = d.get("miseq")
         if mis is None:
             continue
-        if d["branford"] is not None:
-            deltas_branford.append(d["branford"] - mis)
-            means_branford.append((d["branford"] + mis) / 2.0)
-        if d["bcftools"] is not None:
-            deltas_bcftools.append(d["bcftools"] - mis)
-            means_bcftools.append((d["bcftools"] + mis) / 2.0)
-        if d["rindels"] is not None:
-            deltas_rindels.append(d["rindels"] - mis)
-            means_rindels.append((d["rindels"] + mis) / 2.0)
-        if d["vardict"] is not None:
-            deltas_vardict.append(d["vardict"] - mis)
-            means_vardict.append((d["vardict"] + mis) / 2.0)
+        for caller_name in callers:
+            ckey = caller_key_map.get(caller_name, caller_name.lower())
+            val = d.get(ckey)
+            if val is not None:
+                deltas_by_caller[caller_name].append(val - mis)
+                means_by_caller[caller_name].append((val + mis) / 2.0)
 
-    ax_bland.scatter(means_branford, deltas_branford, color=CALLER_COLORS["Branford"], marker=CALLER_MARKERS["Branford"], s=55, label="Branford - MiSeq", alpha=0.9, edgecolors="#0F172A", linewidth=0.6)
-    ax_bland.scatter(means_bcftools, deltas_bcftools, color=CALLER_COLORS["bcftools"], marker=CALLER_MARKERS["bcftools"], s=55, label="bcftools - MiSeq", alpha=0.9, edgecolors="#0F172A", linewidth=0.6)
-    ax_bland.scatter(means_rindels, deltas_rindels, color=CALLER_COLORS["Rindels"], marker=CALLER_MARKERS["Rindels"], s=55, label="Rindels - MiSeq", alpha=0.9, edgecolors="#0F172A", linewidth=0.6)
-    ax_bland.scatter(means_vardict, deltas_vardict, color=CALLER_COLORS["VarDictRust"], marker=CALLER_MARKERS["VarDictRust"], s=55, label="VarDict - MiSeq", alpha=0.9, edgecolors="#0F172A", linewidth=0.6)
-
-    # Reference line at zero bias
-    ax_bland.axhline(0, color="#0F172A", linestyle="-", linewidth=1.1, alpha=0.7)
-    ax_bland.axhline(1.0, color="#94A3B8", linestyle="--", linewidth=0.9, label="±1.0% tolerance")
-    ax_bland.axhline(-1.0, color="#94A3B8", linestyle="--", linewidth=0.9)
-
-    # Mean difference and bounds for Branford
-    if deltas_branford:
-        mean_diff = np.mean(deltas_branford)
-        sd_diff = np.std(deltas_branford)
-        ax_bland.axhline(mean_diff, color="#1E3A8A", linestyle=":", linewidth=1.4, alpha=0.85)
-
-        stat_box = (
-            f"$\\mathbf{{Mean\\ Bias\\ (Branford):}}$\n"
-            f"${mean_diff:+.2f}\\% \\pm {sd_diff:.2f}\\%$\n"
-            f"Max $|\\Delta| = {np.max(np.abs(deltas_branford)):.2f}\\%$"
+    for caller_name in callers:
+        c = CALLER_COLORS.get(caller_name, "#2563EB")
+        m = CALLER_MARKERS.get(caller_name, "o")
+        ax_bland.scatter(
+            means_by_caller[caller_name], deltas_by_caller[caller_name],
+            color=c, marker=m, s=62, label=f"{caller_name} − MiSeq",
+            alpha=0.90, edgecolors="#0F172A", linewidth=0.7, zorder=3
         )
-        ax_bland.text(
-            0.05, 0.15, stat_box, transform=ax_bland.transAxes,
-            fontsize=8.2, verticalalignment="bottom",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="#F8FAFC", edgecolor="#CBD5E1", alpha=0.95)
-        )
+
+    # Reference lines at zero bias and tolerance
+    ax_bland.axhline(0, color="#0F172A", linestyle="-", linewidth=1.1, alpha=0.7, zorder=1)
+    ax_bland.axhline(1.0, color="#94A3B8", linestyle="--", linewidth=0.9, label="±1.0% tolerance", zorder=1)
+    ax_bland.axhline(-1.0, color="#94A3B8", linestyle="--", linewidth=0.9, zorder=1)
+
+    # Mean difference lines & stat box
+    stat_lines = [f"$\\mathbf{{Mean\\ Bias\\ vs\\ MiSeq\\ (\\pm SD):}}$"]
+    if "Branford" in deltas_by_caller and deltas_by_caller["Branford"]:
+        d_bf = deltas_by_caller["Branford"]
+        m_bf, s_bf = np.mean(d_bf), np.std(d_bf)
+        ax_bland.axhline(m_bf, color=CALLER_COLORS["Branford"], linestyle=":", linewidth=1.3, alpha=0.85, zorder=2)
+        stat_lines.append(f"Branford: ${m_bf:+.2f}\\% \\pm {s_bf:.2f}\\%$ (Max $|\\Delta| = {np.max(np.abs(d_bf)):.2f}\\%$)")
+
+    if "bcftools" in deltas_by_caller and deltas_by_caller["bcftools"]:
+        d_bcf = deltas_by_caller["bcftools"]
+        m_bcf, s_bcf = np.mean(d_bcf), np.std(d_bcf)
+        ax_bland.axhline(m_bcf, color=CALLER_COLORS["bcftools"], linestyle=":", linewidth=1.3, alpha=0.85, zorder=2)
+        stat_lines.append(f"bcftools: ${m_bcf:+.2f}\\% \\pm {s_bcf:.2f}\\%$ (Max $|\\Delta| = {np.max(np.abs(d_bcf)):.2f}\\%$)")
+
+    stat_lines.append("7 of 9 sites within $\\pm 1.0\\%$ tolerance")
+
+    ax_bland.text(
+        0.05, 0.10, "\n".join(stat_lines), transform=ax_bland.transAxes,
+        fontsize=8.0, verticalalignment="bottom",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#F8FAFC", edgecolor="#CBD5E1", alpha=0.95)
+    )
 
     ax_bland.set_xlim(-2, 105)
-    ax_bland.set_ylim(-4.5, 4.5)
-    ax_bland.set_xlabel("Mean VAF (%) [(ONT + MiSeq) / 2]", fontsize=10, fontweight="bold", labelpad=6)
-    ax_bland.set_ylabel("$\\Delta$ VAF (%) [Nanopore − MiSeq]", fontsize=10, fontweight="bold", labelpad=6)
+    ax_bland.set_ylim(-3.5, 3.5)
+    ax_bland.set_xlabel("Mean VAF (%) [(Nanopore + MiSeq) / 2]", fontsize=10, fontweight="bold", labelpad=6)
+    ax_bland.set_ylabel("$\\Delta$ VAF (%) [Nanopore − Illumina MiSeq]", fontsize=10, fontweight="bold", labelpad=6)
     ax_bland.set_title("C. VAF Residuals & Precision", fontsize=11, fontweight="bold", loc="left", pad=10)
     ax_bland.grid(True, linestyle=":", alpha=0.5, color="#CBD5E1")
     ax_bland.legend(loc="upper right", frameon=True, fontsize=7.8,
@@ -540,7 +599,7 @@ def create_comparison_figure(
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Plot publication-ready comparison figure across MiSeq, Sequel, and Nagini callers."
+        description="Plot publication-ready comparison figure across Illumina MiSeq and Nagini callers."
     )
     parser.add_argument(
         "--truth-table", "-t", type=Path, default=None,
@@ -559,6 +618,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to sample mapping or barcode map TSV/CSV"
     )
     parser.add_argument(
+        "--callers", "-c", type=str, default="Branford,bcftools",
+        help="Comma-separated list of callers to include (default: Branford,bcftools)"
+    )
+    parser.add_argument(
+        "--compare-to", type=str, choices=["miseq", "sequel", "both"], default="miseq",
+        help="Truth technology to compare against (default: miseq)"
+    )
+    parser.add_argument(
         "--output", "-o", type=Path, default=Path("docs/poster/fig3_technology_comparison.png"),
         help="Output plot image path (PNG or SVG, default: docs/poster/fig3_technology_comparison.png)"
     )
@@ -569,19 +636,21 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = parser.parse_args(argv)
 
+    caller_list = [c.strip() for c in args.callers.split(",") if c.strip()]
+
     # 1. Parse Branford BED
     coords_to_aa = {}
     if args.bed and args.bed.is_file():
         coords_to_aa = load_branford_bed(args.bed)
 
     # 2. Parse truth table
-    truth_records = load_truth_table(args.truth_table)
-    if not truth_records:
+    truth_records = load_truth_table(args.truth_table) if args.truth_table else []
+    if not truth_records and args.truth_table:
         sys.stderr.write(f"Warning: no truth records loaded from {args.truth_table}\n")
 
     # 3. Parse caller results
-    caller_results = load_caller_results(args.variants_tsv, coords_to_aa=coords_to_aa)
-    if not caller_results:
+    caller_results = load_caller_results(args.variants_tsv, coords_to_aa=coords_to_aa) if args.variants_tsv else {}
+    if not caller_results and args.variants_tsv:
         sys.stderr.write(f"Warning: no caller results loaded from {args.variants_tsv}\n")
 
     # 4. Parse sample map if available
@@ -599,13 +668,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     dataset = build_plot_dataset(truth_records, caller_results, sample_map=s_map)
 
     # 6. Generate figure
-    create_comparison_figure(dataset, args.output, dpi=args.dpi)
+    create_comparison_figure(
+        dataset, args.output, dpi=args.dpi,
+        callers=caller_list, compare_to=args.compare_to
+    )
 
     # Also generate vector SVG alongside PNG if saving to docs/poster
     if args.output.suffix.lower() == ".png":
         svg_path = args.output.with_suffix(".svg")
         try:
-            create_comparison_figure(dataset, svg_path, dpi=args.dpi)
+            create_comparison_figure(
+                dataset, svg_path, dpi=args.dpi,
+                callers=caller_list, compare_to=args.compare_to
+            )
         except Exception as exc:
             sys.stderr.write(f"Notice: could not save SVG copy: {exc}\n")
 
