@@ -355,6 +355,18 @@ class NamedMutationsTests(unittest.TestCase):
                 {("chr9", 104, "T", "C"), ("chr9", 106, "C", "G")},
             )
 
+    def test_none_declares_a_negative_control(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, sites = self._sites(tmp)
+            for spelling in ("none", "None", " NONE "):
+                self.assertEqual(QS.resolve_named_mutations(spelling, sites), set(), spelling)
+
+    def test_a_negative_control_keeps_every_position_in_the_background(self):
+        """Without 'none', the sweep would guess -- here M351T, which is noise."""
+        with tempfile.TemporaryDirectory() as tmp:
+            control = self._run(tmp, "none")
+        self.assertEqual(control["mutation_vafs"], {})
+
     def test_an_unknown_name_is_an_error_not_a_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, sites = self._sites(tmp)
@@ -514,6 +526,78 @@ class DepthMaskTests(unittest.TestCase):
     def test_the_command_line_default_is_500(self):
         args = QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf"])
         self.assertEqual(args.min_plot_depth, 500.0)
+
+
+
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
+class SummaryPagePerModeTests(unittest.TestCase):
+    """--mode both draws binned and cumulative on separate summary pages."""
+
+    def _calls(self, mode):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            bed = tmp / "p.bed"
+            bed.write_text("chr9\t100\t101\tNM:c.(944C>T)\tC\tT\tp.Thr315Ile\n")
+            bam = tmp / "s.bam"
+            header = {"HD": {"VN": "1.0", "SO": "coordinate"}, "SQ": [{"LN": 1000, "SN": "chr9"}]}
+            with pysam.AlignmentFile(str(bam), "wb", header=header) as out:
+                for i in range(200):
+                    seq = list("A" * 30)
+                    seq[10] = "C"
+                    aln = pysam.AlignedSegment()
+                    aln.query_name = f"r{i}"
+                    aln.query_sequence = "".join(seq)
+                    aln.query_qualities = pysam.qualitystring_to_array("I" * 30)
+                    aln.reference_id, aln.reference_start, aln.mapping_quality = 0, 90, 60
+                    aln.cigar = ((0, 30),)
+                    aln.set_tag("qs", 14.0 + (i % 6), value_type="f")
+                    out.write(aln)
+            pysam.index(str(bam))
+            args = SimpleNamespace(
+                split_strands=False, bam=bam, bed=bed, sample="S", min_base_quality=0,
+                min_mapping_quality=0, qs_min=14, qs_max=18, mode=mode, strand="all",
+                output_pdf=tmp / "o.pdf", output_tsv=None, zoom_max=5, color_mode="bases",
+            )
+            calls = []
+
+            def capture(summaries, sample, **kwargs):
+                calls.append(([b["type"] for b in summaries], kwargs.get("mode")))
+                return QS.plt.figure()
+
+            with (
+                patch.object(QS, "parse_args", return_value=args),
+                patch.object(QS, "build_summary_figure", side_effect=capture),
+                patch.object(QS, "build_plot_figure", return_value=None),
+                patch.object(QS, "PdfPages"),
+            ):
+                QS.main()
+            return calls
+
+    def test_both_modes_get_a_page_each(self):
+        calls = self._calls("both")
+        self.assertEqual([mode for _, mode in calls], ["binned", "cumulative"])
+        for types, mode in calls:
+            self.assertEqual(set(types), {mode}, "a page must hold one kind of bin only")
+
+    def test_a_single_mode_still_gets_one_page(self):
+        for mode in ("binned", "cumulative"):
+            calls = self._calls(mode)
+            self.assertEqual(len(calls), 1, mode)
+            self.assertEqual(calls[0][1], mode)
+
+    def test_the_page_says_which_kind_it_is(self):
+        bins = [{"short_label": ">=14", "type": "cumulative", "median_depth": 1000,
+                 "mean_background_noise": 0.2, "mutation_vafs": {}}]
+        fig = QS.build_summary_figure(bins, "S", mode="cumulative")
+        try:
+            self.assertIn("cumulative", fig._suptitle.get_text())
+            self.assertIn("QS >= N", fig.axes[2].get_xlabel())
+            for axis in (fig.axes[0], fig.axes[2]):
+                self.assertIn("Thresholds", axis.get_title(loc="left"))
+            # It used to give the >= 1 % rule's wording even for a negative control.
+            self.assertIn("No mutations tracked", " ".join(t.get_text() for t in fig.axes[2].texts))
+        finally:
+            QS.plt.close(fig)
 
 
 if __name__ == "__main__":

@@ -534,7 +534,10 @@ def resolve_named_mutations(names: str, sites: List[Dict[str, Any]]) -> Set[Tupl
 
     requested = [n.strip() for n in re.split(r"[,\s]+", names or "") if n.strip()]
     if not requested:
-        raise ValueError("was given but names no mutation")
+        raise ValueError("was given but names no mutation; use 'none' for a negative control")
+    if [n.lower() for n in requested] == ["none"]:
+        # A negative control: every position is background, nothing is tracked.
+        return set()
     alleles: Set[Tuple[str, int, str, str]] = set()
     unknown = []
     for name in requested:
@@ -595,6 +598,7 @@ def build_summary_figure(
     bin_summaries: List[Dict[str, Any]],
     sample: str,
     min_depth: float = 0.0,
+    mode: Optional[str] = None,
 ) -> plt.Figure:
     """Build multi-panel summary curve across QS bins with strand and indel metrics.
 
@@ -643,7 +647,9 @@ def build_summary_figure(
             mut_vafs_rev.setdefault(mut_name, []).append(vaf)
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(max(14, len(labels) * 0.45), 10.5), sharex=True)
-    fig.suptitle(f"BCR-ABL1 Kinase Domain | Quality Score (QS) Sweep Summary ({sample})", fontsize=14, fontweight="bold", y=0.98)
+    kind = {"binned": " | per QS bin", "cumulative": " | cumulative, reads with QS >= threshold"}.get(mode, "")
+    across = "Thresholds" if mode == "cumulative" else "Bins"
+    fig.suptitle(f"BCR-ABL1 Kinase Domain | Quality Score (QS) Sweep Summary ({sample}){kind}", fontsize=14, fontweight="bold", y=0.98)
 
     # 1. Median Depth vs QS
     ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth (Combined)")
@@ -654,7 +660,7 @@ def build_summary_figure(
     ax1.grid(True, linestyle="--", alpha=0.5)
     import matplotlib.ticker as ticker
     ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{int(y):,}"))
-    ax1.set_title("Sequencing Coverage Retention across QS Bins", fontsize=11, loc="left", fontweight="semibold")
+    ax1.set_title(f"Sequencing Coverage Retention across QS {across}", fontsize=11, loc="left", fontweight="semibold")
     ax1.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     # 2. Mean Background Noise (%) vs QS (Split per strand + indels)
@@ -687,7 +693,7 @@ def build_summary_figure(
             if m_name in mut_vafs_rev:
                 ax3.plot(x, masked(mut_vafs_rev[m_name], depths_rev), color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
     else:
-        ax3.text(0.5, 0.5, "No variants with VAF >= 1.0% detected in sample", ha="center", va="center", transform=ax3.transAxes)
+        ax3.text(0.5, 0.5, "No mutations tracked", ha="center", va="center", transform=ax3.transAxes)
 
     ax3.set_ylabel("Mutation VAF (%)", fontsize=11, fontweight="bold")
     # Scale to what is drawn: a masked 7 % at 150x must not set the axis.
@@ -695,7 +701,7 @@ def build_summary_figure(
     max_vaf = max(all_vafs) if all_vafs else 5.0
     ax3.set_ylim(0, max(5.0, max_vaf * 1.25))
     ax3.grid(True, linestyle="--", alpha=0.5)
-    ax3.set_title("Detected Resistance Mutation Stability across QS Bins", fontsize=11, loc="left", fontweight="semibold")
+    ax3.set_title(f"Tracked Mutation Stability across QS {across}", fontsize=11, loc="left", fontweight="semibold")
     if mut_vafs:
         ax3.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
@@ -708,7 +714,12 @@ def build_summary_figure(
 
     ax3.set_xticks(x)
     ax3.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
-    ax3.set_xlabel("Read Quality Score (QS) Bin / Cutoff", fontsize=11, fontweight="bold")
+    ax3.set_xlabel(
+        {"binned": "Read Quality Score (QS) Bin", "cumulative": "Minimum Read Quality Score (QS >= N)"}.get(
+            mode, "Read Quality Score (QS) Bin / Cutoff"
+        ),
+        fontsize=11, fontweight="bold",
+    )
 
     plt.tight_layout()
     return fig
@@ -756,7 +767,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mutations", default=None,
-        help="The sample's true mutations, comma-separated (e.g. Y253H,T315I or p.Tyr253His). "
+        help="The sample's true mutations, comma-separated (e.g. Y253H,T315I or p.Tyr253His), or 'none' "
+             "for a negative control. "
              "They are tracked on the summary page and kept out of the background. Without it, any "
              "panel allele at >= 1%% in the unfiltered reads is assumed real, which can turn a noisy "
              "position into a 'mutation' and drop it from the background it belongs to."
@@ -949,11 +961,17 @@ def main():
     # Generate multi-page PDF
     args.output_pdf.parent.mkdir(parents=True, exist_ok=True)
     with PdfPages(args.output_pdf) as pdf:
-        print(f"[PDF] Rendering summary curve page...", file=sys.stderr)
         min_plot_depth = float(getattr(args, "min_plot_depth", 0) or 0)
-        summary_fig = build_summary_figure(bin_summaries, sample, min_depth=min_plot_depth)
-        pdf.savefig(summary_fig, dpi=300)
-        plt.close(summary_fig)
+        # One summary page per kind of bin. Binned and cumulative answer
+        # different questions on different depth scales; drawn as one line they
+        # ran from "> 30" through "unknown" into ">= 14" as if one series.
+        kinds = [k for k in ("binned", "cumulative") if any(b.get("type") == k for b in bin_summaries)]
+        for kind in kinds or [None]:
+            group = [b for b in bin_summaries if kind is None or b.get("type") == kind]
+            print(f"[PDF] Rendering summary curve page ({kind or 'all'})...", file=sys.stderr)
+            summary_fig = build_summary_figure(group, sample, min_depth=min_plot_depth, mode=kind)
+            pdf.savefig(summary_fig, dpi=300)
+            plt.close(summary_fig)
 
         for b, page_strand_label, rows in pages_to_render:
             med_depth = int(np.median([float(r["depth"]) for r in rows]))
