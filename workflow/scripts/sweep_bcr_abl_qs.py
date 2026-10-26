@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -515,6 +516,39 @@ def row_allele_key(row: Dict[str, str]) -> Tuple[str, int, str, str]:
     return row["chrom"], int(row["pos"]) - 1, row["ref"].upper(), row["alt"].upper()
 
 
+def resolve_named_mutations(names: str, sites: List[Dict[str, Any]]) -> Set[Tuple[str, int, str, str]]:
+    """Panel alleles for the mutations a user names, e.g. "Y253H,T315I".
+
+    Accepts the short form (Y253H), the HGVS protein form (p.Tyr253His) and
+    any case. A name stands for every panel allele that produces it, so F317L
+    covers each nucleotide change listed for it. An unknown name is an error,
+    not a silent no-op: a typo would otherwise fall back to treating the real
+    mutation as background.
+    """
+
+    by_name: Dict[str, Set[Tuple[str, int, str, str]]] = {}
+    for site in sites:
+        key = (site["chrom"], site["pos0"], site["ref"], site["alt"])
+        for alias in (site["mutation"], short_aa(site["aa_change"])):
+            by_name.setdefault(alias.strip().upper(), set()).add(key)
+
+    requested = [n.strip() for n in re.split(r"[,\s]+", names or "") if n.strip()]
+    if not requested:
+        raise ValueError("was given but names no mutation")
+    alleles: Set[Tuple[str, int, str, str]] = set()
+    unknown = []
+    for name in requested:
+        found = by_name.get(short_aa(name).upper())
+        if found:
+            alleles |= found
+        else:
+            unknown.append(name)
+    if unknown:
+        known = ", ".join(sorted(by_name, key=lambda n: (int(re.sub(r"\D", "", n) or 0), n)))
+        raise ValueError(f"names something not in the panel: {', '.join(unknown)}. Panel mutations: {known}")
+    return alleles
+
+
 def row_allele_label(row: Dict[str, str]) -> str:
     chrom, pos0, ref, alt = row_allele_key(row)
     return f'{row["mutation"]} ({chrom}:{pos0 + 1} {ref}>{alt})'
@@ -686,6 +720,13 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--threads", "-t", type=int, default=1,
         help="Number of worker threads for BAM decompression (default: 1)"
     )
+    parser.add_argument(
+        "--mutations", default=None,
+        help="The sample's true mutations, comma-separated (e.g. Y253H,T315I or p.Tyr253His). "
+             "They are tracked on the summary page and kept out of the background. Without it, any "
+             "panel allele at >= 1%% in the unfiltered reads is assumed real, which can turn a noisy "
+             "position into a 'mutation' and drop it from the background it belongs to."
+    )
     parsed = parser.parse_args(argv)
     if parsed.split_strands:
         parsed.strand = "both"
@@ -763,14 +804,25 @@ def main():
     # First check an unconstrained pool
     all_reads_fn = lambda q: True
     baseline_rows = rows_for_bin(sites, by_pos, {"filter_fn": all_reads_fn, "label": "ALL", "type": "all"}, sample, strand="all")
-    candidate_mutations: Set[Tuple[str, int, str, str]] = {
-        row_allele_key(r) for r in baseline_rows
-        if float(r["vaf_percent"]) >= 1.0
-    }
-    if not candidate_mutations:
+    named = getattr(args, "mutations", None)
+    if named:
+        try:
+            candidate_mutations: Set[Tuple[str, int, str, str]] = resolve_named_mutations(named, sites)
+        except ValueError as err:
+            sys.exit(f"Error: --mutations {err}")
+        source = "given with --mutations"
+    else:
         candidate_mutations = {
-            row_allele_key(r) for r in baseline_rows if float(r["vaf_percent"]) >= 0.5
+            row_allele_key(r) for r in baseline_rows
+            if float(r["vaf_percent"]) >= 1.0
         }
+        if not candidate_mutations:
+            candidate_mutations = {
+                row_allele_key(r) for r in baseline_rows if float(r["vaf_percent"]) >= 0.5
+            }
+        source = "assumed from >= 1% in the unfiltered reads; pass --mutations to state them"
+    chosen = sorted(row_allele_label(r) for r in baseline_rows if row_allele_key(r) in candidate_mutations)
+    print(f"[Sweep] Mutations ({source}): {', '.join(chosen) or 'none'}", file=sys.stderr)
 
     for b in bins:
         rows_all = rows_for_bin(sites, by_pos, b, sample, strand="all")

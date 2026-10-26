@@ -317,6 +317,123 @@ class TestSweepBcrAblQs(unittest.TestCase):
             self.assertIn("hg19", bed19.name)
 
 
+
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
+class NamedMutationsTests(unittest.TestCase):
+    """--mutations states the truth instead of guessing it from >= 1 %."""
+
+    # Five panel positions. F317L appears twice: one amino-acid change, two
+    # nucleotide changes, as in the real panel.
+    BED = (
+        "chr9\t100\t101\tNM:c.(758T>C)\tT\tC\tp.Tyr253His\n"
+        "chr9\t102\t103\tNM:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+        "chr9\t104\t105\tNM:c.(949T>C)\tT\tC\tp.Phe317Leu\n"
+        "chr9\t106\t107\tNM:c.(951C>G)\tC\tG\tp.Phe317Leu\n"
+        "chr9\t108\t109\tNM:c.(1052T>C)\tT\tC\tp.Met351Thr\n"
+    )
+    REF = {100: "T", 102: "C", 104: "T", 106: "C", 108: "T"}
+
+    def _sites(self, tmp):
+        bed = Path(tmp) / "panel.bed"
+        bed.write_text(self.BED)
+        return bed, QS.load_branford_bed(bed)
+
+    def test_names_resolve_in_every_accepted_form(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, sites = self._sites(tmp)
+            y253h = {("chr9", 100, "T", "C")}
+            for spelling in ("Y253H", "y253h", "p.Tyr253His", " Y253H "):
+                self.assertEqual(QS.resolve_named_mutations(spelling, sites), y253h, spelling)
+            both = QS.resolve_named_mutations("Y253H, T315I", sites)
+            self.assertEqual(both, y253h | {("chr9", 102, "C", "T")})
+
+    def test_a_name_covers_every_allele_that_produces_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, sites = self._sites(tmp)
+            self.assertEqual(
+                QS.resolve_named_mutations("F317L", sites),
+                {("chr9", 104, "T", "C"), ("chr9", 106, "C", "G")},
+            )
+
+    def test_an_unknown_name_is_an_error_not_a_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, sites = self._sites(tmp)
+            with self.assertRaises(ValueError) as raised:
+                QS.resolve_named_mutations("Y253H,T315X", sites)
+            self.assertIn("T315X", str(raised.exception))
+            self.assertIn("T315I", str(raised.exception))  # and it lists what exists
+
+    def _run(self, tmp, mutations):
+        """Y253H is real at 3 %; M351T is a negative position that is noisy
+        only in the poor reads, enough to pass 1 % in the unfiltered pool."""
+
+        import random
+        random.seed(7)
+        bed, _ = self._sites(tmp)
+        bam = Path(tmp) / "s.bam"
+        header = {"HD": {"VN": "1.0", "SO": "coordinate"}, "SQ": [{"LN": 1000, "SN": "chr9"}]}
+        with pysam.AlignmentFile(str(bam), "wb", header=header) as out:
+            for i in range(4000):
+                poor = i < 400
+                seq = ["A"] * 30
+                for pos, base in self.REF.items():
+                    seq[pos - 90] = base
+                if i % 100 < 3:
+                    seq[100 - 90] = "C"                       # Y253H, 3 %
+                if random.random() < (0.15 if poor else 0.003):
+                    seq[108 - 90] = "C"                       # M351T allele, noise only
+                aln = pysam.AlignedSegment()
+                aln.query_name = f"r{i}"
+                aln.query_sequence = "".join(seq)
+                aln.query_qualities = pysam.qualitystring_to_array("I" * 30)
+                aln.reference_id, aln.reference_start, aln.mapping_quality = 0, 90, 60
+                aln.cigar = ((0, 30),)
+                aln.flag = 16 if i % 2 else 0
+                aln.set_tag("qs", 8.0 if poor else 15.0, value_type="f")
+                out.write(aln)
+        pysam.index(str(bam))
+        args = SimpleNamespace(
+            split_strands=False, bam=bam, bed=bed, sample="S", min_base_quality=0,
+            min_mapping_quality=0, qs_min=11, qs_max=11, mode="cumulative", strand="all",
+            output_pdf=Path(tmp) / "o.pdf", output_tsv=None, zoom_max=5, color_mode="bases",
+            mutations=mutations,
+        )
+        summaries = []
+        with (
+            patch.object(QS, "parse_args", return_value=args),
+            patch.object(QS, "build_summary_figure",
+                         side_effect=lambda s, n: (summaries.extend(s), QS.plt.figure())[1]),
+            patch.object(QS, "build_plot_figure", return_value=None),
+            patch.object(QS, "PdfPages"),
+        ):
+            QS.main()
+        return summaries[0]
+
+    def test_named_mutations_keep_a_noisy_negative_in_the_background(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            named = self._run(tmp, "Y253H")
+        tracked = " ".join(named["mutation_vafs"])
+        self.assertIn("Y253H", tracked)
+        self.assertNotIn("M351T", tracked)
+
+    def test_without_names_the_noisy_negative_is_taken_for_a_mutation(self):
+        """The behaviour --mutations exists to avoid, kept as the default."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            guessed = self._run(tmp, None)
+        with tempfile.TemporaryDirectory() as tmp:
+            named = self._run(tmp, "Y253H")
+        self.assertIn("M351T", " ".join(guessed["mutation_vafs"]))
+        # Leaving the hotspot out of the background makes it look cleaner.
+        self.assertLess(guessed["mean_background_noise"], named["mean_background_noise"])
+
+    def test_a_typo_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit) as stopped:
+                self._run(tmp, "Y253X")
+        self.assertIn("Y253X", str(stopped.exception.code))
+
+
 if __name__ == "__main__":
     unittest.main()
 
