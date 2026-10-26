@@ -14,21 +14,24 @@ WGS-vägen. Det är ingen separat pipeline och ingen avgrening — samma regler,
 containrar och referenser som pipelinen i övrigt.
 
 Läsningar från MinKNOW filtreras före alignment på basecallerns egen
-medelkvalitet (`qs`-taggen, ≥ 20) och längd (500–3000 bp). cDNA-amplikonet
+medelkvalitet (`qs`-taggen, ≥ 14) och längd (800–2500 bp). cDNA-amplikonet
 korsar introner, så alignment sker med `minimap2 -ax splice` mot GRCh37/hg19.
 
 Tre oberoende frågor ställs på samma BAM:
 
-**Vilken fusion?** Läsningar som korsar brytpunkten räknas per isoform. Fem
+**Vilken fusion?** Läsningar som korsar brytpunkten räknas per isoform. Åtta
 isoformer skiljs åt: e13a2 (b2a2) och e14a2 (b3a2), båda p210 vid KML; e1a2
-(p190, ALL); e19a2 (p230, KNL); samt atypiska e14a3 (p205). Varje läsning är
-en molekyl, så fraktionen är en direkt räkning och inte en modellskattning.
+(p190, ALL); e19a2 (p230, KNL); samt de atypiska e13a3, e14a3 (p205), e1a3
+(p185) och e6a2 (p195). Varje läsning är en molekyl, så fraktionen är en
+direkt räkning och inte en modellskattning.
 
 **Vilken resistens?** 73 Branford-varianter på 52 genomiska positioner över 38
 kodon (244–499) i ABL1:s kinasdomän interrogeras. 38 av dem har en kurerad
 TKI-resistensprofil; övriga rapporteras som oklassade eller synonyma, inte som
 resistens. Varianter rapporteras från 1 % allelfraktion, och subklonalt ned
-till 0,2 %.
+till 0,2 %. Läsningar vars baser närmast positionen (±3 bp) avviker från
+referensen räknas inte — varken som referens eller som variant. För utvärdering
+kan två ortogonala callers slås på: bcftools och Rindels.
 
 **Samma molekyl?** En ONT-läsning spänner hela kinasdomänen (~1 kb), så när två
 resistensmutationer hittas avgörs cis/trans genom att läsa av enskilda
@@ -50,9 +53,9 @@ CGU-pipelines, med VCF, TSV och JSON bredvid för vidare bearbetning.
 | **Val av analys** | `assay: bcr_abl` i `units.tsv`, eller `--assay bcr_abl` |
 | **Omfattning** | 20 regler / 41 jobb (WGS-vägen: 72) |
 | **Referens** | GRCh37 / hg19 |
-| **Läsfilter** | nanostream, `qs` ≥ 20, 500–3000 bp |
+| **Läsfilter** | nanostream, `qs` ≥ 14, 800–2500 bp |
 | **Alignment** | minimap2 2.26, `-ax splice -y -Y --MD` |
-| **Fusionsisoformer** | 5 — e13a2, e14a2, e1a2, e19a2, e14a3 |
+| **Fusionsisoformer** | 8 — e13a2, e14a2, e1a2, e19a2; atypiska e13a3, e14a3, e1a3, e6a2 |
 | **Resistenspanel** | 73 varianter / 52 positioner / 38 kodon (244–499) |
 | **Kurerad TKI-profil** | 38 av de 73 varianterna |
 | **Detektionsgräns** | AF ≥ 1 %; subklonalt ≥ 0,2 % |

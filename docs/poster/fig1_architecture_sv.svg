@@ -35,7 +35,7 @@
   <rect class="box" x="40" y="216" width="250" height="68"/>
   <rect x="40" y="216" width="5" height="68" fill="#2a78d6" rx="2"/>
   <text x="56" y="240" class="ttl">Läsfilter — nanostream</text>
-  <text x="56" y="259" class="sub">qs ≥ 20 · 500–3000 bp</text>
+  <text x="56" y="259" class="sub">qs ≥ 14 · 800–2500 bp</text>
   <text x="56" y="276" class="mono">dorados eget qs, ej omräknat</text>
 
   <path class="edge" d="M165,284 L165,312"/>
@@ -60,22 +60,25 @@
   <text x="386" y="112" class="hdr">ANALYS — TRE OBEROENDE FRÅGOR</text>
 
   <!-- analysis 1 -->
-  <rect class="box" x="386" y="126" width="368" height="92"/>
-  <rect x="386" y="126" width="5" height="92" fill="#eb6834" rx="2"/>
+  <rect class="box" x="386" y="126" width="368" height="110"/>
+  <rect x="386" y="126" width="5" height="110" fill="#eb6834" rx="2"/>
   <text x="404" y="150" class="ttl">Vilken fusion?</text>
   <text x="404" y="170" class="mono">bcr_abl_fusion_counts</text>
   <text x="404" y="192" class="sub">Split-läsningar över brytpunkten räknas per isoform</text>
-  <text x="404" y="210" class="sub">e13a2 · e14a2 · e1a2 · e19a2 · e14a3</text>
-  <text x="724" y="160" class="num" fill="#eb6834" text-anchor="end">5</text>
+  <text x="404" y="210" class="sub">e13a2 · e14a2 · e1a2 · e19a2</text>
+  <text x="404" y="228" class="sub">atypiska: e13a3 · e14a3 · e1a3 · e6a2</text>
+  <text x="724" y="160" class="num" fill="#eb6834" text-anchor="end">8</text>
   <text x="742" y="160" class="sub" text-anchor="end" dy="14">isoformer</text>
 
   <!-- analysis 2 -->
-  <rect class="box" x="386" y="286" width="368" height="92"/>
-  <rect x="386" y="286" width="5" height="92" fill="#eb6834" rx="2"/>
+  <rect class="box" x="386" y="286" width="368" height="132"/>
+  <rect x="386" y="286" width="5" height="132" fill="#eb6834" rx="2"/>
   <text x="404" y="310" class="ttl">Vilken resistens?</text>
   <text x="404" y="330" class="mono">bcr_abl_branford_calling</text>
   <text x="404" y="352" class="sub">ABL1-kinasdomänen, kodon 244–499</text>
   <text x="404" y="370" class="sub">AF ≥ 1 % · subklonalt ned till 0,2 %</text>
+  <text x="404" y="388" class="sub">läsningar med avvikande flank (±3 bp) räknas inte</text>
+  <text x="404" y="408" class="sub" font-style="italic">tillval: ortogonala callers bcftools · Rindels</text>
   <text x="724" y="320" class="num" fill="#eb6834" text-anchor="end">73</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="14">varianter</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="30">på 52 positioner</text>

@@ -14,22 +14,25 @@ against 72 for the WGS route. It is not a separate pipeline and not a fork —
 the same rules, containers and references as the rest of the pipeline.
 
 Reads from MinKNOW are filtered before alignment on the basecaller's own mean
-read quality (the `qs` tag, ≥ 20) and on length (500–3000 bp). The cDNA
+read quality (the `qs` tag, ≥ 14) and on length (800–2500 bp). The cDNA
 amplicon spans introns, so alignment uses `minimap2 -ax splice` against
 GRCh37/hg19.
 
 Three independent questions are asked of the same BAM:
 
-**Which fusion?** Reads spanning the breakpoint are counted per isoform. Five
+**Which fusion?** Reads spanning the breakpoint are counted per isoform. Eight
 isoforms are distinguished: e13a2 (b2a2) and e14a2 (b3a2), both p210 in CML;
-e1a2 (p190, ALL); e19a2 (p230, CNL); and atypical e14a3 (p205). Each read is
-one molecule, so the fraction is a direct count rather than a model estimate.
+e1a2 (p190, ALL); e19a2 (p230, CNL); and the atypical e13a3, e14a3 (p205),
+e1a3 (p185) and e6a2 (p195). Each read is one molecule, so the fraction is a
+direct count rather than a model estimate.
 
 **Which resistance?** 73 Branford variants at 52 genomic positions across 38
 codons (244–499) of the ABL1 kinase domain are interrogated. 38 of them have
 a curated TKI-resistance profile; the rest are reported as unclassified or
 synonymous, not as resistance. Variants are reported from 1 % allele
-fraction, and subclonally down to 0.2 %.
+fraction, and subclonally down to 0.2 %. Reads whose bases next to the site
+(±3 bp) differ from the reference are not counted, as reference or as variant.
+Two orthogonal callers can be switched on for evaluation: bcftools and Rindels.
 
 **The same molecule?** A single ONT read spans the entire kinase domain
 (~1 kb), so when two resistance mutations are found, cis versus trans is read
@@ -52,9 +55,9 @@ downstream use.
 | **Analysis selected by** | `assay: bcr_abl` in `units.tsv`, or `--assay bcr_abl` |
 | **Scope** | 20 rules / 41 jobs (WGS route: 72) |
 | **Reference** | GRCh37 / hg19 |
-| **Read filter** | nanostream, `qs` ≥ 20, 500–3000 bp |
+| **Read filter** | nanostream, `qs` ≥ 14, 800–2500 bp |
 | **Alignment** | minimap2 2.26, `-ax splice -y -Y --MD` |
-| **Fusion isoforms** | 5 — e13a2, e14a2, e1a2, e19a2, e14a3 |
+| **Fusion isoforms** | 8 — e13a2, e14a2, e1a2, e19a2; atypical e13a3, e14a3, e1a3, e6a2 |
 | **Resistance panel** | 73 variants / 52 positions / 38 codons (244–499) |
 | **Curated TKI profile** | 38 of the 73 variants |
 | **Limit of detection** | AF ≥ 1 %; subclonal ≥ 0.2 % |
