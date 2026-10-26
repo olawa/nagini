@@ -71,7 +71,7 @@ Varje kandidat måste passera samtliga. Kontextfiltret verkar på läsningsnivå
 | Signal/brus | alt / näst största icke-referensbas ≥ 3,0 | positionsbrus |
 | Strängbias | minorsträngandel ≥ 0,05 **och** SOR ≤ 3,0 | ensidiga artefakter |
 | Medelbaskvalitet, alt | ≥ 14,0 | lågkvalitativa anrop |
-| Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt | kontextfel, t.ex. K375E (0,2–0,3 % → < 0,05 %) |
+| Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt | kontextfel, t.ex. K357E (0,2–0,3 % → < 0,05 %) |
 | Mappningskvalitet | ≥ 1 | multimappning |
 
 Strängbias kräver **båda** signalerna: SOR ensamt flaggar äkta varianter på

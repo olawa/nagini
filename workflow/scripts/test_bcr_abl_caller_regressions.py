@@ -54,14 +54,14 @@ def run_caller(tmp, bam, bed_text, extra=()):
 class FlankingContextCounting(unittest.TestCase):
     """Reads with a dirty flank are evidence for no allele.
 
-    Modelled on K375E (c.1069A>G): on the reverse strand the G of AAG|AAAAA is
+    Modelled on K357E (c.1069A>G): on the reverse strand the G of AAG|AAAAA is
     read one base late, so the read shows G>A at -1 and A>G at the site. In
     every sample this sits at 0.2-0.3 % of depth.
     """
 
     SITE = 100
     LEFT, RIGHT = "GAGTACCTGGAGAAG", "AAAACTTCATCCACA"
-    BED = "chr9\t100\t101\tNM_005157.6:c.(1069A>G)\tA\tG\tp.Lys375Glu\n"
+    BED = "chr9\t100\t101\tNM_005157.6:c.(1069A>G)\tA\tG\tp.Lys357Glu\n"
 
     def setUp(self):
         import random

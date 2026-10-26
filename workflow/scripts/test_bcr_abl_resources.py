@@ -70,16 +70,14 @@ class BranfordBedTest(unittest.TestCase):
         self.assertEqual(int(t315i[0][2]), 130872896)
         self.assertEqual((t315i[0][4], t315i[0][5]), ("C", "T"))
 
-    # Inherited as-is from pickett_bcr_abl_pipeline's own production Branford
-    # list (chr9:133748407-133748408, NM_005157.6:c.(1069A>G)): the label
-    # K375E implies codon 375, but cDNA position 1069 is codon 357. The
-    # genomic position, REF and ALT are independently confirmed correct
-    # (validated against a real hg19 FASTA and hg38 elsewhere in this file);
-    # only the human-readable codon number in pickett's own label disagrees
-    # with its own cDNA numbering. Not something to silently correct without
-    # the source Branford publication -- flagged here rather than fixed, and
-    # worth a question to whoever maintains pickett's list.
-    _KNOWN_UPSTREAM_CODON_LABEL_MISMATCH = {"NM_005157.6:c.(1069A>G)"}
+    def test_c1069_is_k357e_not_the_inherited_k375e(self):
+        """pickett's list, and the MiSeq reports, call c.1069A>G K375E. c.1069 is
+        the first base of codon 357 (AAA, Lys -> GAA, Glu); codon 375 is CAC,
+        His, so no K375E exists. Locked so the inherited label cannot return."""
+
+        for name in ("branford_positions_hg19.bed", "branford_positions_hg38.bed"):
+            rows = [r for r in read_bed(RESOURCES / name) if r[3] == "NM_005157.6:c.(1069A>G)"]
+            self.assertEqual([r[6] for r in rows], ["p.Lys357Glu"], name)
 
     def test_amino_acid_column_is_internally_consistent(self):
         """Catches the AA1<->AA3 conversion errors the hand-typed list had:
@@ -90,8 +88,6 @@ class BranfordBedTest(unittest.TestCase):
         for name in ("branford_positions_hg19.bed", "branford_positions_hg38.bed"):
             for row in read_bed(RESOURCES / name):
                 hgvs, aa = row[3], row[6]
-                if hgvs in self._KNOWN_UPSTREAM_CODON_LABEL_MISMATCH:
-                    continue
                 aa_match = pattern.fullmatch(aa)
                 self.assertIsNotNone(aa_match, f"{name}: unparseable AA change {aa!r}")
                 cdna_match = hgvs_pattern.search(hgvs)

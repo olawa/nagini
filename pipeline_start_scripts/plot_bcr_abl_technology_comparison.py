@@ -32,6 +32,12 @@ THREE_TO_ONE = {
     "Ser": "S", "Thr": "T", "Trp": "W", "Tyr": "Y", "Val": "V"
 }
 
+# Labels that are wrong at the source, mapped to what their cDNA says. pickett's
+# Branford list and the MiSeq reports call c.1069A>G K375E, but c.1069 is codon
+# 357 (AAA, Lys); codon 375 is His. Applied to the truth table and to caller
+# output alike, so results labelled either way still pair up.
+LABEL_ERRATA = {"K375E": "K357E"}
+
 # Caller styling
 CALLER_COLORS = {
     "MiSeq": "#334155",        # Charcoal / Slate
@@ -58,11 +64,8 @@ def normalize_aa(s: str) -> str:
     m = re.match(r"^p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2})$", clean)
     if m:
         ref, pos, alt = m.groups()
-        return f"{THREE_TO_ONE.get(ref, ref)}{pos}{THREE_TO_ONE.get(alt, alt)}"
-    m2 = re.match(r"^([A-Z])(\d+)([A-Z])$", clean)
-    if m2:
-        return clean
-    return clean
+        clean = f"{THREE_TO_ONE.get(ref, ref)}{pos}{THREE_TO_ONE.get(alt, alt)}"
+    return LABEL_ERRATA.get(clean, clean)
 
 
 def parse_vaf(val: Any) -> Optional[float]:
@@ -259,7 +262,7 @@ def build_plot_dataset(
             "vardict": calls.get("VarDictRust"),
         })
 
-    # 2. Add caller results not in truth table (e.g. F359V, E255K, K375E, subclonal E499E, F359I)
+    # 2. Add caller results not in truth table (e.g. F359V, E255K, K357E, subclonal E499E, F359I)
     for (dna_or_sid, var), calls in caller_results.items():
         if not var or var.lower().startswith("snv") or "chr22" in var:
             continue
@@ -763,14 +766,14 @@ def create_single_panel_figure(
                 return mis_val, (bf_val if bf_val is not None else (bcf_val if bcf_val is not None else mis_val))
         return approx_mis, approx_mis
 
-    k375e_pt = get_pt("K375E", 19.8)
+    k357e_pt = get_pt("K357E", 19.8)
     t315i_pt = get_pt("T315I", 42.4)
     e255k_pt = get_pt("E255K", 55.4)
     m351t_pt = get_pt("M351T", 95.3)
     f359v_pt = get_pt("F359V", 98.5)
 
     annotations = [
-        (k375e_pt[0], k375e_pt[1], f"K375E ({k375e_pt[0]:.1f}% vs {k375e_pt[1]:.1f}%)", (23, 11)),
+        (k357e_pt[0], k357e_pt[1], f"K357E ({k357e_pt[0]:.1f}% vs {k357e_pt[1]:.1f}%)", (23, 11)),
         (t315i_pt[0], t315i_pt[1], f"T315I ({t315i_pt[0]:.1f}% vs {t315i_pt[1]:.1f}%)", (20, 52)),
         (e255k_pt[0], e255k_pt[1], f"E255K ({e255k_pt[0]:.1f}% vs {e255k_pt[1]:.1f}%)", (58, 45)),
         (m351t_pt[0], m351t_pt[1], f"M351T ({m351t_pt[0]:.1f}% vs {m351t_pt[1]:.1f}%)", (68, 92)),

@@ -59,7 +59,7 @@ FLANKING CONTEXT (--kmer-window)
     still shows how clean the alternate reads were before exclusion.
 
     This replaced rejecting a whole call when under 60 % of its alternate reads
-    were clean (DIRTY_CONTEXT, --min-kmer-rate). K375E (c.1069A>G) shows why:
+    were clean (DIRTY_CONTEXT, --min-kmer-rate). K357E (c.1069A>G) shows why:
     on the reverse strand the G of AAG|AAAAA is read one base late, giving a
     G>A + A>G pair at 0.2-0.3 % in every sample. A true 0.3 % subclone there
     would have had about half its alternate reads dirty and been rejected;
