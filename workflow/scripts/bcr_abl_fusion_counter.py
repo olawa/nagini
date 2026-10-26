@@ -63,10 +63,11 @@ except ImportError:
 # verified offsets below -- not separately curated, so the two builds cannot
 # drift apart the way they did before.
 #
-# e6/e19 are not present in pickett's exon BED (only exons 1, 13, 14 are
-# annotated there for the isoforms it reports on) and have not been
-# cross-checked against RefSeq. Treat e6a2/e19a2/e19a3 calls as provisional
-# until these two are verified against an authoritative BCR exon model.
+# e6 and e19 are not in pickett's exon BED. They are the 1-based ends of BCR
+# exons 6 and 19 in Ensembl GRCh37 (ENST00000305877), each followed by GT in
+# hg19; e1, e13 and e14 agree with the same model exactly. Until 2026-10-26 e6
+# stood at 23595687 -- in intron 1, 299 bp before exon 2 and 18 kb from exon 6,
+# so a true e6a2 could never be named -- and e19 was 36 bp short of its donor.
 
 _CHR9_HG19_TO_HG38_OFFSET = 2875387   # ABL1 locus; see regenerate_branford_bed.py
 _CHR22_HG19_TO_HG38_OFFSET = 342187   # BCR locus; derived from rindels'
@@ -76,10 +77,10 @@ _CHR22_HG19_TO_HG38_OFFSET = 342187   # BCR locus; derived from rindels'
 
 _BCR_EXONS_HG19 = {
     "e1": 23524426,
-    "e6": 23595687,   # UNVERIFIED: not present in pickett's exon BED.
+    "e6": 23613779,
     "e13": 23631808,
     "e14": 23632600,
-    "e19": 23653987,  # UNVERIFIED: not present in pickett's exon BED.
+    "e19": 23654023,
 }
 _ABL_EXONS_HG19 = {
     "a2": 133729451,
@@ -89,7 +90,7 @@ _ABL_EXONS_HG19 = {
 # Genomic bounds for BCR and ABL1 exon bodies / amplicon targets:
 _BCR_EXON_REGIONS_HG19 = {
     "e1": (23524100, 23524550),   # spans minor primer (23524226) and donor (23524426)
-    "e6": (23595500, 23595800),
+    "e6": (23613650, 23613900),   # spans exon 6 body (23613719-23613779) and donor
     "e13": (23631650, 23631900),  # spans exon 13 body and donor (23631808)
     "e14": (23632480, 23632700),  # spans major primer (23632550) and donor (23632600)
     "e19": (23653850, 23654150),

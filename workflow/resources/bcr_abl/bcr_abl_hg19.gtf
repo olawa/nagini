@@ -11,8 +11,8 @@ chr9	HAVANA	exon	133753802	133753954	.	+	.	gene_id "ENSG00000097007"; gene_name 
 chr9	HAVANA	exon	133755455	133755544	.	+	.	gene_id "ENSG00000097007"; gene_name "ABL1"; transcript_id "ENST00000318560"; exon_number "9"; gene_type "protein_coding"; transcript_type "protein_coding";
 chr9	HAVANA	exon	133755887	133756051	.	+	.	gene_id "ENSG00000097007"; gene_name "ABL1"; transcript_id "ENST00000318560"; exon_number "10"; gene_type "protein_coding"; transcript_type "protein_coding";
 chr9	HAVANA	exon	133759356	133761070	.	+	.	gene_id "ENSG00000097007"; gene_name "ABL1"; transcript_id "ENST00000318560"; exon_number "11"; gene_type "protein_coding"; transcript_type "protein_coding";
-chr22	HAVANA	gene	23523148	23653987	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; gene_type "protein_coding";
-chr22	HAVANA	transcript	23523148	23653987	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; transcript_id "ENST00000305877"; transcript_name "BCR-201"; gene_type "protein_coding"; transcript_type "protein_coding";
+chr22	HAVANA	gene	23523148	23654023	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; gene_type "protein_coding";
+chr22	HAVANA	transcript	23523148	23654023	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; transcript_id "ENST00000305877"; transcript_name "BCR-201"; gene_type "protein_coding"; transcript_type "protein_coding";
 chr22	HAVANA	exon	23523148	23524426	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; transcript_id "ENST00000305877"; exon_number "1"; gene_type "protein_coding"; transcript_type "protein_coding";
 chr22	HAVANA	exon	23631704	23631808	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; transcript_id "ENST00000305877"; exon_number "13"; gene_type "protein_coding"; transcript_type "protein_coding";
 chr22	HAVANA	exon	23632526	23632600	.	+	.	gene_id "ENSG00000186716"; gene_name "BCR"; transcript_id "ENST00000305877"; exon_number "14"; gene_type "protein_coding"; transcript_type "protein_coding";

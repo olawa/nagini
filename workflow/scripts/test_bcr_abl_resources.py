@@ -196,6 +196,41 @@ class FusionJunctionTableTest(unittest.TestCase):
                 f"{exon} at {pos} falls outside its breakpoint cluster {chrom}:{start}-{end}",
             )
 
+    # 1-based ends of BCR exons in Ensembl GRCh37 (ENST00000305877), 2026-10-26.
+    ENSEMBL_BCR_DONORS = {"e1": 23524426, "e6": 23613779, "e13": 23631808, "e14": 23632600, "e19": 23654023}
+
+    def test_bcr_donors_are_the_ensembl_exon_ends(self):
+        """e6 stood in intron 1, 18 kb from exon 6, and e19 was 36 bp short."""
+        self.assertEqual(fusion_counter.KNOWN_JUNCTIONS["hg19"]["bcr_exons"], self.ENSEMBL_BCR_DONORS)
+
+    def test_every_bcr_exon_region_contains_its_donor(self):
+        for exon, (start, end) in fusion_counter._BCR_EXON_REGIONS_HG19.items():
+            donor = fusion_counter.KNOWN_JUNCTIONS["hg19"]["bcr_exons"][exon]
+            self.assertTrue(start <= donor <= end, f"{exon}: donor {donor} outside {start}-{end}")
+
+    def test_features_json_bcr_donors_agree_with_the_counter(self):
+        import json
+        features = json.loads((RESOURCES / "bcr_abl_features.json").read_text())
+        seen = 0
+
+        def walk(node):
+            nonlocal seen
+            if isinstance(node, dict):
+                exon = node.get("bcr_exon")
+                for build in ("hg19", "hg38"):
+                    key = f"bcr_ref_pos_{build}"
+                    if exon and key in node:
+                        seen += 1
+                        self.assertEqual(node[key], fusion_counter.KNOWN_JUNCTIONS[build]["bcr_exons"][exon], f"{exon} {key}")
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        walk(features)
+        self.assertGreater(seen, 0)
+
     def test_hg38_offsets_match_the_branford_bed_offset(self):
         """The chr9 offset used here must be the same one that produced the
         hg38 Branford BED, or ABL1-side fusion calls and Branford calls would
@@ -282,6 +317,28 @@ class ExonBoundarySequenceTest(unittest.TestCase):
                     self.assertEqual(fasta.fetch(c, start - 2, start).upper(), "AG", f"{name}: no acceptor before {start}")
                 if name not in last:
                     self.assertIn(fasta.fetch(c, end, end + 2).upper(), ("GT", "GC"), f"{name}: no donor after {end}")
+
+
+class JunctionSequenceTest(unittest.TestCase):
+    """Every fusion junction the counter knows sits on a canonical splice site
+    in the reference -- the check that found e6 in an intron."""
+
+    def test_donors_and_acceptors_are_canonical(self):
+        fasta_path = next((p for p in ExonBoundarySequenceTest.CANDIDATES if p.is_file()), None)
+        if fasta_path is None:
+            self.skipTest("no local hg19 FASTA available")
+        try:
+            import pysam
+        except ImportError:
+            self.skipTest("pysam is required to read the reference")
+        junctions = fusion_counter.KNOWN_JUNCTIONS["hg19"]
+        with pysam.FastaFile(str(fasta_path)) as fasta:
+            c22 = "chr22" if "chr22" in fasta.references else "22"
+            c9 = "chr9" if "chr9" in fasta.references else "9"
+            for exon, end in junctions["bcr_exons"].items():           # 1-based last exon base
+                self.assertIn(fasta.fetch(c22, end, end + 2).upper(), ("GT", "GC"), f"BCR {exon}: no donor after {end}")
+            for exon, start in junctions["abl_exons"].items():         # 1-based first exon base
+                self.assertEqual(fasta.fetch(c9, start - 3, start - 1).upper(), "AG", f"ABL1 {exon}: no acceptor before {start}")
 
 
 class GtfAndJunctionConsistencyTest(unittest.TestCase):
