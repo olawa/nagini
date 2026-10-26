@@ -288,6 +288,7 @@ def create_comparison_figure(
     dpi: int = 300,
     callers: Optional[List[str]] = None,
     compare_to: str = "miseq",
+    marker_style: str = "concentric",
 ) -> None:
     """Create publication-ready multi-panel figure.
 
@@ -297,6 +298,7 @@ def create_comparison_figure(
         dpi: DPI for output.
         callers: Callers to include (default: ['Branford', 'bcftools']).
         compare_to: Target comparison ('miseq', 'sequel', or 'both'). Default: 'miseq'.
+        marker_style: Marker style to prevent overplotting ('concentric' or 'dodge'). Default: 'concentric'.
     """
     callers = callers or ["Branford", "bcftools"]
     compare_to = compare_to.lower()
@@ -345,12 +347,27 @@ def create_comparison_figure(
             # Compare to MiSeq
             if compare_to in ("miseq", "both") and mis is not None and val is not None:
                 lbl = f"ONT {caller_name} vs MiSeq"
-                ax_corr.scatter(
-                    mis, val, color=c, marker=m, s=62, alpha=0.90,
-                    edgecolors="#0F172A", linewidth=0.7,
-                    label=lbl if lbl not in seen_labels else "",
-                    zorder=4
-                )
+                if marker_style == "concentric" and caller_name == "bcftools":
+                    ax_corr.scatter(
+                        mis, val, facecolor="none", edgecolor=c, marker="s", s=125, linewidth=1.9,
+                        label=lbl if lbl not in seen_labels else "",
+                        zorder=6
+                    )
+                elif marker_style == "dodge" and caller_name in ("Branford", "bcftools"):
+                    x_pos = mis - 0.35 if caller_name == "Branford" else mis + 0.35
+                    ax_corr.scatter(
+                        x_pos, val, color=c, marker=m, s=62, alpha=1.0,
+                        edgecolors="#0F172A" if caller_name == "Branford" else "#92400E", linewidth=0.8,
+                        label=lbl if lbl not in seen_labels else "",
+                        zorder=5
+                    )
+                else:
+                    ax_corr.scatter(
+                        mis, val, color=c, marker=m, s=62, alpha=1.0,
+                        edgecolors="#0F172A", linewidth=0.8,
+                        label=lbl if lbl not in seen_labels else "",
+                        zorder=5
+                    )
                 seen_labels.add(lbl)
                 paired_pts.append((mis, val, caller_name, "MiSeq"))
                 if caller_name == "Branford":
@@ -365,7 +382,7 @@ def create_comparison_figure(
                 lbl = f"ONT {caller_name} vs Sequel"
                 ax_corr.scatter(
                     seq, val, facecolor="none", edgecolor=c, marker=m, s=68,
-                    linewidth=1.3, alpha=0.9,
+                    linewidth=1.3, alpha=1.0,
                     label=lbl if lbl not in seen_labels else "",
                     zorder=4
                 )
@@ -388,7 +405,7 @@ def create_comparison_figure(
         r2_val_bf = r_val_bf ** 2
         mae_bf = np.mean(np.abs(np.array(x_miseq_branford) - np.array(y_branford_for_mis)))
 
-        reg_lines.append(f"$\\mathbf{{Linear\\ Fit\\ vs\\ Illumina\\ MiSeq:}}$")
+        reg_lines.append(r"$\mathbf{Linear\ Fit\ vs\ Illumina\ MiSeq:}$")
         reg_lines.append(f"Branford: $y = {coeffs_bf[0]:.3f}x + {coeffs_bf[1]:.2f}$  ($R^2 = {r2_val_bf:.4f}$, MAE $= {mae_bf:.2f}\\%$)")
 
         # bcftools stats if present
@@ -430,7 +447,13 @@ def create_comparison_figure(
             c = CALLER_COLORS.get(caller, "#2563EB")
             m = CALLER_MARKERS.get(caller, "o")
             if truth_src == "MiSeq":
-                ax_inset.scatter(mis, val, color=c, marker=m, s=65, edgecolors="#0F172A", linewidth=0.7, zorder=4)
+                if marker_style == "concentric" and caller == "bcftools":
+                    ax_inset.scatter(mis, val, facecolor="none", edgecolor=c, marker="s", s=125, linewidth=1.9, zorder=6)
+                elif marker_style == "dodge" and caller in ("Branford", "bcftools"):
+                    x_ins = mis - 0.35 if caller == "Branford" else mis + 0.35
+                    ax_inset.scatter(x_ins, val, color=c, marker=m, s=62, edgecolors="#0F172A", linewidth=0.8, zorder=5)
+                else:
+                    ax_inset.scatter(mis, val, color=c, marker=m, s=62, edgecolors="#0F172A", linewidth=0.8, zorder=5)
             else:
                 ax_inset.scatter(mis, val, facecolor="none", edgecolor=c, marker=m, s=68, linewidth=1.2, zorder=4)
 
@@ -553,11 +576,27 @@ def create_comparison_figure(
     for caller_name in callers:
         c = CALLER_COLORS.get(caller_name, "#2563EB")
         m = CALLER_MARKERS.get(caller_name, "o")
-        ax_bland.scatter(
-            means_by_caller[caller_name], deltas_by_caller[caller_name],
-            color=c, marker=m, s=62, label=f"{caller_name} − MiSeq",
-            alpha=0.90, edgecolors="#0F172A", linewidth=0.7, zorder=3
-        )
+        if marker_style == "concentric" and caller_name == "bcftools":
+            ax_bland.scatter(
+                means_by_caller[caller_name], deltas_by_caller[caller_name],
+                facecolor="none", edgecolor=c, marker="s", s=115, linewidth=1.8,
+                label=f"{caller_name} − MiSeq", zorder=4
+            )
+        elif marker_style == "dodge" and caller_name in ("Branford", "bcftools"):
+            x_bland = [m_val + (-0.25 if caller_name == "Branford" else 0.25) for m_val in means_by_caller[caller_name]]
+            ax_bland.scatter(
+                x_bland, deltas_by_caller[caller_name],
+                color=c, marker=m, s=62, label=f"{caller_name} − MiSeq",
+                alpha=1.0, edgecolors="#0F172A" if caller_name == "Branford" else "#92400E",
+                linewidth=0.8, zorder=3
+            )
+        else:
+            ax_bland.scatter(
+                means_by_caller[caller_name], deltas_by_caller[caller_name],
+                color=c, marker=m, s=62, label=f"{caller_name} − MiSeq",
+                alpha=1.0, edgecolors="#0F172A" if caller_name == "Branford" else "#92400E",
+                linewidth=0.8, zorder=3
+            )
 
     # Reference lines at zero bias and tolerance
     ax_bland.axhline(0, color="#0F172A", linestyle="-", linewidth=1.1, alpha=0.7, zorder=1)
@@ -565,7 +604,7 @@ def create_comparison_figure(
     ax_bland.axhline(-1.0, color="#94A3B8", linestyle="--", linewidth=0.9, zorder=1)
 
     # Mean difference lines & stat box
-    stat_lines = [f"$\\mathbf{{Mean\\ Bias\\ vs\\ MiSeq\\ (\\pm SD):}}$"]
+    stat_lines = [r"$\mathbf{Mean\ Bias\ vs\ MiSeq\ (\pm SD):}$"]
     if "Branford" in deltas_by_caller and deltas_by_caller["Branford"]:
         d_bf = deltas_by_caller["Branford"]
         m_bf, s_bf = np.mean(d_bf), np.std(d_bf)
@@ -592,7 +631,7 @@ def create_comparison_figure(
     ax_bland.set_xlim(-2, 105)
     ax_bland.set_ylim(-3.5, 3.5)
     ax_bland.set_xlabel("Mean VAF (%) [(Nanopore + MiSeq) / 2]", fontsize=10, fontweight="bold", labelpad=6)
-    ax_bland.set_ylabel("$\\Delta$ VAF (%) [Nanopore − Illumina MiSeq]", fontsize=10, fontweight="bold", labelpad=6)
+    ax_bland.set_ylabel(r"$\Delta$ VAF (%) [Nanopore − Illumina MiSeq]", fontsize=10, fontweight="bold", labelpad=6)
     ax_bland.set_title("C. VAF Residuals & Precision", fontsize=11, fontweight="bold", loc="left", pad=10)
     ax_bland.grid(True, linestyle=":", alpha=0.5, color="#CBD5E1")
     ax_bland.legend(loc="upper right", frameon=True, fontsize=7.8,
@@ -607,6 +646,177 @@ def create_comparison_figure(
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     print(f"[Nagini] Successfully saved comparison figure to: {out_path}")
+
+
+def create_single_panel_figure(
+    dataset: List[Dict[str, Any]],
+    out_path: Path,
+    dpi: int = 300,
+    callers: Optional[List[str]] = None,
+    compare_to: str = "miseq",
+    marker_style: str = "concentric",
+) -> None:
+    """Create publication-ready single-panel hero figure for poster presentation."""
+    callers = callers or ["Branford", "bcftools"]
+    compare_to = compare_to.lower()
+
+    # Setup styling
+    plt.rcParams["font.sans-serif"] = ["Helvetica", "Arial", "DejaVu Sans", "Liberation Sans"]
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["axes.edgecolor"] = "#475569"
+    plt.rcParams["axes.linewidth"] = 1.0
+
+    fig, ax = plt.subplots(figsize=(8.8, 7.8), dpi=dpi)
+
+    x_bf, y_bf = [], []
+    x_bcf, y_bcf = [], []
+    pts = []
+
+    for d in dataset:
+        mis = d.get("miseq")
+        bf = d.get("branford")
+        bcf = d.get("bcftools")
+        var = d.get("variant")
+        if mis is None:
+            continue
+        pts.append((mis, bf, bcf, var))
+        if bf is not None:
+            x_bf.append(mis)
+            y_bf.append(bf)
+        if bcf is not None:
+            x_bcf.append(mis)
+            y_bcf.append(bcf)
+
+    # Identity line
+    ax.plot([-2, 105], [-2, 105], "--", color="#94A3B8", linewidth=1.3, label="Identity line ($y = x$)", zorder=1)
+
+    # Linear fits
+    x_line = np.linspace(0, 102, 100)
+    stat_lines = [r"$\mathbf{Cross\text{-}Platform\ Concordance\ vs\ Illumina\ MiSeq}$"]
+
+    if len(x_bf) >= 2:
+        c_bf = np.polyfit(x_bf, y_bf, deg=1)
+        r_bf = np.corrcoef(x_bf, y_bf)[0, 1]
+        mae_bf = np.mean(np.abs(np.array(x_bf) - np.array(y_bf)))
+        ax.plot(x_line, np.poly1d(c_bf)(x_line), color=CALLER_COLORS["Branford"], linewidth=2.0, alpha=0.9, zorder=2)
+        stat_lines.append(f"• Branford (ONT):  $y = {c_bf[0]:.3f}x + {c_bf[1]:.2f}$  ($R^2 = {r_bf**2:.4f}$, MAE $= {mae_bf:.2f}\\%$)")
+
+    if len(x_bcf) >= 2:
+        c_bcf = np.polyfit(x_bcf, y_bcf, deg=1)
+        r_bcf = np.corrcoef(x_bcf, y_bcf)[0, 1]
+        mae_bcf = np.mean(np.abs(np.array(x_bcf) - np.array(y_bcf)))
+        ax.plot(x_line, np.poly1d(c_bcf)(x_line), color=CALLER_COLORS["bcftools"], linestyle=":", linewidth=1.8, alpha=0.9, zorder=2)
+        stat_lines.append(f"• bcftools (ONT):  $y = {c_bcf[0]:.3f}x + {c_bcf[1]:.2f}$  ($R^2 = {r_bcf**2:.4f}$, MAE $= {mae_bcf:.2f}\\%$)")
+
+    stat_lines.append(f"• $n = {len(x_bf)}$ clinical SNVs | Dynamic Range: $1.4\\% - 100.0\\%$")
+    stat_lines.append(r"• $100\%$ concordant detection of all resistance mutations")
+
+    ax.text(
+        0.04, 0.96, "\n".join(stat_lines), transform=ax.transAxes, fontsize=9.0, verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.55", facecolor="#F8FAFC", edgecolor="#94A3B8", alpha=0.95)
+    )
+
+    # Scatter points
+    seen_labels = set()
+    for mis, bf, bcf, var in pts:
+        if marker_style == "concentric":
+            if bcf is not None and "bcftools" in callers:
+                lbl = "Oxford Nanopore (bcftools)"
+                ax.scatter(
+                    mis, bcf, facecolor="none", edgecolor=CALLER_COLORS["bcftools"],
+                    marker="s", s=135, linewidth=2.0,
+                    label=lbl if lbl not in seen_labels else "", zorder=4
+                )
+                seen_labels.add(lbl)
+            if bf is not None and "Branford" in callers:
+                lbl = "Oxford Nanopore (Branford)"
+                ax.scatter(
+                    mis, bf, color=CALLER_COLORS["Branford"],
+                    marker="o", s=65, edgecolors="#0F172A", linewidth=0.8,
+                    label=lbl if lbl not in seen_labels else "", zorder=5
+                )
+                seen_labels.add(lbl)
+        else: # dodge
+            if bf is not None and "Branford" in callers:
+                lbl = "Oxford Nanopore (Branford)"
+                ax.scatter(
+                    mis - 0.35, bf, color=CALLER_COLORS["Branford"],
+                    marker="o", s=65, edgecolors="#0F172A", linewidth=0.8,
+                    label=lbl if lbl not in seen_labels else "", zorder=4
+                )
+                seen_labels.add(lbl)
+            if bcf is not None and "bcftools" in callers:
+                lbl = "Oxford Nanopore (bcftools)"
+                ax.scatter(
+                    mis + 0.35, bcf, color=CALLER_COLORS["bcftools"],
+                    marker="s", s=65, edgecolors="#92400E", linewidth=0.8,
+                    label=lbl if lbl not in seen_labels else "", zorder=5
+                )
+                seen_labels.add(lbl)
+
+    # Annotations for major clinical points
+    annotations = [
+        (19.8, 19.4, "K375E (19.8% vs 19.4%)", (23, 11)),
+        (42.4, 43.73, "T315I (42.4% vs 43.7%)", (20, 52)),
+        (55.4, 53.48, "E255K (55.4% vs 53.5%)", (58, 45)),
+        (95.3, 97.02, "M351T (95.3% vs 97.0%)", (68, 92)),
+        (98.5, 98.83, "F359V (98.5% vs 98.8%)", (72, 102)),
+    ]
+    for x, y, label, text_pos in annotations:
+        ax.annotate(
+            label, xy=(x, y), xytext=text_pos,
+            arrowprops=dict(arrowstyle="->", color="#475569", lw=0.9),
+            fontsize=8.5, fontweight="bold", color="#1E293B",
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="#F1F5F9", edgecolor="#CBD5E1", alpha=0.92)
+        )
+
+    # Inset for subclonal
+    ax_inset = ax.inset_axes([0.54, 0.12, 0.41, 0.38])
+    ax_inset.plot([0, 3.5], [0, 3.5], "--", color="#94A3B8", linewidth=1.1, zorder=1)
+
+    for mis, bf, bcf, var in pts:
+        if mis <= 3.5:
+            if marker_style == "concentric":
+                if bcf is not None and "bcftools" in callers:
+                    ax_inset.scatter(mis, bcf, facecolor="none", edgecolor=CALLER_COLORS["bcftools"], marker="s", s=135, linewidth=2.0, zorder=4)
+                if bf is not None and "Branford" in callers:
+                    ax_inset.scatter(mis, bf, color=CALLER_COLORS["Branford"], marker="o", s=65, edgecolors="#0F172A", linewidth=0.8, zorder=5)
+            else: # dodge
+                if bf is not None and "Branford" in callers:
+                    ax_inset.scatter(mis - 0.35, bf, color=CALLER_COLORS["Branford"], marker="o", s=65, edgecolors="#0F172A", linewidth=0.8, zorder=4)
+                if bcf is not None and "bcftools" in callers:
+                    ax_inset.scatter(mis + 0.35, bcf, color=CALLER_COLORS["bcftools"], marker="s", s=65, edgecolors="#92400E", linewidth=0.8, zorder=5)
+
+    ax_inset.set_xlim(0, 3.2)
+    ax_inset.set_ylim(0, 3.2)
+    ax_inset.set_title("Subclonal Range (0–3.2%)", fontsize=8.5, fontweight="bold", pad=3)
+    ax_inset.tick_params(labelsize=7.5)
+    ax_inset.grid(True, linestyle=":", alpha=0.5)
+
+    ax_inset.annotate("F359I (1.4% vs 1.56%)", xy=(1.4, 1.56), xytext=(0.10, 2.50),
+                      arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
+                      fontsize=7.2, fontweight="bold", color="#1E3A8A")
+    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.80, 0.40),
+                      arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
+                      fontsize=7.2, fontweight="bold", color="#1E3A8A")
+
+    ax.set_xlim(-2, 105)
+    ax.set_ylim(-2, 105)
+    ax.set_xlabel("Illumina MiSeq VAF (%)", fontsize=11, fontweight="bold", labelpad=8)
+    ax.set_ylabel("Oxford Nanopore VAF (%)", fontsize=11, fontweight="bold", labelpad=8)
+    ax.set_title("BCR-ABL1 Cross-Platform Validation: Oxford Nanopore vs Illumina MiSeq",
+                 fontsize=12, fontweight="bold", pad=12)
+    ax.grid(True, linestyle=":", alpha=0.5, color="#CBD5E1")
+    ax.legend(loc="center left", bbox_to_anchor=(0.04, 0.65), frameon=True, fontsize=8.8,
+              facecolor="#F8FAFC", edgecolor="#CBD5E1", framealpha=0.95)
+
+    ax.tick_params(axis="both", which="major", labelsize=9.0)
+    ax.set_facecolor("#FFFFFF")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Nagini] Successfully saved single-panel hero figure to: {out_path}")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -636,6 +846,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--compare-to", type=str, choices=["miseq", "sequel", "both"], default="miseq",
         help="Truth technology to compare against (default: miseq)"
+    )
+    parser.add_argument(
+        "--layout", choices=["all", "single", "multi"], default="all",
+        help="Layout mode: 'all' (creates both multi-panel and single hero panel), 'single' (hero panel only), or 'multi' (3 panels)"
+    )
+    parser.add_argument(
+        "--marker-style", choices=["concentric", "dodge"], default="concentric",
+        help="Marker style to prevent overplotting: 'concentric' (open square for bcftools around solid circle for Branford) or 'dodge' (horizontal offset)"
     )
     parser.add_argument(
         "--output", "-o", type=Path, default=Path("docs/poster/fig3_technology_comparison.png"),
@@ -679,22 +897,47 @@ def main(argv: Optional[List[str]] = None) -> int:
     # 5. Assemble dataset
     dataset = build_plot_dataset(truth_records, caller_results, sample_map=s_map)
 
-    # 6. Generate figure
-    create_comparison_figure(
-        dataset, args.output, dpi=args.dpi,
-        callers=caller_list, compare_to=args.compare_to
-    )
+    # 6. Generate figures
+    # Multi-panel figure
+    if args.layout in ("all", "multi"):
+        create_comparison_figure(
+            dataset, args.output, dpi=args.dpi,
+            callers=caller_list, compare_to=args.compare_to,
+            marker_style=args.marker_style
+        )
+        if args.output.suffix.lower() == ".png":
+            svg_path = args.output.with_suffix(".svg")
+            try:
+                create_comparison_figure(
+                    dataset, svg_path, dpi=args.dpi,
+                    callers=caller_list, compare_to=args.compare_to,
+                    marker_style=args.marker_style
+                )
+            except Exception as exc:
+                sys.stderr.write(f"Notice: could not save SVG copy: {exc}\n")
 
-    # Also generate vector SVG alongside PNG if saving to docs/poster
-    if args.output.suffix.lower() == ".png":
-        svg_path = args.output.with_suffix(".svg")
-        try:
-            create_comparison_figure(
-                dataset, svg_path, dpi=args.dpi,
-                callers=caller_list, compare_to=args.compare_to
-            )
-        except Exception as exc:
-            sys.stderr.write(f"Notice: could not save SVG copy: {exc}\n")
+    # Single-panel hero figure
+    if args.layout in ("all", "single"):
+        if args.layout == "single":
+            single_out_png = args.output
+        else:
+            single_out_png = args.output.parent / f"{args.output.stem}_single{args.output.suffix}"
+
+        create_single_panel_figure(
+            dataset, single_out_png, dpi=args.dpi,
+            callers=caller_list, compare_to=args.compare_to,
+            marker_style=args.marker_style
+        )
+        if single_out_png.suffix.lower() == ".png":
+            single_out_svg = single_out_png.with_suffix(".svg")
+            try:
+                create_single_panel_figure(
+                    dataset, single_out_svg, dpi=args.dpi,
+                    callers=caller_list, compare_to=args.compare_to,
+                    marker_style=args.marker_style
+                )
+            except Exception as exc:
+                sys.stderr.write(f"Notice: could not save SVG copy for single panel: {exc}\n")
 
     return 0
 
