@@ -307,8 +307,8 @@ def create_comparison_figure(
     plt.rcParams["axes.edgecolor"] = "#475569"
     plt.rcParams["axes.linewidth"] = 0.9
 
-    fig = plt.figure(figsize=(18.2, 5.8), dpi=dpi)
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.15, 1.45, 0.95], wspace=0.28, left=0.06, right=0.97, top=0.90, bottom=0.12)
+    fig = plt.figure(figsize=(19.5, 6.0), dpi=dpi)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.10, 1.70, 0.95], wspace=0.28, left=0.05, right=0.98, top=0.90, bottom=0.12)
 
     ax_corr = fig.add_subplot(gs[0, 0])
     ax_bar = fig.add_subplot(gs[0, 1])
@@ -448,17 +448,16 @@ def create_comparison_figure(
     # -------------------------------------------------------------
     # Panel B: Grouped VAF Concordance across Dynamic Range
     # -------------------------------------------------------------
-    if compare_to == "miseq":
-        # Strictly select variants evaluated on Illumina MiSeq
-        bar_variants = [d for d in dataset if d.get("miseq") is not None]
-    else:
-        bar_variants = [d for d in dataset if d.get("branford") is not None or d.get("miseq") is not None]
+    # Include all detected variants from truth table and callers
+    bar_variants = [
+        d for d in dataset
+        if d.get("branford") is not None or d.get("bcftools") is not None or d.get("miseq") is not None
+    ]
+    bar_variants = [d for d in bar_variants if d.get("variant") and not str(d["variant"]).lower().startswith(("snv", "ins"))]
 
-    bar_variants = [d for d in bar_variants if d.get("variant") and not str(d["variant"]).lower().startswith("ins")]
-
-    # Sort order: by MiSeq VAF ascending
+    # Sort order: by detected VAF ascending
     def get_sort_key(d: Dict[str, Any]) -> float:
-        return d.get("miseq") or d.get("sequel") or d.get("branford") or 0.0
+        return d.get("branford") or d.get("bcftools") or d.get("miseq") or 0.0
 
     bar_variants.sort(key=get_sort_key)
 
@@ -490,7 +489,7 @@ def create_comparison_figure(
 
     x = np.arange(len(labels))
     n_series = len(series_keys)
-    total_width = 0.72
+    total_width = 0.74
     width = total_width / n_series
 
     for idx, key in enumerate(series_keys):
@@ -503,25 +502,32 @@ def create_comparison_figure(
             label=disp_label, color=c, edgecolor="#1E293B", linewidth=0.5
         )
 
-        # Mark "ND" (Not Detected) where a caller had no call
-        if key == "bcftools":
+        # Mark "ND" (Not Detected) or "—" (Not Evaluated) where a caller had no call
+        if key == "MiSeq":
             for b_idx, val in enumerate(vals):
-                if val == 0.0 and series_data.get("MiSeq", [0])[b_idx] > 0:
+                if val == 0.0:
+                    ax_bar.text(
+                        x[b_idx] + offset, 2.2, "—", ha="center", va="bottom",
+                        fontsize=7.0, color="#94A3B8"
+                    )
+        elif key == "bcftools":
+            for b_idx, val in enumerate(vals):
+                if val == 0.0:
                     ax_bar.text(
                         x[b_idx] + offset, 2.2, "ND", ha="center", va="bottom",
-                        fontsize=6.8, fontstyle="italic", color="#64748B"
+                        fontsize=6.2, fontstyle="italic", color="#94A3B8"
                     )
 
     ax_bar.set_ylabel("Variant Allele Frequency (%)", fontsize=10, fontweight="bold", labelpad=6)
     if compare_to == "miseq":
-        ax_bar.set_title("B. Allele Frequency Concordance (Nanopore vs Illumina MiSeq)", fontsize=11, fontweight="bold", loc="left", pad=10)
+        ax_bar.set_title(f"B. Allele Frequency Concordance across Callers (All {len(labels)} Detected Variants)", fontsize=11, fontweight="bold", loc="left", pad=10)
     else:
-        ax_bar.set_title("B. Allele Frequency Concordance across Callers & Dynamic Range", fontsize=11, fontweight="bold", loc="left", pad=10)
+        ax_bar.set_title(f"B. Allele Frequency Concordance across Callers & Dynamic Range ({len(labels)} Variants)", fontsize=11, fontweight="bold", loc="left", pad=10)
     ax_bar.set_xticks(x)
-    ax_bar.set_xticklabels(labels, fontsize=8.2, rotation=0, ha="center")
+    ax_bar.set_xticklabels(labels, fontsize=7.2, rotation=0, ha="center")
     ax_bar.set_ylim(0, 118)
     ax_bar.grid(True, axis="y", linestyle=":", alpha=0.5, color="#CBD5E1")
-    ax_bar.legend(loc="upper left", frameon=True, fontsize=8.2, ncol=len(series_keys),
+    ax_bar.legend(loc="upper left", frameon=True, fontsize=8.0, ncol=len(series_keys),
                   facecolor="#F8FAFC", edgecolor="#CBD5E1", framealpha=0.95)
 
     # -------------------------------------------------------------
