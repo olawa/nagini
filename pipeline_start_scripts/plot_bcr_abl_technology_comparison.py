@@ -464,10 +464,12 @@ def create_comparison_figure(
     ax_inset.tick_params(labelsize=7)
     ax_inset.grid(True, linestyle=":", alpha=0.4)
     # Highlight subclonal points in inset
-    ax_inset.annotate("F359I (1.4% vs 1.56%)", xy=(1.4, 1.56), xytext=(0.10, 2.50),
+    f359i_pt = next(((mis, val) for mis, val, caller, src in paired_pts if mis < 2.0 and abs(mis - 1.4) < 0.3 and caller == "Branford"), (1.4, 1.51))
+    e459k_pt = next(((mis, val) for mis, val, caller, src in paired_pts if mis < 2.5 and abs(mis - 1.7) < 0.3 and caller == "Branford"), (1.7, 2.31))
+    ax_inset.annotate(f"F359I ({f359i_pt[0]:.1f}% vs {f359i_pt[1]:.2f}%)", xy=f359i_pt, xytext=(0.10, 2.50),
                       arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.6),
                       fontsize=6.5, fontweight="bold", color="#1E3A8A")
-    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.85, 0.35),
+    ax_inset.annotate(f"E459K ({e459k_pt[0]:.1f}% vs {e459k_pt[1]:.2f}%)", xy=e459k_pt, xytext=(0.85, 0.35),
                       arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.6),
                       fontsize=6.5, fontweight="bold", color="#1E3A8A")
 
@@ -754,13 +756,25 @@ def create_single_panel_figure(
                 )
                 seen_labels.add(lbl)
 
-    # Annotations for major clinical points
+    # Dynamic annotations for major clinical points
+    def get_pt(target_var: str, approx_mis: float) -> Tuple[float, float]:
+        for mis_val, bf_val, bcf_val, v in pts:
+            if v == target_var and abs(mis_val - approx_mis) < 2.0:
+                return mis_val, (bf_val if bf_val is not None else (bcf_val if bcf_val is not None else mis_val))
+        return approx_mis, approx_mis
+
+    k375e_pt = get_pt("K375E", 19.8)
+    t315i_pt = get_pt("T315I", 42.4)
+    e255k_pt = get_pt("E255K", 55.4)
+    m351t_pt = get_pt("M351T", 95.3)
+    f359v_pt = get_pt("F359V", 98.5)
+
     annotations = [
-        (19.8, 19.4, "K375E (19.8% vs 19.4%)", (23, 11)),
-        (42.4, 43.73, "T315I (42.4% vs 43.7%)", (20, 52)),
-        (55.4, 53.48, "E255K (55.4% vs 53.5%)", (58, 45)),
-        (95.3, 97.02, "M351T (95.3% vs 97.0%)", (68, 92)),
-        (98.5, 98.83, "F359V (98.5% vs 98.8%)", (72, 102)),
+        (k375e_pt[0], k375e_pt[1], f"K375E ({k375e_pt[0]:.1f}% vs {k375e_pt[1]:.1f}%)", (23, 11)),
+        (t315i_pt[0], t315i_pt[1], f"T315I ({t315i_pt[0]:.1f}% vs {t315i_pt[1]:.1f}%)", (20, 52)),
+        (e255k_pt[0], e255k_pt[1], f"E255K ({e255k_pt[0]:.1f}% vs {e255k_pt[1]:.1f}%)", (58, 45)),
+        (m351t_pt[0], m351t_pt[1], f"M351T ({m351t_pt[0]:.1f}% vs {m351t_pt[1]:.1f}%)", (68, 92)),
+        (f359v_pt[0], f359v_pt[1], f"F359V ({f359v_pt[0]:.1f}% vs {f359v_pt[1]:.1f}%)", (72, 102)),
     ]
     for x, y, label, text_pos in annotations:
         ax.annotate(
@@ -793,10 +807,12 @@ def create_single_panel_figure(
     ax_inset.tick_params(labelsize=7.5)
     ax_inset.grid(True, linestyle=":", alpha=0.5)
 
-    ax_inset.annotate("F359I (1.4% vs 1.56%)", xy=(1.4, 1.56), xytext=(0.10, 2.50),
+    f359i_spt = get_pt("F359I", 1.4)
+    e459k_spt = get_pt("E459K", 1.7)
+    ax_inset.annotate(f"F359I ({f359i_spt[0]:.1f}% vs {f359i_spt[1]:.2f}%)", xy=f359i_spt, xytext=(0.10, 2.50),
                       arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
                       fontsize=7.2, fontweight="bold", color="#1E3A8A")
-    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.80, 0.40),
+    ax_inset.annotate(f"E459K ({e459k_spt[0]:.1f}% vs {e459k_spt[1]:.2f}%)", xy=e459k_spt, xytext=(0.80, 0.40),
                       arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
                       fontsize=7.2, fontweight="bold", color="#1E3A8A")
 
