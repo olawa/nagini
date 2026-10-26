@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 744" width="1000" height="744" font-family="Inter, Helvetica Neue, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 816" width="1000" height="816" font-family="Inter, Helvetica Neue, Arial, sans-serif">
   <defs>
     <style>
       .big  { font-size:26px; font-weight:700; fill:#0b0b0b; }
@@ -10,7 +10,7 @@
       .exon { stroke:#ffffff; stroke-width:2; }
     </style>
   </defs>
-  <rect width="1000" height="744" fill="#fcfcfb"/>
+  <rect width="1000" height="816" fill="#fcfcfb"/>
 
   <text x="40" y="44" class="big">What the analysis answers</text>
   <text x="40" y="68" class="sub">Two questions about one amplicon: which fusion is present, and whether the kinase domain carries resistance.</text>
@@ -24,6 +24,8 @@
   <rect x="100" y="156" width="400" height="22" fill="#eef4fc" rx="3"/>
   <rect class="exon" x="108" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
   <text x="124" y="200" class="ax" text-anchor="middle">e1</text>
+  <rect class="exon" x="200" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
+  <text x="216" y="200" class="ax" text-anchor="middle">e6</text>
   <rect class="exon" x="296" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
   <text x="312" y="200" class="ax" text-anchor="middle">e13</text>
   <rect class="exon" x="340" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
@@ -40,20 +42,29 @@
   <text x="680" y="200" class="ax" text-anchor="middle">a3</text>
 
   <!-- joins: drop from the BCR exon, run right, rise into the ABL1 exon -->
+  <g stroke="#c9c8c0" stroke-width="2.5" fill="none" stroke-dasharray="5 4">
+    <path d="M356,216 L356,324 L680,324"/>
+    <path d="M312,216 L312,348 L680,348"/>
+    <path d="M216,216 L216,372 L636,372"/>
+    <path d="M124,216 L124,396 L680,396"/>
+  </g>
   <g stroke-width="2.5" fill="none" stroke="#8a8982">
     <path d="M312,216 L312,228 L636,228 L636,216"/>
     <path d="M356,216 L356,252 L636,252"/>
     <path d="M124,216 L124,276 L636,276"/>
     <path d="M468,216 L468,300 L636,300"/>
   </g>
-  <path d="M356,216 L356,324 L680,324" stroke="#c9c8c0" stroke-width="2.5" fill="none" stroke-dasharray="5 4"/>
 
   <text x="652" y="233" class="ttl">e13a2</text><text x="722" y="233" class="sub">b2a2 · p210 · CML</text>
   <text x="652" y="257" class="ttl">e14a2</text><text x="722" y="257" class="sub">b3a2 · p210 · CML</text>
   <text x="652" y="281" class="ttl">e1a2</text> <text x="722" y="281" class="sub">p190 · ALL</text>
   <text x="652" y="305" class="ttl">e19a2</text><text x="722" y="305" class="sub">p230 · CNL</text>
   <text x="696" y="329" class="ttl" fill="#8a8982">e14a3</text><text x="766" y="329" class="sub">p205 · atypical</text>
+  <text x="696" y="353" class="ttl" fill="#8a8982">e13a3</text><text x="766" y="353" class="sub">p205 · atypical</text>
+  <text x="652" y="377" class="ttl" fill="#8a8982">e6a2</text><text x="722" y="377" class="sub">p195 · atypical</text>
+  <text x="696" y="401" class="ttl" fill="#8a8982">e1a3</text><text x="766" y="401" class="sub">p185 · atypical</text>
 
+  <g transform="translate(0,72)">
   <line x1="40" y1="366" x2="960" y2="366" stroke="#e4e3dc" stroke-width="2"/>
 
   <!-- ===== 2. kinase domain ===== -->
@@ -146,5 +157,6 @@
     <line x1="48" y1="20" x2="216" y2="20" stroke="#8a8982" stroke-width="3.5"/>
     <circle cx="168" cy="20" r="5.5" fill="#8a8982"/>
     <text x="232" y="11" class="sub">separate reads — two independent clones</text>
+  </g>
   </g>
 </svg>
