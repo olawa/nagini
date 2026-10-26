@@ -17,7 +17,7 @@
   <rect width="1000" height="790" fill="#fcfcfb"/>
 
   <text x="40" y="44" class="big">BCR-ABL1 on nagini</text>
-  <text x="40" y="68" class="sub">One column in <tspan font-family="ui-monospace,Menlo,monospace">units.tsv</tspan> selects the analysis. No separate pipeline, no fork.</text>
+  <text x="40" y="68" class="sub">One column in <tspan font-family="ui-monospace,Menlo,monospace">units.tsv</tspan> selects the analysis.</text>
 
   <!-- assay switch -->
   <rect x="640" y="26" width="320" height="52" rx="8" fill="#eef4fc" stroke="#2a78d6" stroke-width="2"/>
@@ -54,7 +54,7 @@
   <!-- fan out -->
   <path class="edge" d="M290,438 L340,438 L340,170 L384,170"/>
   <path class="edge" d="M290,438 L340,438 L340,330 L384,330"/>
-  <path class="edge" d="M290,438 L340,438 L340,490 L384,490"/>
+  <path class="edge" d="M290,438 L340,438 L340,508 L384,508"/>
   <path class="edge" d="M290,438 L340,438 L340,636 L384,636"/>
 
   <text x="386" y="112" class="hdr">ANALYSIS — THREE INDEPENDENT QUESTIONS</text>
@@ -71,26 +71,27 @@
   <text x="742" y="160" class="sub" text-anchor="end" dy="14">isoforms</text>
 
   <!-- analysis 2 -->
-  <rect class="box" x="386" y="286" width="368" height="132"/>
-  <rect x="386" y="286" width="5" height="132" fill="#eb6834" rx="2"/>
+  <rect class="box" x="386" y="286" width="368" height="150"/>
+  <rect x="386" y="286" width="5" height="150" fill="#eb6834" rx="2"/>
   <text x="404" y="310" class="ttl">Which resistance?</text>
   <text x="404" y="330" class="mono">bcr_abl_branford_calling</text>
   <text x="404" y="352" class="sub">ABL1 kinase domain, codons 244–499</text>
   <text x="404" y="370" class="sub">AF ≥ 1% · subclonal down to 0.2%</text>
-  <text x="404" y="388" class="sub">reads with a dirty ±3 bp flank are not counted</text>
-  <text x="404" y="408" class="sub" font-style="italic">optional: orthogonal callers bcftools · Rindels</text>
+  <text x="404" y="388" class="sub">reads with errors within 3 bp of the Branford</text>
+  <text x="404" y="406" class="sub">position are not counted</text>
+  <text x="404" y="426" class="sub" font-style="italic">optional: orthogonal caller bcftools</text>
   <text x="724" y="320" class="num" fill="#eb6834" text-anchor="end">73</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="14">variants</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="30">at 52 positions</text>
 
   <!-- analysis 3 -->
-  <rect class="box" x="386" y="446" width="368" height="92"/>
-  <rect x="386" y="446" width="5" height="68" fill="#1baf7a" rx="2"/>
-  <text x="404" y="470" class="ttl">Same molecule?</text>
-  <text x="404" y="490" class="mono">bcr_abl_phasing</text>
-  <text x="404" y="512" class="sub">Single reads span the whole domain (~1 kb), so CIS</text>
-  <text x="404" y="530" class="sub">and TRANS are read off, not inferred</text>
-  <text x="730" y="482" class="num" fill="#1baf7a" text-anchor="end">cis/trans</text>
+  <rect class="box" x="386" y="464" width="368" height="92"/>
+  <rect x="386" y="464" width="5" height="68" fill="#1baf7a" rx="2"/>
+  <text x="404" y="488" class="ttl">Same molecule?</text>
+  <text x="404" y="508" class="mono">bcr_abl_phasing</text>
+  <text x="404" y="530" class="sub">Single reads span the whole domain (~1 kb), so CIS</text>
+  <text x="404" y="548" class="sub">and TRANS are read off, not inferred</text>
+  <text x="730" y="500" class="num" fill="#1baf7a" text-anchor="end">cis/trans</text>
 
   <!-- supporting -->
   <rect class="box" x="386" y="600" width="368" height="72" fill="#f6f5f0"/>
@@ -101,7 +102,7 @@
   <!-- outputs -->
   <path class="edge" d="M754,172 L800,172 L800,380 L838,380"/>
   <path class="edge" d="M754,332 L800,332 L800,380 L838,380"/>
-  <path class="edge" d="M754,492 L800,492 L800,380 L838,380"/>
+  <path class="edge" d="M754,510 L800,510 L800,380 L838,380"/>
   <path class="edge" d="M754,636 L800,636 L800,380 L838,380"/>
 
   <text x="840" y="112" class="hdr">DELIVERED</text>
