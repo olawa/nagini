@@ -31,7 +31,7 @@ TKI-resistensprofil; övriga rapporteras som oklassade eller synonyma, inte som
 resistens. Varianter rapporteras från 1 % allelfraktion, och subklonalt ned
 till 0,2 %. Läsningar vars baser närmast positionen (±3 bp) avviker från
 referensen räknas inte — varken som referens eller som variant. För utvärdering
-kan två ortogonala callers slås på: bcftools och Rindels.
+kan en ortogonal caller, bcftools, slås på.
 
 **Samma molekyl?** En ONT-läsning spänner hela kinasdomänen (~1 kb), så när två
 resistensmutationer hittas avgörs cis/trans genom att läsa av enskilda

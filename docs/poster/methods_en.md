@@ -32,7 +32,7 @@ a curated TKI-resistance profile; the rest are reported as unclassified or
 synonymous, not as resistance. Variants are reported from 1 % allele
 fraction, and subclonally down to 0.2 %. Reads whose bases next to the site
 (±3 bp) differ from the reference are not counted, as reference or as variant.
-Two orthogonal callers can be switched on for evaluation: bcftools and Rindels.
+An orthogonal caller, bcftools, can be switched on for evaluation.
 
 **The same molecule?** A single ONT read spans the entire kinase domain
 (~1 kb), so when two resistance mutations are found, cis versus trans is read
