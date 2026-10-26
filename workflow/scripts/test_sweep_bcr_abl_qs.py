@@ -232,7 +232,7 @@ class TestSweepBcrAblQs(unittest.TestCase):
             captured = []
             captured_rows = []
 
-            def capture_summary(summaries, sample):
+            def capture_summary(summaries, sample, **_):
                 captured.extend(summaries)
                 return QS.plt.figure()
 
@@ -402,7 +402,7 @@ class NamedMutationsTests(unittest.TestCase):
         with (
             patch.object(QS, "parse_args", return_value=args),
             patch.object(QS, "build_summary_figure",
-                         side_effect=lambda s, n: (summaries.extend(s), QS.plt.figure())[1]),
+                         side_effect=lambda s, n, **_: (summaries.extend(s), QS.plt.figure())[1]),
             patch.object(QS, "build_plot_figure", return_value=None),
             patch.object(QS, "PdfPages"),
         ):
@@ -432,6 +432,88 @@ class NamedMutationsTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as stopped:
                 self._run(tmp, "Y253X")
         self.assertIn("Y253X", str(stopped.exception.code))
+
+
+
+@unittest.skipIf(matplotlib is None, "matplotlib is required for the QS sweep and background plots")
+class DepthMaskTests(unittest.TestCase):
+    """Bins too thin to mean anything are shaded, not drawn as data."""
+
+    # Three bins: 6x (QS 26 on a real run), 2,000x with a thin reverse strand,
+    # and 9,000x. The 6x bin carries the kind of spike it produced for real.
+    BINS = [
+        {"short_label": "26", "median_depth": 6, "median_depth_fwd": 5, "median_depth_rev": 1,
+         "mean_background_noise": 0.35, "mean_background_noise_fwd": 0.4, "mean_background_noise_rev": 0.0,
+         "mean_del_rate": 0.1, "mean_ins_rate": 0.0,
+         "mutation_vafs": {"T315I": 16.7}, "mutation_vafs_fwd": {"T315I": 20.0}, "mutation_vafs_rev": {"T315I": 0.0}},
+        {"short_label": "11", "median_depth": 2000, "median_depth_fwd": 1600, "median_depth_rev": 400,
+         "mean_background_noise": 1.1, "mean_background_noise_fwd": 1.2, "mean_background_noise_rev": 0.9,
+         "mean_del_rate": 0.8, "mean_ins_rate": 0.3,
+         "mutation_vafs": {"T315I": 3.6}, "mutation_vafs_fwd": {"T315I": 3.5}, "mutation_vafs_rev": {"T315I": 3.9}},
+        {"short_label": "18", "median_depth": 9000, "median_depth_fwd": 7000, "median_depth_rev": 2000,
+         "mean_background_noise": 0.33, "mean_background_noise_fwd": 0.35, "mean_background_noise_rev": 0.25,
+         "mean_del_rate": 0.4, "mean_ins_rate": 0.1,
+         "mutation_vafs": {"T315I": 3.9}, "mutation_vafs_fwd": {"T315I": 3.9}, "mutation_vafs_rev": {"T315I": 3.9}},
+    ]
+
+    @staticmethod
+    def _line(ax, label_start):
+        import math
+        line = next(l for l in ax.get_lines() if l.get_label().startswith(label_start))
+        return ["nan" if math.isnan(v) else round(float(v), 2) for v in line.get_ydata()]
+
+    def test_thin_bins_are_not_drawn(self):
+        fig = QS.build_summary_figure(self.BINS, "S", min_depth=500)
+        try:
+            _, ax2, ax3 = fig.axes[:3]
+            self.assertEqual(self._line(ax2, "Mean Non-Ref Noise"), ["nan", 1.1, 0.33])
+            self.assertEqual(self._line(ax3, "T315I (Combined)"), ["nan", 3.6, 3.9])
+        finally:
+            QS.plt.close(fig)
+
+    def test_strand_curves_are_judged_on_their_own_depth(self):
+        """The reverse strand has 400x at QS 11 although the bin has 2,000x."""
+        fig = QS.build_summary_figure(self.BINS, "S", min_depth=500)
+        try:
+            ax2, ax3 = fig.axes[1], fig.axes[2]
+            self.assertEqual(self._line(ax2, "Reverse Strand"), ["nan", "nan", 0.25])
+            self.assertEqual(self._line(ax2, "Forward Strand"), ["nan", 1.2, 0.35])
+            self.assertEqual(self._line(ax3, "T315I (Rev -)"), ["nan", "nan", 3.9])
+        finally:
+            QS.plt.close(fig)
+
+    def test_the_depth_panel_is_always_drawn(self):
+        fig = QS.build_summary_figure(self.BINS, "S", min_depth=500)
+        try:
+            self.assertEqual(self._line(fig.axes[0], "Median Depth (Combined)"), [6, 2000, 9000])
+        finally:
+            QS.plt.close(fig)
+
+    def test_a_masked_spike_does_not_set_the_vaf_axis(self):
+        fig = QS.build_summary_figure(self.BINS, "S", min_depth=500)
+        try:
+            self.assertLess(fig.axes[2].get_ylim()[1], 10)    # 16.7 % at 6x is not on the plot
+        finally:
+            QS.plt.close(fig)
+
+    def test_masked_bins_are_shaded_and_labelled(self):
+        fig = QS.build_summary_figure(self.BINS, "S", min_depth=500)
+        try:
+            labels = [h.get_label() for h in fig.axes[1].get_legend().legend_handles]
+            self.assertTrue(any("500x" in label for label in labels), labels)
+        finally:
+            QS.plt.close(fig)
+
+    def test_zero_draws_everything(self):
+        fig = QS.build_summary_figure(self.BINS, "S")
+        try:
+            self.assertEqual(self._line(fig.axes[1], "Mean Non-Ref Noise"), [0.35, 1.1, 0.33])
+        finally:
+            QS.plt.close(fig)
+
+    def test_the_command_line_default_is_500(self):
+        args = QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf"])
+        self.assertEqual(args.min_plot_depth, 500.0)
 
 
 if __name__ == "__main__":

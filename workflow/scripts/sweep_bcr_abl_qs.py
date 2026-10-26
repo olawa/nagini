@@ -594,8 +594,17 @@ def background_noise_values(
 def build_summary_figure(
     bin_summaries: List[Dict[str, Any]],
     sample: str,
+    min_depth: float = 0.0,
 ) -> plt.Figure:
-    """Build multi-panel summary curve across QS bins with strand and indel metrics."""
+    """Build multi-panel summary curve across QS bins with strand and indel metrics.
+
+    A noise or VAF value is drawn only when the median depth behind it reaches
+    ``min_depth``; strand curves are judged on their own strand's depth, which
+    on these amplicons is far from half the total. At 6x a single read moves a
+    VAF by 17 points, and those bins had been drawn as points on the same curve
+    as the 9,000x bins. The depth panel is always drawn: it is what shows why a
+    bin is missing, and masked bins are shaded on every panel.
+    """
     labels = [b["short_label"] for b in bin_summaries]
     x = np.arange(len(labels))
     depths = [b["median_depth"] for b in bin_summaries]
@@ -605,11 +614,22 @@ def build_summary_figure(
     def plotted(values):
         return [np.nan if value is None else value for value in values]
 
-    noises = plotted([b["mean_background_noise"] for b in bin_summaries])
-    noises_fwd = plotted([b.get("mean_background_noise_fwd") for b in bin_summaries])
-    noises_rev = plotted([b.get("mean_background_noise_rev") for b in bin_summaries])
-    del_rates = plotted([b.get("mean_del_rate") for b in bin_summaries])
-    ins_rates = plotted([b.get("mean_ins_rate") for b in bin_summaries])
+    min_depth = float(min_depth or 0.0)
+
+    def masked(values, depth_list):
+        """NaN where the depth behind a value is below min_depth."""
+        return [
+            np.nan if value is None or (min_depth > 0 and float(depth or 0) < min_depth) else value
+            for value, depth in zip(values, depth_list)
+        ]
+
+    masked_bins = [i for i, depth in enumerate(depths) if min_depth > 0 and float(depth or 0) < min_depth]
+
+    noises = masked([b["mean_background_noise"] for b in bin_summaries], depths)
+    noises_fwd = masked([b.get("mean_background_noise_fwd") for b in bin_summaries], depths_fwd)
+    noises_rev = masked([b.get("mean_background_noise_rev") for b in bin_summaries], depths_rev)
+    del_rates = masked([b.get("mean_del_rate") for b in bin_summaries], depths)
+    ins_rates = masked([b.get("mean_ins_rate") for b in bin_summaries], depths)
 
     mut_vafs: Dict[str, List[Optional[float]]] = {}
     mut_vafs_fwd: Dict[str, List[Optional[float]]] = {}
@@ -661,22 +681,30 @@ def build_summary_figure(
     if mut_vafs:
         for idx, (m_name, v_list) in enumerate(mut_vafs.items()):
             col = colors[idx % len(colors)]
-            ax3.plot(x, plotted(v_list), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
+            ax3.plot(x, masked(v_list, depths), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
             if m_name in mut_vafs_fwd:
-                ax3.plot(x, plotted(mut_vafs_fwd[m_name]), color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
+                ax3.plot(x, masked(mut_vafs_fwd[m_name], depths_fwd), color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
             if m_name in mut_vafs_rev:
-                ax3.plot(x, plotted(mut_vafs_rev[m_name]), color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
+                ax3.plot(x, masked(mut_vafs_rev[m_name], depths_rev), color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
     else:
         ax3.text(0.5, 0.5, "No variants with VAF >= 1.0% detected in sample", ha="center", va="center", transform=ax3.transAxes)
 
     ax3.set_ylabel("Mutation VAF (%)", fontsize=11, fontweight="bold")
-    all_vafs = [v for v_list in mut_vafs.values() for v in v_list if v is not None and math.isfinite(v)]
+    # Scale to what is drawn: a masked 7 % at 150x must not set the axis.
+    all_vafs = [v for v_list in mut_vafs.values() for v in masked(v_list, depths) if math.isfinite(v)]
     max_vaf = max(all_vafs) if all_vafs else 5.0
     ax3.set_ylim(0, max(5.0, max_vaf * 1.25))
     ax3.grid(True, linestyle="--", alpha=0.5)
     ax3.set_title("Detected Resistance Mutation Stability across QS Bins", fontsize=11, loc="left", fontweight="semibold")
     if mut_vafs:
         ax3.legend(loc="upper right", framealpha=0.9, fontsize=9)
+
+    for axis in (ax1, ax2, ax3):
+        for i in masked_bins:
+            axis.axvspan(i - 0.5, i + 0.5, color="#bdbdbd", alpha=0.25, linewidth=0)
+    if masked_bins:
+        ax2.axvspan(np.nan, np.nan, color="#bdbdbd", alpha=0.25, label=f"Median depth < {min_depth:,.0f}x: not plotted")
+        ax2.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     ax3.set_xticks(x)
     ax3.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
@@ -719,6 +747,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--threads", "-t", type=int, default=1,
         help="Number of worker threads for BAM decompression (default: 1)"
+    )
+    parser.add_argument(
+        "--min-plot-depth", type=float, default=500.0,
+        help="Draw a bin's noise and VAF on the summary page only when the median depth behind it reaches "
+             "this; strand curves use their own strand's depth. Masked bins are shaded. 0 draws everything "
+             "(default: 500)"
     )
     parser.add_argument(
         "--mutations", default=None,
@@ -916,13 +950,16 @@ def main():
     args.output_pdf.parent.mkdir(parents=True, exist_ok=True)
     with PdfPages(args.output_pdf) as pdf:
         print(f"[PDF] Rendering summary curve page...", file=sys.stderr)
-        summary_fig = build_summary_figure(bin_summaries, sample)
+        min_plot_depth = float(getattr(args, "min_plot_depth", 0) or 0)
+        summary_fig = build_summary_figure(bin_summaries, sample, min_depth=min_plot_depth)
         pdf.savefig(summary_fig, dpi=300)
         plt.close(summary_fig)
 
         for b, page_strand_label, rows in pages_to_render:
             med_depth = int(np.median([float(r["depth"]) for r in rows]))
             title = f"BCR-ABL1 Kinase Domain ({sample}) | {b['label']} ({page_strand_label}) | Median Depth: {med_depth:,}x"
+            if min_plot_depth > 0 and med_depth < min_plot_depth:
+                title += f" | below {min_plot_depth:,.0f}x: not interpreted"
             print(f"[PDF] Rendering page: {b['label']} ({page_strand_label}, Depth {med_depth:,}x)...", file=sys.stderr)
 
             fig = build_plot_figure(
