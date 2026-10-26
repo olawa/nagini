@@ -653,7 +653,7 @@ def build_summary_figure(
     fig.suptitle(f"BCR-ABL1 Kinase Domain | Quality Score (QS) Sweep Summary ({sample}){kind}", fontsize=14, fontweight="bold", y=0.98)
 
     # 1. Median Depth vs QS
-    ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth (Combined)")
+    ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth (Combined)" if strands else "Median Depth")
     ax1.fill_between(x, depths, color="#3470a3", alpha=0.12)
     # strands=False draws the combined curves only, for a cleaner figure.
     if strands:
@@ -667,7 +667,7 @@ def build_summary_figure(
     ax1.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     # 2. Mean Background Noise (%) vs QS (Split per strand + indels)
-    ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.5, label="Mean Non-Ref Noise (%) Combined")
+    ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.5, label="Mean Non-Ref Noise (%) Combined" if strands else "Mean Non-Ref Noise (%)")
     if strands:
         ax2.plot(x, noises_fwd, marker="^", color="#0288d1", linewidth=1.6, linestyle="--", label="Forward Strand (+) Noise (%)")
         ax2.plot(x, noises_rev, marker="v", color="#2e7d32", linewidth=1.6, linestyle="--", label="Reverse Strand (-) Noise (%)")
@@ -694,7 +694,7 @@ def build_summary_figure(
     if mut_vafs:
         for idx, (m_name, v_list) in enumerate(mut_vafs.items()):
             col = colors[idx % len(colors)]
-            ax3.plot(x, masked(v_list, depths), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
+            ax3.plot(x, masked(v_list, depths), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)" if strands else m_name)
             if strands and m_name in mut_vafs_fwd:
                 ax3.plot(x, masked(mut_vafs_fwd[m_name], depths_fwd), color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
             if strands and m_name in mut_vafs_rev:

@@ -532,8 +532,10 @@ class DepthMaskTests(unittest.TestCase):
             labels = self._labels(fig)
             for strand_word in ("Forward Strand", "Reverse Strand", "(Fwd +)", "(Rev -)"):
                 self.assertFalse([l for l in labels if strand_word in l], strand_word)
-            for combined in ("Median Depth (Combined)", "Mean Non-Ref Noise (%) Combined", "T315I (Combined)"):
-                self.assertIn(combined, labels)
+            # With one curve per quantity, "Combined" distinguishes nothing.
+            for label in ("Median Depth", "Mean Non-Ref Noise (%)", "T315I"):
+                self.assertIn(label, labels)
+            self.assertFalse([l for l in labels if "Combined" in l], labels)
             self.assertNotIn("Strand", fig.axes[1].get_title(loc="left"))
         finally:
             QS.plt.close(fig)
