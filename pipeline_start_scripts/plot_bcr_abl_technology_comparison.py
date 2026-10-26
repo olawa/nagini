@@ -440,10 +440,13 @@ def create_comparison_figure(
     ax_inset.set_title("Subclonal Range (0–3%)", fontsize=7.5, fontweight="bold", pad=2)
     ax_inset.tick_params(labelsize=7)
     ax_inset.grid(True, linestyle=":", alpha=0.4)
-    # Highlight E459K point annotation in inset
-    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.15, 2.45),
-                      arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.7),
-                      fontsize=7.0, fontweight="bold", color="#1E3A8A")
+    # Highlight subclonal points in inset
+    ax_inset.annotate("F359I (1.4% vs 1.56%)", xy=(1.4, 1.56), xytext=(0.10, 2.50),
+                      arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.6),
+                      fontsize=6.5, fontweight="bold", color="#1E3A8A")
+    ax_inset.annotate("E459K (1.7% vs 2.01%)", xy=(1.7, 2.01), xytext=(0.85, 0.35),
+                      arrowprops=dict(arrowstyle="->", color="#0F172A", lw=0.6),
+                      fontsize=6.5, fontweight="bold", color="#1E3A8A")
 
     # -------------------------------------------------------------
     # Panel B: Grouped VAF Concordance across Dynamic Range
@@ -575,7 +578,10 @@ def create_comparison_figure(
         ax_bland.axhline(m_bcf, color=CALLER_COLORS["bcftools"], linestyle=":", linewidth=1.3, alpha=0.85, zorder=2)
         stat_lines.append(f"bcftools: ${m_bcf:+.2f}\\% \\pm {s_bcf:.2f}\\%$ (Max $|\\Delta| = {np.max(np.abs(d_bcf)):.2f}\\%$)")
 
-    stat_lines.append("7 of 9 sites within $\\pm 1.0\\%$ tolerance")
+    if "Branford" in deltas_by_caller and deltas_by_caller["Branford"]:
+        d_bf = deltas_by_caller["Branford"]
+        n_within_1 = sum(1 for d in d_bf if abs(d) <= 1.0)
+        stat_lines.append(f"{n_within_1} of {len(d_bf)} sites within $\\pm 1.0\\%$ tolerance")
 
     ax_bland.text(
         0.05, 0.10, "\n".join(stat_lines), transform=ax_bland.transAxes,
