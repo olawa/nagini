@@ -523,6 +523,34 @@ class DepthMaskTests(unittest.TestCase):
         finally:
             QS.plt.close(fig)
 
+    def _labels(self, fig):
+        return [line.get_label() for axis in fig.axes[:3] for line in axis.get_lines()]
+
+    def test_combined_only_draws_no_strand_curves(self):
+        fig = QS.build_summary_figure(self.BINS, "S", strands=False)
+        try:
+            labels = self._labels(fig)
+            for strand_word in ("Forward Strand", "Reverse Strand", "(Fwd +)", "(Rev -)"):
+                self.assertFalse([l for l in labels if strand_word in l], strand_word)
+            for combined in ("Median Depth (Combined)", "Mean Non-Ref Noise (%) Combined", "T315I (Combined)"):
+                self.assertIn(combined, labels)
+            self.assertNotIn("Strand", fig.axes[1].get_title(loc="left"))
+        finally:
+            QS.plt.close(fig)
+
+    def test_strand_curves_are_drawn_by_default(self):
+        fig = QS.build_summary_figure(self.BINS, "S")
+        try:
+            labels = self._labels(fig)
+            self.assertIn("Forward Strand (+)", labels)
+            self.assertIn("T315I (Rev -)", labels)
+        finally:
+            QS.plt.close(fig)
+
+    def test_the_flag_reaches_the_figure(self):
+        self.assertFalse(QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf"]).combined_only)
+        self.assertTrue(QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf", "--combined-only"]).combined_only)
+
     def test_every_bin_is_drawn_by_default(self):
         """Masking is opt-in: --min-plot-depth 500 to shade thin bins."""
         args = QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf"])
@@ -534,7 +562,8 @@ class DepthMaskTests(unittest.TestCase):
 class SummaryPagePerModeTests(unittest.TestCase):
     """--mode both draws binned and cumulative on separate summary pages."""
 
-    def _calls(self, mode):
+    def _calls(self, mode, combined_only=False):
+        self.strands_seen = []
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             bed = tmp / "p.bed"
@@ -558,11 +587,13 @@ class SummaryPagePerModeTests(unittest.TestCase):
                 split_strands=False, bam=bam, bed=bed, sample="S", min_base_quality=0,
                 min_mapping_quality=0, qs_min=14, qs_max=18, mode=mode, strand="all",
                 output_pdf=tmp / "o.pdf", output_tsv=None, zoom_max=5, color_mode="bases",
+                combined_only=combined_only,
             )
             calls = []
 
             def capture(summaries, sample, **kwargs):
                 calls.append(([b["type"] for b in summaries], kwargs.get("mode")))
+                self.strands_seen.append(kwargs.get("strands"))
                 return QS.plt.figure()
 
             with (
@@ -579,6 +610,12 @@ class SummaryPagePerModeTests(unittest.TestCase):
         self.assertEqual([mode for _, mode in calls], ["binned", "cumulative"])
         for types, mode in calls:
             self.assertEqual(set(types), {mode}, "a page must hold one kind of bin only")
+
+    def test_combined_only_is_passed_to_every_summary_page(self):
+        self._calls("both", combined_only=True)
+        self.assertEqual(self.strands_seen, [False, False])
+        self._calls("both")
+        self.assertEqual(self.strands_seen, [True, True])
 
     def test_a_single_mode_still_gets_one_page(self):
         for mode in ("binned", "cumulative"):

@@ -599,6 +599,7 @@ def build_summary_figure(
     sample: str,
     min_depth: float = 0.0,
     mode: Optional[str] = None,
+    strands: bool = True,
 ) -> plt.Figure:
     """Build multi-panel summary curve across QS bins with strand and indel metrics.
 
@@ -654,8 +655,10 @@ def build_summary_figure(
     # 1. Median Depth vs QS
     ax1.plot(x, depths, marker="o", color="#3470a3", linewidth=2.5, label="Median Depth (Combined)")
     ax1.fill_between(x, depths, color="#3470a3", alpha=0.12)
-    ax1.plot(x, depths_fwd, marker=".", color="#0288d1", linewidth=1.5, linestyle="--", label="Forward Strand (+)")
-    ax1.plot(x, depths_rev, marker=".", color="#1a237e", linewidth=1.5, linestyle=":", label="Reverse Strand (-)")
+    # strands=False draws the combined curves only, for a cleaner figure.
+    if strands:
+        ax1.plot(x, depths_fwd, marker=".", color="#0288d1", linewidth=1.5, linestyle="--", label="Forward Strand (+)")
+        ax1.plot(x, depths_rev, marker=".", color="#1a237e", linewidth=1.5, linestyle=":", label="Reverse Strand (-)")
     ax1.set_ylabel("Median Depth (x)", fontsize=11, fontweight="bold")
     ax1.grid(True, linestyle="--", alpha=0.5)
     import matplotlib.ticker as ticker
@@ -665,8 +668,9 @@ def build_summary_figure(
 
     # 2. Mean Background Noise (%) vs QS (Split per strand + indels)
     ax2.plot(x, noises, marker="s", color="#d95f02", linewidth=2.5, label="Mean Non-Ref Noise (%) Combined")
-    ax2.plot(x, noises_fwd, marker="^", color="#0288d1", linewidth=1.6, linestyle="--", label="Forward Strand (+) Noise (%)")
-    ax2.plot(x, noises_rev, marker="v", color="#2e7d32", linewidth=1.6, linestyle="--", label="Reverse Strand (-) Noise (%)")
+    if strands:
+        ax2.plot(x, noises_fwd, marker="^", color="#0288d1", linewidth=1.6, linestyle="--", label="Forward Strand (+) Noise (%)")
+        ax2.plot(x, noises_rev, marker="v", color="#2e7d32", linewidth=1.6, linestyle="--", label="Reverse Strand (-) Noise (%)")
     if any(math.isfinite(r) and r > 0 for r in del_rates):
         ax2.plot(x, del_rates, marker="x", color="#757575", linewidth=1.2, linestyle=":", label="Mean Deletion Rate (%)")
     if any(math.isfinite(r) and r > 0 for r in ins_rates):
@@ -674,12 +678,15 @@ def build_summary_figure(
     ax2.axhline(1.0, color="gray", linestyle=":", linewidth=1, label="1.0% Threshold")
     ax2.axhline(0.2, color="lightgray", linestyle=":", linewidth=0.8, label="0.2% Subclonal")
     ax2.set_ylabel("Background Rate (%)", fontsize=11, fontweight="bold")
-    all_noise_pts = noises + noises_fwd + noises_rev + del_rates + ins_rates
+    all_noise_pts = noises + (noises_fwd + noises_rev if strands else []) + del_rates + ins_rates
     finite_noise_pts = [value for value in all_noise_pts if math.isfinite(value)]
     max_noise = max(finite_noise_pts) if finite_noise_pts else 0.5
     ax2.set_ylim(0, max(1.5, max_noise * 1.25))
     ax2.grid(True, linestyle="--", alpha=0.5)
-    ax2.set_title("Background Noise & Strand Bias across Negative Sites", fontsize=11, loc="left", fontweight="semibold")
+    ax2.set_title(
+        "Background Noise & Strand Bias across Negative Sites" if strands else "Background Noise across Negative Sites",
+        fontsize=11, loc="left", fontweight="semibold",
+    )
     ax2.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
     # 3. Detected Mutations VAF (%) vs QS
@@ -688,9 +695,9 @@ def build_summary_figure(
         for idx, (m_name, v_list) in enumerate(mut_vafs.items()):
             col = colors[idx % len(colors)]
             ax3.plot(x, masked(v_list, depths), marker="^", color=col, linewidth=2.2, label=f"{m_name} (Combined)")
-            if m_name in mut_vafs_fwd:
+            if strands and m_name in mut_vafs_fwd:
                 ax3.plot(x, masked(mut_vafs_fwd[m_name], depths_fwd), color=col, linestyle="--", linewidth=1.2, alpha=0.75, label=f"{m_name} (Fwd +)")
-            if m_name in mut_vafs_rev:
+            if strands and m_name in mut_vafs_rev:
                 ax3.plot(x, masked(mut_vafs_rev[m_name], depths_rev), color=col, linestyle=":", linewidth=1.2, alpha=0.75, label=f"{m_name} (Rev -)")
     else:
         ax3.text(0.5, 0.5, "No mutations tracked", ha="center", va="center", transform=ax3.transAxes)
@@ -758,6 +765,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--threads", "-t", type=int, default=1,
         help="Number of worker threads for BAM decompression (default: 1)"
+    )
+    parser.add_argument(
+        "--combined-only", action="store_true", default=False,
+        help="Draw only the combined-strand curves on the summary pages, for a cleaner figure. "
+             "Per-bin pages follow --strand as before."
     )
     parser.add_argument(
         "--min-plot-depth", type=float, default=0.0,
@@ -969,7 +981,10 @@ def main():
         for kind in kinds or [None]:
             group = [b for b in bin_summaries if kind is None or b.get("type") == kind]
             print(f"[PDF] Rendering summary curve page ({kind or 'all'})...", file=sys.stderr)
-            summary_fig = build_summary_figure(group, sample, min_depth=min_plot_depth, mode=kind)
+            summary_fig = build_summary_figure(
+                group, sample, min_depth=min_plot_depth, mode=kind,
+                strands=not getattr(args, "combined_only", False),
+            )
             pdf.savefig(summary_fig, dpi=300)
             plt.close(summary_fig)
 
