@@ -63,14 +63,14 @@ downstream use.
 
 ### Artefact filters in the resistance caller
 
-Every candidate must clear all of them:
+Every candidate must clear all of them. The context filter acts on reads, before counting:
 
 | filter | threshold | catches |
 |---|---|---|
 | Signal-to-noise | alt / next-largest non-reference base ≥ 3.0 | positional noise |
 | Strand bias | minor-strand fraction ≥ 0.05 **and** SOR ≤ 3.0 | one-sided artefacts |
 | Mean base quality, alt | ≥ 14.0 | low-quality calls |
-| Flanking k-mer | ≥ 60 % clean, window ±3 bp | homopolymer / indel noise |
+| Flanking context | reads that differ from the reference within ±3 bp are not counted, as reference or alternate | context errors, e.g. K375E (0.2–0.3 % → < 0.05 %) |
 | Mapping quality | ≥ 1 | multi-mapping |
 
 Strand bias requires **both** signals: SOR alone flags true variants on

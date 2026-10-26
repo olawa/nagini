@@ -61,14 +61,14 @@ CGU-pipelines, med VCF, TSV och JSON bredvid för vidare bearbetning.
 
 ### Artefaktfilter i resistenskallningen
 
-Varje kandidat måste passera samtliga:
+Varje kandidat måste passera samtliga. Kontextfiltret verkar på läsningsnivå, före räkningen:
 
 | filter | tröskel | fångar |
 |---|---|---|
 | Signal/brus | alt / näst största icke-referensbas ≥ 3,0 | positionsbrus |
 | Strängbias | minorsträngandel ≥ 0,05 **och** SOR ≤ 3,0 | ensidiga artefakter |
 | Medelbaskvalitet, alt | ≥ 14,0 | lågkvalitativa anrop |
-| Flankerande k-mer | ≥ 60 % rena, fönster ±3 bp | homopolymer-/indelbrus |
+| Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt | kontextfel, t.ex. K375E (0,2–0,3 % → < 0,05 %) |
 | Mappningskvalitet | ≥ 1 | multimappning |
 
 Strängbias kräver **båda** signalerna: SOR ensamt flaggar äkta varianter på
