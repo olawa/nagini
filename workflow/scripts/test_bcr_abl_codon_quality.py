@@ -49,19 +49,22 @@ class CodonQualityTests(unittest.TestCase):
             self.assertEqual(float(row["mean_baseq_ref"]), 30)
         self.assertEqual(panel_assessment(audit)["state"], "INCOMPLETE")
 
-    def test_codon_base_quality_and_context_filters_cannot_be_bypassed(self):
-        for bad_read, failure, field, value in (
-            (full("GTT", quality=12), "LOW_BASEQ", "mean_baseq_alt", "12.0"),
-            (full("GTT", dirty=True), "DIRTY_CONTEXT", "kmer_clean_percent", "0.0"),
-        ):
-            with self.subTest(failure=failure):
-                reads = [full("ACT")] * 60 + [full("GCT")] * 20 + [full("ATT")] * 20 + [bad_read] * 10
-                audit, variants, _ = self.call(reads, ("--include-artifacts",))
-                self.assertTrue(all(row["status"] == "DETECTED" for row in audit))
-                valine = next(row for row in variants if row["mutation"] == "T315V")
-                self.assertEqual(valine["status"], "ARTIFACT")
-                self.assertIn(failure, valine["filter_reason"])
-                self.assertEqual(valine[field], value)
+    def test_codon_base_quality_filter_cannot_be_bypassed(self):
+        reads = [full("ACT")] * 60 + [full("GCT")] * 20 + [full("ATT")] * 20 + [full("GTT", quality=12)] * 10
+        audit, variants, _ = self.call(reads, ("--include-artifacts",))
+        self.assertTrue(all(row["status"] == "DETECTED" for row in audit))
+        valine = next(row for row in variants if row["mutation"] == "T315V")
+        self.assertEqual(valine["status"], "ARTIFACT")
+        self.assertIn("LOW_BASEQ", valine["filter_reason"])
+        self.assertEqual(valine["mean_baseq_alt"], "12.0")
+
+    def test_codon_reads_with_a_dirty_context_are_evidence_for_no_haplotype(self):
+        """As for single sites: the dirty GTT reads are not counted, so no T315V
+        haplotype is formed from them -- not even as an artefact."""
+        reads = [full("ACT")] * 60 + [full("GCT")] * 20 + [full("ATT")] * 20 + [full("GTT", dirty=True)] * 10
+        audit, variants, _ = self.call(reads, ("--include-artifacts",))
+        self.assertTrue(all(row["status"] == "DETECTED" for row in audit))
+        self.assertFalse([row for row in variants if row["mutation"] == "T315V"])
 
     def test_insufficient_complete_codon_evidence_is_preserved_as_unresolved(self):
         left = [{"seq": "N" * 99 + ("G" if i < 20 else "A")} for i in range(100)]

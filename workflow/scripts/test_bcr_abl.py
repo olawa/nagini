@@ -298,8 +298,10 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
             self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
             self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
 
-    def test_kmer_filter_still_rejects_a_genuinely_dirty_context(self):
-        """A mismatch that is not a known position still counts as dirty."""
+    def test_a_genuinely_dirty_context_contributes_no_evidence(self):
+        """A mismatch that is not a known position still counts as dirty, and a
+        dirty read is evidence for no allele -- it used to be counted and then
+        reject the whole call as DIRTY_CONTEXT."""
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -327,9 +329,14 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
             create_synthetic_bam(bam, reads, [("chr9", 200)])
             rows = self._run_caller(tmp, bam, bed, fasta)
 
-        self.assertEqual(rows[0]["kmer_clean_percent"], "0.0")
-        self.assertEqual(rows[0]["status"], "ARTIFACT")
-        self.assertIn("DIRTY_CONTEXT", rows[0]["filter_reason"])
+        row = rows[0]
+        self.assertEqual(row["kmer_clean_percent"], "0.0")      # the audit still shows it
+        self.assertEqual(row["ad_alt"], "0")
+        self.assertEqual(row["ad_alt_context_excluded"], "200")
+        self.assertEqual(row["depth_context_excluded"], "200")
+        self.assertEqual(row["depth"], "300")
+        self.assertEqual(row["status"], "WILDTYPE")
+        self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
 
     def test_strand_bias_spares_a_variant_on_a_strand_skewed_amplicon(self):
         """When the whole amplicon is one-sided the reference is one-sided too.

@@ -49,13 +49,26 @@ LOW_BASEQ (--min-base-quality, --min-mean-baseq)
     ad_alt_unfiltered are reported alongside, so a downstream comparison can
     use counts that do not depend on this setting.
 
-DIRTY_CONTEXT (--min-kmer-rate, --kmer-window)
-    Fraction of alt reads whose flanking bases match the reference. Targets
-    homopolymer and indel-adjacent errors. Deviations that coincide with
-    another panel position are ignored, because a compound mutation in cis is
-    not a dirty context -- 25 of the 52 Branford positions sit within 3 bp of
-    another one, so without that exemption this filter would reject exactly
-    the compound mutations the phaser exists to resolve.
+FLANKING CONTEXT (--kmer-window)
+    With --reference-fasta, a read whose bases within --kmer-window of the site
+    differ from the reference is not counted at all -- not for the reference,
+    not for any alternate. Such reads are what a context error looks like, and
+    excluding them from both sides keeps the VAF unbiased: true alternate reads
+    carry random flank errors as often as reference reads do. They are reported
+    as depth_context_excluded / ad_alt_context_excluded, and kmer_clean_percent
+    still shows how clean the alternate reads were before exclusion.
+
+    This replaced rejecting a whole call when under 60 % of its alternate reads
+    were clean (DIRTY_CONTEXT, --min-kmer-rate). K375E (c.1069A>G) shows why:
+    on the reverse strand the G of AAG|AAAAA is read one base late, giving a
+    G>A + A>G pair at 0.2-0.3 % in every sample. A true 0.3 % subclone there
+    would have had about half its alternate reads dirty and been rejected;
+    counting only clean reads keeps the subclone and drops the artefact.
+
+    Deviations that coincide with another panel position are ignored, because a
+    compound mutation in cis is not a dirty context -- 25 of the 52 Branford
+    positions sit within 3 bp of another one, so without that exemption the
+    compound mutations the phaser exists to resolve would be discarded.
 
 Thresholds are conventional starting points, not values derived from these
 data. Calibrate them against the per-position background once it exists.
@@ -130,7 +143,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
     parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
     parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
-    parser.add_argument("--min-kmer-rate", type=float, default=0.60, help="Minimum kmer reference clean rate (default 0.60 / 60 percent)")
+    parser.add_argument("--min-kmer-rate", type=float, default=0.60, help="No longer used: reads with a dirty flanking context are now excluded from the counts instead of a call being rejected below this clean rate. Accepted so existing invocations keep working.")
     parser.add_argument("--kmer-window", type=int, default=3, help="Flanking kmer window size in bp (default 3)")
     parser.add_argument("--known-variants", type=Path, default=None, help="Optional BED/VCF of known polymorphisms whose flanking mismatches should not count as dirty context. Panel positions are always exempt.")
     parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
@@ -335,11 +348,15 @@ def collect_codon_haplotypes(
         codon = "".join(bases[pos][0] for pos in positions)
         reverse = bases[positions[0]][2]
         item = out.setdefault((codon, reverse), {"count": 0, "bq_sum": 0, "kmer_total": 0, "kmer_clean": 0})
-        item["count"] += 1
-        item["bq_sum"] += sum(bases[pos][1] for pos in positions) / 3
+        # The clean rate is an audit of all reads, as for a single site...
         if clean_context is not None:
             item["kmer_total"] += 1
             item["kmer_clean"] += int(clean_context)
+        # ...but a dirty flank makes the read evidence for no haplotype.
+        if clean_context is False:
+            continue
+        item["count"] += 1
+        item["bq_sum"] += sum(bases[pos][1] for pos in positions) / 3
     return out
 
 
@@ -357,8 +374,6 @@ def allele_quality(args, ref_fwd, ref_rev, alt_fwd, alt_rev, bq_sum, bq_count, k
         failures.append(f"STRAND_BIAS(ratio={minor:.3f}<{args.min_minor_strand_ratio:.2f},SOR={sor:.2f}>{args.max_sor:.1f})")
     if baseq < args.min_mean_baseq:
         failures.append(f"LOW_BASEQ({baseq:.1f}<{args.min_mean_baseq:.1f})")
-    if clean_percent is not None and clean_percent < args.min_kmer_rate * 100:
-        failures.append(f"DIRTY_CONTEXT({clean_percent:.1f}%<{args.min_kmer_rate * 100:.0f}%)")
     return {
         "alt_minor_strand_ratio": minor, "sor": sor, "mean_baseq_alt": baseq,
         "kmer_clean_percent": clean_percent if clean_percent is not None else "NA",
@@ -430,6 +445,9 @@ def count_positions_batch(
             # comparing these calls against another platform needs counts that
             # do not move when the threshold is tuned.
             "unfiltered": {b: 0 for b in BASES},
+            # Reads whose flanking bases disagree with the reference: not
+            # counted for any allele (see FLANKING CONTEXT in the module docs).
+            "context_excluded": {b: 0 for b in BASES},
         })
         results[pos_0based] = counts
 
@@ -506,12 +524,10 @@ def count_positions_batch(
                 counts["low_baseq"] += 1
                 continue
 
-            strand = "rev" if aln.is_reverse else "fwd"
-            counts[f"{base}_{strand}"] += 1
-            counts["base_qual_sum"][base] += bq
-            counts["base_qual_count"][base] += 1
-
-            # Flanking k-mer reference context check
+            # Flanking context, checked before the read is counted: a read that
+            # disagrees with the reference beside the site is evidence for no
+            # allele. Reads too close to their own end to check are kept.
+            clean = None
             if k_len > 0:
                 qpos = read.query_position
                 qseq = aln.query_sequence
@@ -519,10 +535,19 @@ def count_positions_batch(
                     counts["kmer_total_count"][base] += 1
                     read_left = qseq[qpos - k_len : qpos].upper()
                     read_right = qseq[qpos + 1 : qpos + 1 + k_len].upper()
-                    if context_is_clean(read_left, ref_left, left_mask) and context_is_clean(
+                    clean = context_is_clean(read_left, ref_left, left_mask) and context_is_clean(
                         read_right, ref_right, right_mask
-                    ):
+                    )
+                    if clean:
                         counts["kmer_clean_count"][base] += 1
+            if clean is False:
+                counts["context_excluded"][base] += 1
+                continue
+
+            strand = "rev" if aln.is_reverse else "fwd"
+            counts[f"{base}_{strand}"] += 1
+            counts["base_qual_sum"][base] += bq
+            counts["base_qual_count"][base] += 1
 
     return results
 
@@ -829,6 +854,8 @@ def main(argv=None) -> None:
                 "n_refskip": counts.get("refskip", 0),
                 "n_deletion": counts.get("deletion", 0),
                 "n_insertion": counts.get("insertion", 0),
+                "depth_context_excluded": sum(counts.get("context_excluded", {}).values()),
+                "ad_alt_context_excluded": counts.get("context_excluded", {}).get(alt, 0),
             }
             all_results.append(record)
 
@@ -1043,6 +1070,7 @@ def main(argv=None) -> None:
         "mean_baseq_ref", "mean_baseq_alt", "kmer_clean_percent",
         "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib", "asciminib",
         "ad_ref_fwd", "ad_ref_rev", "ad_alt_fwd", "ad_alt_rev", "n_refskip", "n_deletion", "n_insertion",
+        "depth_context_excluded", "ad_alt_context_excluded",
     ]
 
     # Write All Sites TSV

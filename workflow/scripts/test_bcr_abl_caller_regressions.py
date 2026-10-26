@@ -51,6 +51,89 @@ def run_caller(tmp, bam, bed_text, extra=()):
     return read(all_sites), read(mutations), vcf
 
 
+class FlankingContextCounting(unittest.TestCase):
+    """Reads with a dirty flank are evidence for no allele.
+
+    Modelled on K375E (c.1069A>G): on the reverse strand the G of AAG|AAAAA is
+    read one base late, so the read shows G>A at -1 and A>G at the site. In
+    every sample this sits at 0.2-0.3 % of depth.
+    """
+
+    SITE = 100
+    LEFT, RIGHT = "GAGTACCTGGAGAAG", "AAAACTTCATCCACA"
+    BED = "chr9\t100\t101\tNM_005157.6:c.(1069A>G)\tA\tG\tp.Lys375Glu\n"
+
+    def setUp(self):
+        import random
+        rng = random.Random(3)
+        filler = lambda n: "".join(rng.choice("ACGT") for _ in range(n))  # noqa: E731
+        self.ref = filler(self.SITE - len(self.LEFT)) + self.LEFT + "A" + self.RIGHT
+        self.ref += filler(200 - len(self.ref))
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.tmp = Path(self.directory.name)
+        self.fasta = self.tmp / "ref.fa"
+        self.fasta.write_text(">chr9\n" + self.ref + "\n")
+        pysam.faidx(str(self.fasta))
+
+    def read(self, i, alt=False, artefact=False, flank_error=False):
+        seq = list(self.ref[25:175])
+        site = self.SITE - 25
+        if alt or artefact:
+            seq[site] = "G"
+        if artefact:
+            seq[site - 1] = "A"                     # the G read one base late
+        if flank_error:
+            seq[site + 2] = "C" if seq[site + 2] != "C" else "G"
+        return {"name": f"r{i}", "seq": "".join(seq), "start": 25, "flag": 16 if (artefact or i % 3 == 0) else 0}
+
+    def call(self, rows, reference=True):
+        bam = self.tmp / "reads.bam"
+        write_bam(bam, rows)
+        extra = ("--reference-fasta", str(self.fasta)) if reference else ()
+        audit, variants, _ = run_caller(self.tmp, bam, self.BED, extra)
+        return audit[0]
+
+    def test_a_subclone_is_called_although_the_artefact_sits_on_top_of_it(self):
+        """12 clean G (0.30 %) + 10 shifted G. Before, 22 alt reads with 55 % clean
+        context failed DIRTY_CONTEXT and the subclone was lost."""
+        rows = [self.read(i, alt=True) for i in range(12)]
+        rows += [self.read(100 + i, artefact=True) for i in range(10)]
+        rows += [self.read(1000 + i) for i in range(3978)]
+        row = self.call(rows)
+        self.assertEqual(row["status"], "SUBCLONAL")
+        self.assertEqual(row["ad_alt"], "12")
+        self.assertEqual(row["depth"], "3990")
+        self.assertEqual(row["ad_alt_context_excluded"], "10")
+        self.assertAlmostEqual(float(row["vaf_percent"]), 12 / 3990 * 100, places=2)
+        self.assertAlmostEqual(float(row["kmer_clean_percent"]), 54.5, places=1)   # audit of all 22
+
+    def test_the_artefact_alone_is_not_called(self):
+        rows = [self.read(i, alt=True) for i in range(4)]
+        rows += [self.read(100 + i, artefact=True) for i in range(10)]
+        rows += [self.read(1000 + i) for i in range(3986)]
+        row = self.call(rows)
+        self.assertNotIn(row["status"], ("DETECTED", "SUBCLONAL"))
+        self.assertEqual(row["ad_alt"], "4")
+
+    def test_excluding_on_both_sides_keeps_the_vaf_unbiased(self):
+        """Every 12th read has a flank error, whatever its allele. Excluding
+        them only from the alternate side would read 5 % as about 4.6 %."""
+        rows = [self.read(i, alt=i < 200, flank_error=i % 12 == 0) for i in range(4000)]
+        row = self.call(rows)
+        self.assertAlmostEqual(float(row["vaf_percent"]), 5.0, delta=0.1)
+        self.assertGreater(int(row["depth_context_excluded"]), 300)
+
+    def test_without_a_reference_nothing_is_excluded(self):
+        rows = [self.read(i, alt=True) for i in range(12)]
+        rows += [self.read(100 + i, artefact=True) for i in range(10)]
+        rows += [self.read(1000 + i) for i in range(3978)]
+        row = self.call(rows, reference=False)
+        self.assertEqual(row["ad_alt"], "22")
+        self.assertEqual(row["depth"], "4000")
+        self.assertEqual(row["depth_context_excluded"], "0")
+
+
 class CallerRegressions(unittest.TestCase):
     def test_single_site_variant_copy_is_loadable_by_phaser_and_audit_is_preserved(self):
         with tempfile.TemporaryDirectory() as d:
