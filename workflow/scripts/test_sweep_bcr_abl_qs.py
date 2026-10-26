@@ -523,9 +523,10 @@ class DepthMaskTests(unittest.TestCase):
         finally:
             QS.plt.close(fig)
 
-    def test_the_command_line_default_is_500(self):
+    def test_every_bin_is_drawn_by_default(self):
+        """Masking is opt-in: --min-plot-depth 500 to shade thin bins."""
         args = QS.parse_args(["--bam", "x.bam", "--output-pdf", "x.pdf"])
-        self.assertEqual(args.min_plot_depth, 500.0)
+        self.assertEqual(args.min_plot_depth, 0.0)
 
 
 

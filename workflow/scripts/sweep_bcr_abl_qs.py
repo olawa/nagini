@@ -760,10 +760,10 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Number of worker threads for BAM decompression (default: 1)"
     )
     parser.add_argument(
-        "--min-plot-depth", type=float, default=500.0,
+        "--min-plot-depth", type=float, default=0.0,
         help="Draw a bin's noise and VAF on the summary page only when the median depth behind it reaches "
-             "this; strand curves use their own strand's depth. Masked bins are shaded. 0 draws everything "
-             "(default: 500)"
+             "this; strand curves use their own strand's depth, and masked bins are shaded. The default, 0, "
+             "draws every bin -- read the depth panel before trusting a thin one (default: 0)"
     )
     parser.add_argument(
         "--mutations", default=None,
