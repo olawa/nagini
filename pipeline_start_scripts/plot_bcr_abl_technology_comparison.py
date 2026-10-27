@@ -506,8 +506,13 @@ def create_comparison_figure(
     for k in series_keys:
         series_data[k] = []
 
+    # Samples without a barcode are named P1, P2, ... in DNA-number order. The
+    # figure is published, so a DNA number must never reach it.
+    unbarcoded = sorted({d["dna_number"] for d in bar_variants if not d["sample_id"]})
+    pseudonym = {dna: f"P{i}" for i, dna in enumerate(unbarcoded, 1)}
+
     for d in bar_variants:
-        bc_tag = d['sample_id'].replace("BCRABL-", "") if d['sample_id'] else d['dna_number']
+        bc_tag = d['sample_id'].replace("BCRABL-", "") if d['sample_id'] else pseudonym[d['dna_number']]
         lbl = f"{d['variant']}\n({bc_tag})"
         labels.append(lbl)
         if "MiSeq" in series_data:
