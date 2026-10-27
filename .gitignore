@@ -18,3 +18,7 @@ describe_workflow.rst
 describe_jupyter_notebook.txt
 nagini
 .venv
+
+# Analysis and poster scripts that are not part of the pipeline. Kept
+# locally, never pushed: their inputs are patient data.
+/local/

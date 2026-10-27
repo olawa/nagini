@@ -7,13 +7,19 @@ Figurer och text för postern, plus ett körbart exempel så att påståendet
 |---|---|
 | `fig1_architecture_sv.svg` / `_en.svg` | pipelinefiguren: från FASTQ till levererad arbetsbok |
 | `fig2_analysis_sv.svg` / `_en.svg` | analysfiguren: fusionsisoformer, Branford-panelen, cis/trans |
+| `fig3_technology_comparison*.png/.svg` | ONT mot Illumina MiSeq: korrelation, VAF per variant, residualer |
+| `fig4_dilution_series*.png/.svg` | spädningsserien: linjäritet och detektionsgräns |
 | `metod_sv.md` / `methods_en.md` | metodstycke, specifikationstabell, begränsningar |
 | `example/` | minimal konfiguration som kör BCR-ABL-vägen |
 
 Båda språken finns i båda figurerna. De är separata filer och inte lager, så
 en ändring i sak måste göras i båda — det är två filer, inte åtta.
 
-Figurerna är handskriven SVG — vektor, så de skalar till posterstorlek utan
+Figur 3 och 4 är genererade, inte handskrivna. Skripten som ritar dem ligger
+utanför repot, i `local/scripts/` (gitignorerad), eftersom de körs på
+patientdata. Prov utan barkod heter P1, P2, … i figur 3 — inga DNA-nummer.
+
+Figur 1 och 2 är handskriven SVG — vektor, så de skalar till posterstorlek utan
 förlust, och texten går att redigera direkt i Illustrator eller Inkscape.
 De delar palett: blått för BCR/chr22, orange för ABL1/chr9 och de analyser som
 kallar varianter, grönt för fasning och leverans. Paletten är validerad för
