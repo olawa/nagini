@@ -5,15 +5,16 @@ __license__ = "GPL-3"
 
 
 rule read_filter_fastq:
-    """Filter raw FASTQ reads by QV and length before alignment."""
+    """Filter raw FASTQ reads by QV and length before alignment, and select
+    reads from the run's sequencing summary when the unit has one."""
     input:
         fastq1=lambda wildcards: get_fastq_for_read_filter(wildcards),
     output:
         fastq1=temp("reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.fastq.gz"),
     params:
         binary=lambda wildcards: get_nanostream_binary(),
-        min_qv=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)),
-        length_range=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "length_range", config.get("read_filter", {}).get("length_range", "500-3000")),
+        thresholds=lambda wildcards: get_read_filter_thresholds(wildcards),
+        selection=lambda wildcards: get_read_selection_args(wildcards),
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
     log:
         "logs/read_filter/{sample}_{type}_{processing_unit}_{barcode}.fastq.log",
@@ -42,22 +43,27 @@ rule read_filter_fastq:
     shell:
         """
         {params.binary} filter {input.fastq1} -o {output.fastq1} \
-            --qv {params.min_qv} \
-            --len {params.length_range} \
+            {params.thresholds} {params.selection} \
             -t {threads} {params.extra} > {log} 2>&1
         """
 
 
 rule read_filter_unmapped_bam:
-    """Filter raw unmapped BAM reads by QV and length before alignment."""
+    """Filter BAM reads by QV and length before alignment, and select reads
+    from the run's sequencing summary when the unit has one.
+
+    Written --unaligned: primary records only, in sequenced orientation and
+    without aligner tags. That makes an aligned input -- MinKNOW's bam_pass,
+    or an aligned_bam being realigned -- safe for the uBAM aligner, whose
+    `samtools fastq -T "*"` would otherwise carry a stale SA and NM along."""
     input:
         bam=lambda wildcards: get_unit_input(wildcards, "bam"),
     output:
         bam=temp("reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.unmapped.bam"),
     params:
         binary=lambda wildcards: get_nanostream_binary(),
-        min_qv=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)),
-        length_range=lambda wildcards: get_assay_setting(wildcards.sample, "read_filter", "length_range", config.get("read_filter", {}).get("length_range", "500-3000")),
+        thresholds=lambda wildcards: get_read_filter_thresholds(wildcards),
+        selection=lambda wildcards: get_read_selection_args(wildcards),
         extra=lambda wildcards: config.get("read_filter", {}).get("extra", ""),
     log:
         "logs/read_filter/{sample}_{type}_{processing_unit}_{barcode}.bam.log",
@@ -86,8 +92,7 @@ rule read_filter_unmapped_bam:
     shell:
         """
         {params.binary} filter {input.bam} -o {output.bam} \
-            --qv {params.min_qv} \
-            --len {params.length_range} \
+            {params.thresholds} {params.selection} --unaligned \
             -t {threads} {params.extra} > {log} 2>&1
         """
 

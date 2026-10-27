@@ -165,7 +165,7 @@ class SampleRoutingTest(unittest.TestCase):
         self.assertIn("library_type=wgs", warnings[0])
 
 
-    def test_read_filter_warns_when_the_input_is_already_aligned(self):
+    def test_read_filter_says_an_aligned_input_is_aligned_again(self):
         units = units_frame([
             {"sample": "S", "assay": "bcr_abl", "input_type": "aligned_bam"},
         ])
@@ -173,6 +173,7 @@ class SampleRoutingTest(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertIn("aligned_bam", warnings[0])
         self.assertIn("read_filter", warnings[0])
+        self.assertIn("aligned again", warnings[0])
 
     def test_read_filter_is_silent_when_disabled(self):
         units = units_frame([

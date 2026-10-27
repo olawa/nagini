@@ -61,6 +61,7 @@ dorado_container=""
 dorado_binary=""
 dorado_demux_output_format="fastq"
 dorado_demux_both_ends=false
+min_barcode_score=""
 dorado_demux_extra=""
 dorado_aligner="minimap2"
 
@@ -132,7 +133,12 @@ Options:
   --dorado-container IMAGE      Override default Dorado Docker/Singularity image (or 'none' for local binary).
   --dorado-binary PATH          Path to local dorado binary (e.g. ~/tmp/tools/dorado-2.1.1-linux-x64/bin/dorado).
   --demux-output-format FORMAT  Per-barcode raw output: bam, fastq, or both (default: fastq).
-  --demux-both-ends             Require barcode detection at both ends in Dorado demux.
+  --demux-both-ends             Keep only reads with their barcode at both ends (alias --both-ends).
+                                minknow input: dorado demux --barcode-both-ends. A run MinKNOW
+                                already demultiplexed: selected from its sequencing_summary
+                                before alignment, without demultiplexing again.
+  --min-barcode-score SCORE     Minimum front and rear barcode score for --both-ends from a
+                                sequencing summary (default: 60).
   --demux-extra FLAGS           Additional flags passed to dorado demux.
   --dorado-aligner ALIGNER      Alignment after demux: minimap2 or dorado (default: minimap2).
 
@@ -344,6 +350,11 @@ while [[ $# -gt 0 ]]; do
         --demux-both-ends|--both-ends)
             dorado_demux_both_ends=true
             shift
+            ;;
+        --min-barcode-score)
+            [[ $# -ge 2 ]] || die "--min-barcode-score requires a value"
+            min_barcode_score="$2"
+            shift 2
             ;;
         --demux-extra)
             [[ $# -ge 2 ]] || die "$1 requires a value"
@@ -726,6 +737,7 @@ $dry_run && prepare_cmd+=(--allow-missing-containers)
 [[ -n "$barcode_kit" ]] && prepare_cmd+=(--dorado-kit "$barcode_kit")
 [[ "$input_type" == "minknow" ]] && prepare_cmd+=(--dorado-demux-output-format "$dorado_demux_output_format" --dorado-aligner "$dorado_aligner")
 [[ "$dorado_demux_both_ends" == "true" ]] && prepare_cmd+=(--dorado-demux-both-ends)
+[[ -n "$min_barcode_score" ]] && prepare_cmd+=(--min-barcode-score "$min_barcode_score")
 [[ -n "$dorado_demux_extra" ]] && prepare_cmd+=(--dorado-demux-extra "$dorado_demux_extra")
 [[ -n "$dorado_device" ]] && prepare_cmd+=(--dorado-device "$dorado_device")
 

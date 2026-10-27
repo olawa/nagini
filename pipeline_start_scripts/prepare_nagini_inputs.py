@@ -45,7 +45,19 @@ BASE_UNIT_COLUMNS = [
     "basecalling_model",
     "library_type",
     "assay",
+    "sequencing_summary",
+    "bam_aligned",
 ]
+# The sequencing_summary columns nanostream reads. A unit's summary keeps only
+# these, and only its barcode's rows.
+SUMMARY_COLUMNS = (
+    "read_id",
+    "mean_qscore_template",
+    "barcode_arrangement",
+    "barcode_front_score",
+    "barcode_rear_score",
+    "start_time",
+)
 DEFAULT_SAMPLE_REGEX = r"(?P<sample>[^_]+)(?:_.*)?\.(?:fastq|fq)(?:\.gz)?$"
 DEFAULT_BASECALLING_MODEL = "dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
 
@@ -203,7 +215,17 @@ def parse_args() -> argparse.Namespace:
         "--dorado-demux-both-ends",
         action="store_true",
         default=False,
-        help="Require barcode detection at both ends of reads in Dorado demux.",
+        help=(
+            "Keep only reads with their barcode at both ends. minknow input: "
+            "dorado demux --barcode-both-ends. A run MinKNOW already demultiplexed: "
+            "selected from its sequencing_summary, without demultiplexing again."
+        ),
+    )
+    parser.add_argument(
+        "--min-barcode-score",
+        type=float,
+        default=None,
+        help="Minimum front and rear barcode score for both ends from a sequencing summary (default 60).",
     )
     parser.add_argument(
         "--dorado-demux-extra",
@@ -899,11 +921,13 @@ def make_bam_tables_from_barcode_map(
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
+    summaries = UnitSummaries(getattr(args, "analysis_dir", None), args.input_dir)
     for barcode in selected_barcodes:
         assignment = mapping[barcode]
 
         sample_name = assignment["sample"]
         samples_by_name.setdefault(sample_name, sample_row(sample_name, assignment))
+        barcode_summary = summaries.for_barcode(barcode, sorted(bams_by_barcode[barcode]))
         for bam_path, unit_name in name_processing_units(
             sorted(bams_by_barcode[barcode]), barcode
         ):
@@ -921,6 +945,8 @@ def make_bam_tables_from_barcode_map(
                     "barcode": "BC",
                     "barcode_name": barcode,
                     "input_type": args.input_type,
+                    "bam_aligned": bam_aligned_flag(bam_path, args.input_type),
+                    "sequencing_summary": barcode_summary,
                     "fastq1": "UNUSED",
                     "fastq2": "UNUSED",
                     "bam": str(bam_path),
@@ -1278,6 +1304,115 @@ def infer_barcode_map_from_fastq_files(
     return mapping
 
 
+def bam_is_aligned(path: Path) -> bool:
+    """Whether a BAM holds alignments: reference sequences in its header and a
+    first record placed on one. MinKNOW's bam_pass is aligned when alignment
+    was switched on in the run; dorado's uBAM is not. A header with @SQ alone is
+    not enough -- an unaligned BAM imported against a reference has one too."""
+
+    import struct
+
+    try:
+        with gzip.open(path, "rb") as handle:
+            if handle.read(4) != b"BAM\1":
+                return False
+            (l_text,) = struct.unpack("<i", handle.read(4))
+            handle.read(l_text)
+            (n_ref,) = struct.unpack("<i", handle.read(4))
+            if n_ref <= 0:
+                return False
+            for _ in range(n_ref):
+                (l_name,) = struct.unpack("<i", handle.read(4))
+                handle.read(l_name + 4)
+            first = handle.read(8)
+            if len(first) < 8:
+                return False
+            _block_size, ref_id = struct.unpack("<ii", first)
+            return ref_id >= 0
+    except (OSError, EOFError, struct.error):
+        return False
+
+
+def bam_aligned_flag(path: Path, input_type: str) -> str:
+    """"yes" for an unmapped_bam unit whose file holds alignments.
+
+    MinKNOW's bam_pass is aligned when alignment was on in the run, and the
+    launcher's guess for any folder of BAMs is unmapped_bam. Such a unit is
+    still aligned again -- MinKNOW aligned it to its own reference, genomic
+    map-ont, not nagini's -- but nanostream first turns it back into unaligned
+    reads, so its old SA, NM and MD do not follow into the new alignment."""
+
+    return "yes" if input_type == "unmapped_bam" and bam_is_aligned(path) else ""
+
+
+def find_run_summaries(path: Path, stop_at: Path) -> list[Path]:
+    """The sequencing_summary files of the MinKNOW run a file belongs to: the
+    first directory at or above it, up to ``stop_at``, that holds any."""
+
+    stop_at = stop_at.resolve()
+    directory = path.resolve().parent
+    while True:
+        found = sorted(
+            candidate
+            for pattern in ("sequencing_summary*.txt", "sequencing_summary*.txt.gz")
+            for candidate in directory.glob(pattern)
+        )
+        if found:
+            return found
+        if directory == stop_at or directory.parent == directory or stop_at not in directory.parents:
+            return []
+        directory = directory.parent
+
+
+class UnitSummaries:
+    """Per-barcode extracts of the runs' sequencing summaries.
+
+    nanostream selects reads from a summary -- the only place MinKNOW records
+    whether a read has its barcode at both ends -- and judges their quality by
+    its mean_qscore_template. Each barcode gets one small file with its own
+    rows from every run its reads came from; each summary is read once."""
+
+    def __init__(self, analysis_dir: Path | None, input_dir: Path):
+        # No analysis directory, nowhere to write: tables are built without
+        # summaries (the launcher always passes one).
+        self.out_dir = Path(analysis_dir).resolve() / "input_summary" if analysis_dir else None
+        self.input_dir = Path(input_dir)
+        self._rows: dict[Path, dict[str, list[dict[str, str]]]] = {}
+
+    def _split(self, summary: Path) -> dict[str, list[dict[str, str]]]:
+        if summary not in self._rows:
+            by_barcode: dict[str, list[dict[str, str]]] = {}
+            opener = gzip.open if summary.suffix == ".gz" else open
+            with opener(summary, "rt", newline="") as handle:
+                for row in csv.DictReader(handle, delimiter="\t"):
+                    barcode = normalize_barcode(row.get("barcode_arrangement", ""))
+                    if barcode:
+                        by_barcode.setdefault(barcode, []).append(
+                            {column: row.get(column, "") for column in SUMMARY_COLUMNS}
+                        )
+            self._rows[summary] = by_barcode
+        return self._rows[summary]
+
+    def for_barcode(self, barcode: str, source_files: list[Path]) -> str:
+        """Path of ``barcode``'s summary extract, or "" when no run summary is
+        found for its files."""
+
+        summaries = sorted(
+            {summary for path in source_files for summary in find_run_summaries(path, self.input_dir)}
+        )
+        if not summaries or self.out_dir is None:
+            return ""
+        wanted = normalize_barcode(barcode)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        out = self.out_dir / f"{wanted}.sequencing_summary.tsv"
+        with out.open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t")
+            writer.writeheader()
+            for summary in summaries:
+                writer.writerows(self._split(summary).get(wanted, []))
+        return str(out)
+
+
 def make_barcode_fastq_tables(
     args: argparse.Namespace,
     mapping: dict[str, dict[str, str]],
@@ -1320,6 +1455,7 @@ def make_barcode_fastq_tables(
     run_id = args.run_id or args.sequence_id or args.input_dir.name
     samples_by_name: dict[str, dict[str, str]] = {}
     units: list[dict[str, str]] = []
+    summaries = UnitSummaries(getattr(args, "analysis_dir", None), args.input_dir)
     for barcode in selected_barcodes:
         assignment = mapping[barcode]
 
@@ -1343,6 +1479,7 @@ def make_barcode_fastq_tables(
                 "barcode": "BC",
                 "barcode_name": barcode,
                 "input_type": "fastq",
+                "sequencing_summary": summaries.for_barcode(barcode, source_files),
                 "fastq1": str(merged_fastq),
                 "fastq2": "UNUSED",
                 "bam": "UNUSED",
@@ -1575,6 +1712,7 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
             "processing_unit": f"PU{counters[sample]:03d}",
             "barcode": args.barcode,
             "input_type": args.input_type,
+            "bam_aligned": bam_aligned_flag(path, args.input_type),
             "fastq1": "UNUSED",
             "fastq2": "UNUSED",
             "bam": str(path),
@@ -2042,6 +2180,13 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
         read_filter_overrides["length_range"] = str(args.filter_len)
     if getattr(args, "filter_binary", ""):
         read_filter_overrides["binary"] = str(args.filter_binary)
+    # Both ends for minknow input is dorado's --barcode-both-ends, set above;
+    # for a run MinKNOW already demultiplexed it is a read selection from the
+    # run's sequencing summary, applied by nanostream before alignment.
+    if getattr(args, "dorado_demux_both_ends", False) and getattr(args, "input_type", "") != "minknow":
+        read_filter_overrides["both_ends"] = True
+    if getattr(args, "min_barcode_score", None) is not None:
+        read_filter_overrides["min_barcode_score"] = float(args.min_barcode_score)
     if read_filter_overrides:
         config.setdefault("read_filter", {}).update(read_filter_overrides)
 
@@ -2050,6 +2195,28 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     with runtime_config.open("w") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
     return runtime_config
+
+
+def validate_both_ends(args: argparse.Namespace, units: list[dict[str, str]]) -> None:
+    """Both ends from a sequencing summary needs one for every unit, and a
+    barcode to select by; refuse here rather than keep every read."""
+
+    if not getattr(args, "dorado_demux_both_ends", False) or getattr(args, "input_type", "") == "minknow":
+        return
+    lacking = sorted(
+        {
+            f"{row.get('sample')} ({row.get('barcode_name') or 'no barcode'})"
+            for row in units
+            if not str(row.get("sequencing_summary", "") or "").strip()
+            or not str(row.get("barcode_name", "") or "").strip()
+        }
+    )
+    if lacking:
+        raise SystemExit(
+            "--both-ends on a demultiplexed run selects reads from its sequencing_summary, "
+            "but none was found for: " + ", ".join(lacking) + ". It is looked for in the "
+            "MinKNOW run folder above each barcode directory."
+        )
 
 
 def validate_assays(args: argparse.Namespace, units: list[dict[str, str]]) -> None:
@@ -2216,6 +2383,13 @@ def main() -> None:
     validate_tables(samples, units, allow_deferred_inputs=args.input_type == "minknow")
     validate_assays(args, units)
     validate_barcode_kit(args, units)
+    validate_both_ends(args, units)
+    aligned_ubams = [row for row in units if row.get("bam_aligned") == "yes"]
+    if aligned_ubams:
+        print(
+            f"NOTE: {len(aligned_ubams)} unmapped_bam unit(s) hold alignments (MinKNOW bam_pass?). "
+            "nanostream turns them back into unaligned reads before they are aligned again."
+        )
     warn_about_model_download(args)
 
     # The union, not the first row's keys: an optional column such as

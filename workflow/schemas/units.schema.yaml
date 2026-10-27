@@ -19,6 +19,16 @@ properties:
   barcode_name:
     type: string
     pattern: "^(barcode[0-9]+)?$"
+  bam_aligned:
+    type: string
+    description: >-
+      "yes" for an unmapped_bam unit whose file holds alignments (MinKNOW's
+      bam_pass); nanostream unaligns it before it is aligned again.
+  sequencing_summary:
+    type: string
+    description: >-
+      This barcode's rows of the MinKNOW run's sequencing_summary, written by
+      the launcher. nanostream selects and judges reads by it.
   input_type:
     type: string
     enum: [fastq, unmapped_bam, aligned_bam, dorado_bam]

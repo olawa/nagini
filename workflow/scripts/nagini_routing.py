@@ -362,19 +362,18 @@ def routing_warnings(units, samples, assays: dict) -> list:
     return warnings
 
 
-# Input types that reach the aligner already aligned, so stage_aligned_bam
-# takes the unit file verbatim and no read_filter rule ever sees it.
+# Input types that arrive already aligned. Without read filtering they are
+# staged verbatim; with it they are filtered and aligned again.
 PREALIGNED_INPUT_TYPES = ("aligned_bam",)
 
 
 def read_filter_warnings(units, samples, read_filter_enabled: bool) -> list:
-    """Warn where read_filter is configured but cannot apply.
+    """Say where read_filter changes what happens to an aligned input.
 
-    stage_aligned_bam consumes the unit BAM directly, so an already-aligned
-    input bypasses both read_filter rules. Without this the settings in
-    config.yaml look like they are in force while the reads go through
-    untouched -- and whatever filtering they did get happened upstream, under
-    somebody else's thresholds.
+    An aligned BAM cannot be filtered read by read and keep its alignment, so
+    with read_filter on (or both-ends selection) nanostream turns it back into
+    unaligned reads and the pipeline aligns them again; the BAM's own alignment
+    is not used. That is a different result from staging it, so it is logged.
     """
 
     if not read_filter_enabled:
@@ -389,9 +388,9 @@ def read_filter_warnings(units, samples, read_filter_enabled: bool) -> list:
         ]
         if prealigned:
             warnings.append(
-                f"Sample {sample}: read_filter is enabled but input_type="
-                f"{prealigned[0]} is staged as-is, so no filtering is applied "
-                f"here. Whatever produced the BAM decided the thresholds."
+                f"Sample {sample}: read_filter is on, so its input_type="
+                f"{prealigned[0]} reads are filtered and aligned again; the "
+                f"BAM's own alignment is not used."
             )
     return warnings
 

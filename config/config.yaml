@@ -167,20 +167,25 @@ read_filter:
   # nanoMonitor workspace). There is no Python fallback: if the binary cannot
   # be resolved the run stops rather than silently filtering differently.
   #
-  # min_qv is compared against dorado's own mean read quality, the qs tag, on
-  # both BAM and FASTQ input: MinKNOW writes it into the FASTQ header in
-  # SAM-tag form (qs:f:18.9348), so filtering here agrees exactly with dorado
-  # --min-qscore and with the sequencing report. Reads whose header lacks the
-  # tag fall back to a value recomputed from the quality string as
-  # -10*log10(mean(10^(-q/10))), which is the same definition, not the
-  # arithmetic mean of the Phred scores.
+  # min_qv is compared against the basecaller's own mean read quality on every
+  # path: the run's sequencing_summary (mean_qscore_template) when the unit
+  # has one -- MinKNOW's FASTQ headers carry no qs -- else the qs tag, else a
+  # value recomputed as dorado computes qs (from base 60). Recomputing over the
+  # whole read instead passed 1 250 of the 4 084 reads MinKNOW puts at Q20+.
   #
-  # This needs a recent nanostream. Older builds found no tag on either input
-  # -- the BAM path looked for uppercase QS while dorado writes qs, and the
-  # FASTQ parser only understood guppy-era key=value headers -- and silently
-  # recomputed instead. That shifts min_qv without anything in the logs saying
-  # so, so pin `binary:` for any run whose filtering has to be reproducible.
+  # BAM input -- uBAM, dorado's demux, or an aligned BAM being realigned -- is
+  # written back unaligned (nanostream --unaligned): primary records, original
+  # orientation, no aligner tags, so no stale SA/NM reaches the new alignment.
+  #
+  # Needs nanostream with `filter --sequencing-summary --both-ends --unaligned`
+  # (nanoMonitor feat/filter-sequencing-summary or later); the workflow checks.
   enabled: false
+  # Keep only reads with their barcode at both ends, selected from the run's
+  # sequencing_summary (start_nagini.sh --both-ends on a MinKNOW-demultiplexed
+  # run). Independent of `enabled`: with filtering off it selects reads only.
+  both_ends: false
+  # Minimum front and rear score of the assigned barcode for both_ends.
+  min_barcode_score: 60
   # Empty: look for nanostream (then nanofilter) on PATH, then
   # workflow/bin/<os>-<arch>/nanostream. Set to an absolute path to pin it.
   binary: ""
@@ -253,9 +258,10 @@ finalize_dorado_alignment:
   container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 samtools_fastq:
-  # -T carries MM/ML tags into FASTQ comments. minimap2 -y copies those
-  # comments back into SAM auxiliary fields; -Y controls supplementary clips.
-  extra: "-n -T MM,ML"
+  # -T carries tags into FASTQ comments. minimap2 -y copies those comments
+  # back into SAM auxiliary fields; -Y controls supplementary clips. qs is the
+  # basecaller's read quality: without it the read filter would recompute it.
+  extra: "-n -T MM,ML,qs"
 
 # Write one FASTQ per sample to reads/nagini_fastq/, merged across flowcells,
 # for archiving or handing the reads to another tool. Off by default: for a

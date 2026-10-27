@@ -10,7 +10,8 @@ the three input paths explicit:
 
 * ``fastq`` -> minimap2 alignment
 * ``unmapped_bam`` -> samtools fastq, then minimap2 alignment
-* ``aligned_bam`` -> copied and indexed, never realigned
+* ``aligned_bam`` -> copied and indexed; filtered and aligned again when
+  read_filter is on or reads are selected for both barcode ends
 * ``dorado_bam`` -> produced by the pipeline's Dorado basecalling/demux stage
 
 Hydra modules are imported after this file, so the selected reference is
@@ -24,6 +25,7 @@ import platform
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 
@@ -401,6 +403,9 @@ def get_unit_alignment_path(row):
         "aligned_bam": "from_aligned",
         "dorado_bam": "from_dorado",
     }.get(str(row["input_type"]).strip().lower())
+    if unit_is_realigned(row):
+        # Filtered back into an unaligned BAM, then aligned like any uBAM.
+        suffix = "from_ubam"
     if suffix is None:
         raise WorkflowError(
             f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam, aligned_bam or dorado_bam."
@@ -502,7 +507,7 @@ def get_unit_dorado_bam(wildcards):
     barcode = str(row.get("barcode_name", "")).strip()
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
-    if is_read_filtering_enabled(wildcards.sample):
+    if read_filter_step_enabled(wildcards.sample):
         return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam".strip()
     return str(row.get("bam", f"basecalling/dorado_demux/{barcode}.bam"))
 
@@ -514,7 +519,7 @@ def get_unit_dorado_fastq(wildcards):
     barcode = str(row.get("barcode_name", "")).strip()
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
-    if is_read_filtering_enabled(wildcards.sample):
+    if read_filter_step_enabled(wildcards.sample):
         return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
     return f"basecalling/dorado_fastq/{barcode}.fastq.gz"
 
@@ -1000,7 +1005,8 @@ for _warning in _routing_call(
     nagini_routing.read_filter_warnings,
     units,
     list(get_samples(samples)),
-    bool(config.get("read_filter", {}).get("enabled", False)),
+    bool(config.get("read_filter", {}).get("enabled", False))
+    or bool(config.get("read_filter", {}).get("both_ends", False)),
 ):
     sys.stderr.write(f"WARNING: {_warning}\n")
 
@@ -1589,7 +1595,35 @@ def compile_output_file_list(wildcards):
 # --- read filtering (read_filter.smk) ---
 
 
+_NANOSTREAM_REQUIRED_OPTIONS = ("--sequencing-summary", "--both-ends", "--unaligned")
+_nanostream_checked = {}
+
+
 def get_nanostream_binary():
+    """The nanostream executable, checked once to have the filter options the
+    read_filter rules pass. An older build would fail every filter job on an
+    unknown argument; this says so before the DAG runs."""
+
+    binary = _resolve_nanostream_binary()
+    if binary not in _nanostream_checked:
+        try:
+            help_text = subprocess.run(
+                [binary, "filter", "--help"], capture_output=True, text=True, timeout=60
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise WorkflowError(f"Could not run {binary} filter --help: {error}")
+        missing = [option for option in _NANOSTREAM_REQUIRED_OPTIONS if option not in help_text]
+        if missing:
+            raise WorkflowError(
+                f"{binary} is too old for nagini's read filter: its `filter` has no "
+                f"{', '.join(missing)}. Rebuild nanostream from nanoMonitor "
+                "(cargo build --release -p nanostream) or point read_filter.binary at a newer one."
+            )
+        _nanostream_checked[binary] = True
+    return binary
+
+
+def _resolve_nanostream_binary():
     """Resolve the nanostream executable, or fail with what to do about it.
 
     There is deliberately no Python fallback. A fallback that reimplements the
@@ -1651,16 +1685,89 @@ def is_read_filtering_enabled(sample):
     return bool(config.get("read_filter", {}).get("enabled", False))
 
 
+def read_filter_both_ends():
+    """Whether reads must have their barcode at both ends, selected from the
+    run's sequencing summary (a run MinKNOW already demultiplexed)."""
+    return bool(config.get("read_filter", {}).get("both_ends", False))
+
+
+def read_filter_step_enabled(sample):
+    """Whether this sample's reads pass through nanostream before alignment:
+    to filter them on quality and length, to keep only reads with both barcode
+    ends, or both."""
+    return is_read_filtering_enabled(sample) or read_filter_both_ends()
+
+
+def get_read_filter_thresholds(wildcards):
+    """--qv/--len for nanostream; none to speak of when the step runs only to
+    select reads with both barcode ends."""
+    if not is_read_filtering_enabled(wildcards.sample):
+        return "--qv 0"
+    min_qv = get_assay_setting(
+        wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)
+    )
+    length_range = get_assay_setting(
+        wildcards.sample,
+        "read_filter",
+        "length_range",
+        config.get("read_filter", {}).get("length_range", "500-3000"),
+    )
+    return f"--qv {min_qv} --len {length_range}"
+
+
+def get_read_selection_args(wildcards):
+    """nanostream's read selection for a unit: its sequencing summary and
+    barcode, and --both-ends when asked. The summary also gives each read the
+    basecaller's own quality, which MinKNOW's FASTQ headers lack."""
+    row = get_unit(wildcards)
+    if get_unit_input_type(wildcards) == "dorado_bam":
+        # Dorado demultiplexed these reads itself, both ends included if asked.
+        return ""
+    summary = str(row.get("sequencing_summary", "") or "").strip()
+    barcode = str(row.get("barcode_name", "") or "").strip()
+    if read_filter_both_ends() and not (summary and barcode):
+        raise WorkflowError(
+            f"read_filter.both_ends needs a sequencing_summary and barcode_name for unit "
+            f"{wildcards.sample}/{wildcards.processing_unit} in units.tsv; the launcher "
+            "writes them for a MinKNOW-demultiplexed run."
+        )
+    if not summary:
+        return ""
+    args = [f"--sequencing-summary {shlex.quote(summary)}"]
+    if barcode:
+        args.append(f"--barcode {barcode}")
+    if read_filter_both_ends():
+        score = config.get("read_filter", {}).get("min_barcode_score", 60)
+        args.append(f"--both-ends --min-barcode-score {score}")
+    return " ".join(args)
+
+
+def unit_bam_is_aligned(row):
+    """An unmapped_bam unit whose file is in fact aligned (MinKNOW's bam_pass).
+    It is aligned again like any uBAM, but always unaligned by nanostream first."""
+    return str(row.get("bam_aligned", "") or "").strip().lower() == "yes"
+
+
+def unit_is_realigned(row):
+    """An aligned_bam unit is filtered and aligned again when reads are to be
+    filtered or selected: filtering has to happen before alignment, and the
+    BAM's own alignment cannot be filtered read by read."""
+    return str(row["input_type"]).strip().lower() == "aligned_bam" and read_filter_step_enabled(
+        str(row["sample"]).strip()
+    )
+
+
 def get_fastq_for_alignment(wildcards):
     """Return filtered FASTQ if filtering is enabled, else raw unit FASTQ."""
-    if is_read_filtering_enabled(wildcards.sample):
+    if read_filter_step_enabled(wildcards.sample):
         return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
     return get_unit_input(wildcards, "fastq1")
 
 
 def get_unmapped_bam_for_alignment(wildcards):
-    """Return filtered unmapped BAM if filtering is enabled, else raw BAM."""
-    if is_read_filtering_enabled(wildcards.sample):
+    """Return the nanostream output when reads are filtered or selected, or the
+    BAM holds alignments to strip; else the raw uBAM."""
+    if read_filter_step_enabled(wildcards.sample) or unit_bam_is_aligned(get_unit(wildcards)):
         return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam".strip()
     return get_unit_input(wildcards, "bam")
 

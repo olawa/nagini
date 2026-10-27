@@ -15,10 +15,41 @@ Författare: Ola Wallerman — `ola.wallerman@scilifelab.uu.se` — GitHub `olaw
 | --- | --- | --- |
 | `fastq` | minimap2 → sorterad BAM → index | Ja |
 | `unmapped_bam` | samtools fastq → minimap2 → sorterad BAM → index | Ja |
-| `aligned_bam` | samtools sort → index | Nej |
+| `aligned_bam` | samtools sort → index | Nej, utom med läsfilter |
 
-En alignad BAM skickas alltså aldrig till minimap2. Sortering/indexering är
-bara normalisering av filen för downstream-regler; den ändrar inte mappingen.
+Utan läsfilter skickas en alignad BAM aldrig till minimap2. Sortering/indexering
+är bara normalisering av filen för downstream-regler; den ändrar inte mappingen.
+Med läsfilter (eller both ends, nedan) filtreras och alignas den om: en alignad
+BAM kan inte filtreras läsning för läsning och behålla sin alignment.
+
+Startscriptet känner igen en alignad BAM given som `unmapped_bam` (MinKNOW:s
+`bam_pass` när alignment var påslagen i körningen) och markerar uniten
+`bam_aligned: yes`. Den alignas om som vanligt — MinKNOW alignade mot sin egen
+referens, genomiskt — men nanostream gör den först olinjerad, så att MinKNOW:s
+gamla SA/NM/MD inte följer med in i den nya alignmenten.
+
+### Läsfilter och barcode i båda ändar
+
+Läsfiltret (`read_filter`, nanostream) körs före alignment på alla vägar som
+alignar: FASTQ, uBAM, Dorados demux och en `aligned_bam` som alignas om. BAM
+skrivs tillbaka olinjerad (`--unaligned`: primärposter, sekvenserad orientering,
+inga alignertaggar). Kvaliteten är basecallerns egen överallt: körningens
+`sequencing_summary` när uniten har en, annars `qs`-taggen, annars omräknad som
+dorado räknar `qs` (från bas 60). MinKNOW:s FASTQ-huvuden saknar `qs`; räknat
+över hela läsningen blev Q20 där i praktiken Q24.
+
+`--both-ends` håller bara läsningar med barcoden i båda ändar:
+
+| indata | hur |
+| --- | --- |
+| `minknow` (POD5) | `dorado demux --barcode-both-ends` |
+| en körning MinKNOW redan demultiplexat (`fastq_pass`/`bam_pass`) | urval ur körningens `sequencing_summary`: den tilldelade barcodens poäng fram och bak ≥ `--min-barcode-score` (60) — ingen ny demux |
+
+Startscriptet hittar `sequencing_summary` i MinKNOW-körmappen ovanför varje
+barcodekatalog och skriver ett utdrag per barcode till
+`input_summary/<barcode>.sequencing_summary.tsv` (kolumnen `sequencing_summary`
+i `units.tsv`). Both ends kräver inte att läsfiltret är på; utan det väljs bara
+läsningar, utan kvalitets- eller längdgräns.
 
 ## Hydra-kommandon som användes
 

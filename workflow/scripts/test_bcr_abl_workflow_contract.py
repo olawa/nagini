@@ -74,5 +74,87 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("snv_indels/rindels/{sample}_{type}.rindels.vcf.gz", output_files)
 
 
+
+class ReadFilterContractTest(unittest.TestCase):
+    """The nanostream arguments each unit gets, from common.smk itself."""
+
+    def scope(self, read_filter, rows):
+        import shlex
+        import shutil
+        import subprocess
+        import platform
+
+        scope = {
+            "os": os, "shlex": shlex, "shutil": shutil, "subprocess": subprocess,
+            "platform": platform, "WorkflowError": ValueError,
+            "workflow": SimpleNamespace(basedir="workflow"),
+            "config": {"read_filter": read_filter},
+            "get_assay_setting": lambda sample, section, key, default: default,
+        }
+        exec(compile(common_section("read filtering"), "common.smk", "exec"), scope)
+        scope["get_unit"] = lambda wc: rows[wc.processing_unit]
+        scope["get_unit_input_type"] = lambda wc: rows[wc.processing_unit]["input_type"]
+        return scope
+
+    @staticmethod
+    def wc(unit):
+        return SimpleNamespace(sample="S", type="N", processing_unit=unit, barcode="BC")
+
+    ROWS = {
+        "fq": {"sample": "S", "input_type": "fastq", "barcode_name": "barcode13",
+               "sequencing_summary": "/run/input_summary/barcode13.sequencing_summary.tsv"},
+        "bare": {"sample": "S", "input_type": "fastq", "barcode_name": "", "sequencing_summary": ""},
+        "dorado": {"sample": "S", "input_type": "dorado_bam", "barcode_name": "barcode13",
+                   "sequencing_summary": ""},
+        "aligned": {"sample": "S", "input_type": "aligned_bam", "barcode_name": "barcode13",
+                    "sequencing_summary": ""},
+    }
+
+    def test_both_ends_alone_selects_without_thresholds(self):
+        s = self.scope({"enabled": False, "both_ends": True, "min_barcode_score": 70}, self.ROWS)
+        self.assertEqual(s["get_read_filter_thresholds"](self.wc("fq")), "--qv 0")
+        self.assertEqual(
+            s["get_read_selection_args"](self.wc("fq")),
+            "--sequencing-summary /run/input_summary/barcode13.sequencing_summary.tsv "
+            "--barcode barcode13 --both-ends --min-barcode-score 70",
+        )
+        self.assertTrue(s["read_filter_step_enabled"]("S"))
+        # Dorado demultiplexed its own reads, both ends included.
+        self.assertEqual(s["get_read_selection_args"](self.wc("dorado")), "")
+        with self.assertRaisesRegex(ValueError, "sequencing_summary"):
+            s["get_read_selection_args"](self.wc("bare"))
+
+    def test_filtering_uses_the_summary_for_quality_when_there_is_one(self):
+        s = self.scope({"enabled": True, "min_qv": 14, "length_range": "800-2500"}, self.ROWS)
+        self.assertEqual(s["get_read_filter_thresholds"](self.wc("fq")), "--qv 14 --len 800-2500")
+        self.assertEqual(
+            s["get_read_selection_args"](self.wc("fq")),
+            "--sequencing-summary /run/input_summary/barcode13.sequencing_summary.tsv --barcode barcode13",
+        )
+        self.assertEqual(s["get_read_selection_args"](self.wc("bare")), "")
+
+    def test_an_aligned_bam_is_realigned_only_when_reads_are_filtered_or_selected(self):
+        aligned = self.ROWS["aligned"]
+        self.assertFalse(self.scope({"enabled": False}, self.ROWS)["unit_is_realigned"](aligned))
+        self.assertTrue(self.scope({"enabled": True}, self.ROWS)["unit_is_realigned"](aligned))
+        self.assertTrue(self.scope({"enabled": False, "both_ends": True}, self.ROWS)["unit_is_realigned"](aligned))
+        self.assertFalse(self.scope({"enabled": True}, self.ROWS)["unit_is_realigned"](self.ROWS["fq"]))
+
+    def test_an_aligned_bam_handed_in_as_ubam_is_always_unaligned_first(self):
+        rows = dict(self.ROWS, ubam_aligned={"sample": "S", "input_type": "unmapped_bam",
+                                             "bam_aligned": "yes", "barcode_name": "", "sequencing_summary": ""})
+        s = self.scope({"enabled": False}, rows)
+        s["get_unit_input"] = lambda wc, column: "raw.bam"
+        self.assertTrue(s["unit_bam_is_aligned"](rows["ubam_aligned"]))
+        self.assertIn("reads/filtered/", s["get_unmapped_bam_for_alignment"](self.wc("ubam_aligned")))
+        self.assertEqual(s["get_read_filter_thresholds"](self.wc("ubam_aligned")), "--qv 0")
+
+    def test_the_bam_filter_always_writes_unaligned_reads(self):
+        rules = (ROOT / "workflow/rules/read_filter.smk").read_text()
+        bam_rule = rules[rules.index("rule read_filter_unmapped_bam:"):]
+        self.assertIn("--unaligned", bam_rule)
+        self.assertIn("{params.selection}", bam_rule)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -716,6 +716,14 @@ properties:
       enabled:
         type: boolean
         description: 'enabled (default: False)'
+      both_ends:
+        type: boolean
+        description: >-
+          Keep only reads with their barcode at both ends, selected from the
+          unit's sequencing summary (default: False).
+      min_barcode_score:
+        type: number
+        description: Minimum front and rear barcode score for both_ends (default 60).
       extra:
         type: string
         description: extra command-line arguments

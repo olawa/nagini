@@ -40,6 +40,22 @@ class FilterTest(unittest.TestCase):
         self.assertAlmostEqual(rq.mean_read_quality([30] * 5 + [10] * 5), -10 * math.log10((5 * 0.001 + 5 * 0.1) / 10))
         self.assertIsNone(rq.mean_read_quality([]))
 
+    def test_without_qs_the_value_is_recomputed_as_dorado_computes_it(self):
+        # Q5 over the first 60 bases, Q20 after: dorado's qs is 20.
+        sequenced = [5] * 60 + [20] * 300
+        self.assertAlmostEqual(rq.basecaller_mean_read_quality(sequenced), 20.0)
+        self.assertLess(rq.mean_read_quality(sequenced), 19.0)
+        flt = rq.ReadQualityFilter(19)
+        self.assertTrue(flt.passes(fake_aln("fwd", quals=sequenced)))
+        # A reverse-strand alignment stores the qualities reversed.
+        reverse = fake_aln("rev", quals=sequenced[::-1])
+        reverse.is_reverse = True
+        self.assertTrue(flt.passes(reverse))
+        # A split read is averaged over every base.
+        split = fake_aln("split", quals=sequenced)
+        split.has_tag = lambda tag: tag == "pi"
+        self.assertFalse(flt.passes(split))
+
     def test_off_by_default_and_when_zero(self):
         flt = rq.ReadQualityFilter()
         self.assertFalse(flt.enabled)

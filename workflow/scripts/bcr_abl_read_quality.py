@@ -8,7 +8,11 @@ again.  It can only be stricter than the pre-alignment filter, because reads
 below that one are already gone.
 
 The tag is used when the BAM has it.  Otherwise the value is recomputed from the
-base qualities, which is the same number for a primary alignment.  A
+base qualities the way dorado computes ``qs``: from base 60 of the read as
+sequenced (the adapter and barcode region is left out), or over every base for
+a read split from another (``pi`` tag).  That reproduces ``qs`` for 99 % of
+reads and matches nanostream's own fallback; averaging every base instead read
+MinKNOW's Q20 reads as Q16.  A
 supplementary alignment that is hard-clipped carries only part of the read's
 qualities, so its value cannot be recomputed; such an alignment is kept and
 counted as unknown rather than judged on a fragment, unless another alignment of
@@ -24,6 +28,8 @@ import math
 from typing import Dict, Optional, Sequence, Set, Tuple
 
 QS_TAG = "qs"
+# Dorado leaves the first bases of a read out of its qs.
+BASECALLER_QSCORE_START = 60
 
 
 def mean_read_quality(qualities: Sequence[int]) -> Optional[float]:
@@ -33,6 +39,16 @@ def mean_read_quality(qualities: Sequence[int]) -> Optional[float]:
         return None
     mean_error = sum(10.0 ** (-q / 10.0) for q in qualities) / len(qualities)
     return -10.0 * math.log10(mean_error) if mean_error > 0 else float(max(qualities))
+
+
+def basecaller_mean_read_quality(qualities: Sequence[int], split_read: bool = False) -> Optional[float]:
+    """The read's qs as dorado computes it, from qualities in sequenced order."""
+
+    if qualities is None or len(qualities) == 0:
+        return None
+    if split_read or len(qualities) <= BASECALLER_QSCORE_START:
+        return mean_read_quality(qualities)
+    return mean_read_quality(list(qualities)[BASECALLER_QSCORE_START:])
 
 
 class ReadQualityFilter:
@@ -65,7 +81,11 @@ class ReadQualityFilter:
             return self._computed[key]
         qualities = aln.query_qualities
         complete = qualities is not None and len(qualities) == aln.infer_read_length()
-        result = mean_read_quality(qualities) if complete else None
+        result = None
+        if complete:
+            # An alignment stores a reverse-strand read's qualities reversed.
+            ordered = list(qualities)[::-1] if getattr(aln, "is_reverse", False) else list(qualities)
+            result = basecaller_mean_read_quality(ordered, split_read=aln.has_tag("pi"))
         self._computed[key] = result
         return result
 

@@ -1456,5 +1456,104 @@ class ReferenceRootTest(unittest.TestCase):
         self.assertEqual(hs1["fasta"]["type"], "optional")
 
 
+
+def write_bam_header(path, n_ref=0, first_ref_id=None):
+    """The first bytes of a BAM: enough for bam_is_aligned, which reads only
+    the header and the first record's reference id."""
+    import struct
+
+    body = b"BAM\x01" + struct.pack("<i", 0)
+    body += struct.pack("<i", n_ref)
+    for index in range(n_ref):
+        name = f"chr{index + 1}\x00".encode()
+        body += struct.pack("<i", len(name)) + name + struct.pack("<i", 1000)
+    if first_ref_id is not None:
+        body += struct.pack("<ii", 40, first_ref_id)
+    with gzip.open(path, "wb") as handle:
+        handle.write(body)
+
+
+SUMMARY_HEADER = (
+    "filename_fastq\tread_id\tsequence_length_template\tmean_qscore_template\t"
+    "barcode_arrangement\tbarcode_front_score\tbarcode_rear_score\tstart_time\n"
+)
+
+
+class SummarySelectionTest(unittest.TestCase):
+    def test_an_aligned_bam_is_recognised_by_a_placed_first_record(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            write_bam_header(tmp / "aligned.bam", n_ref=2, first_ref_id=1)
+            write_bam_header(tmp / "ubam.bam", n_ref=0, first_ref_id=-1)
+            # An unaligned BAM imported against a reference has @SQ lines too.
+            write_bam_header(tmp / "imported.bam", n_ref=2, first_ref_id=-1)
+            self.assertTrue(PREPARE.bam_is_aligned(tmp / "aligned.bam"))
+            self.assertFalse(PREPARE.bam_is_aligned(tmp / "ubam.bam"))
+            self.assertFalse(PREPARE.bam_is_aligned(tmp / "imported.bam"))
+            # Still realigned, but flagged so nanostream unaligns it first.
+            self.assertEqual(PREPARE.bam_aligned_flag(tmp / "aligned.bam", "unmapped_bam"), "yes")
+            self.assertEqual(PREPARE.bam_aligned_flag(tmp / "ubam.bam", "unmapped_bam"), "")
+            # An explicit aligned_bam is the user's choice to keep the alignment.
+            self.assertEqual(PREPARE.bam_aligned_flag(tmp / "aligned.bam", "aligned_bam"), "")
+
+    def test_each_barcode_gets_its_rows_from_every_run_its_reads_came_from(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inbox = Path(tmpdir) / "inbox"
+            files = []
+            for run, reads in (("run1", ("a", "b")), ("run2", ("c",))):
+                run_dir = inbox / run / "20251204_FBE0001"
+                fastq = run_dir / "fastq_pass" / "barcode13" / "chunk.fastq.gz"
+                fastq.parent.mkdir(parents=True)
+                fastq.write_bytes(b"")
+                files.append(fastq)
+                rows = [f"x\t{r}\t900\t18.5\tbarcode13\t97\t88\tT\n" for r in reads]
+                rows.append(f"x\t{run}_other\t900\t19\tbarcode15\t99\t99\tT\n")
+                (run_dir / f"sequencing_summary_{run}.txt").write_text(SUMMARY_HEADER + "".join(rows))
+            summaries = PREPARE.UnitSummaries(Path(tmpdir) / "analysis", inbox)
+            out = Path(summaries.for_barcode("barcode13", files))
+            lines = out.read_text().splitlines()
+            self.assertEqual(lines[0].split("\t"), list(PREPARE.SUMMARY_COLUMNS))
+            self.assertEqual(sorted(line.split("\t")[0] for line in lines[1:]), ["a", "b", "c"])
+            # No summary above the files: nothing to select by.
+            loose = Path(tmpdir) / "loose" / "barcode01" / "x.fastq.gz"
+            loose.parent.mkdir(parents=True)
+            self.assertEqual(
+                PREPARE.UnitSummaries(Path(tmpdir) / "analysis", loose.parents[1]).for_barcode("barcode01", [loose]),
+                "",
+            )
+
+    def test_both_ends_on_a_demultiplexed_run_needs_a_summary_for_every_unit(self):
+        args = type("Args", (), {"dorado_demux_both_ends": True, "input_type": "fastq"})()
+        units = [
+            {"sample": "S1", "barcode_name": "barcode01", "sequencing_summary": "/x/barcode01.tsv"},
+            {"sample": "S2", "barcode_name": "barcode02", "sequencing_summary": ""},
+        ]
+        with self.assertRaises(SystemExit) as raised:
+            PREPARE.validate_both_ends(args, units)
+        self.assertIn("S2 (barcode02)", str(raised.exception))
+        PREPARE.validate_both_ends(args, units[:1])
+        # minknow input does both ends in dorado demux instead.
+        args.input_type = "minknow"
+        PREPARE.validate_both_ends(args, units)
+
+    def test_both_ends_goes_to_dorado_for_minknow_and_to_the_read_filter_otherwise(self):
+        pipeline_root = Path(__file__).parents[1]
+        for input_type, in_filter in (("fastq", True), ("unmapped_bam", True)):
+            args = type("Args", (), {})()
+            args.base_config = pipeline_root / "config/config.yaml"
+            args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+            args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+            args.library_root = None
+            args.pipeline_root = pipeline_root
+            args.input_type = input_type
+            args.dorado_demux_both_ends = True
+            args.min_barcode_score = 70.0
+            with tempfile.TemporaryDirectory() as tmpdir, contextlib.redirect_stderr(io.StringIO()):
+                config = yaml.safe_load(PREPARE.make_runtime_config(args, Path(tmpdir)).read_text())
+            self.assertEqual(config["read_filter"]["both_ends"], in_filter, input_type)
+            self.assertEqual(config["read_filter"]["min_barcode_score"], 70.0)
+            self.assertFalse(config["read_filter"]["enabled"], "both ends alone does not filter")
+
+
 if __name__ == "__main__":
     unittest.main()

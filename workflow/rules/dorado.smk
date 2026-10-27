@@ -221,7 +221,7 @@ rule dorado_demux_fastq:
     output:
         fastq=_dorado_barcode_fastq_output,
     params:
-        extra=config.get("samtools_fastq", {}).get("extra", "-n -T MM,ML"),
+        extra=config.get("samtools_fastq", {}).get("extra", "-n -T MM,ML,qs"),
     log:
         "logs/dorado/fastq_{dorado_barcode}.log",
     benchmark:
