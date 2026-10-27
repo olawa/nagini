@@ -16,13 +16,13 @@
   </defs>
   <rect width="1000" height="790" fill="#fcfcfb"/>
 
-  <text x="40" y="44" class="big">BCR-ABL1 on nagini</text>
+  <text x="40" y="44" class="big">BCR::ABL1 on nagini</text>
   <text x="40" y="68" class="sub">One column in <tspan font-family="ui-monospace,Menlo,monospace">units.tsv</tspan> selects the analysis.</text>
 
   <!-- assay switch -->
   <rect x="640" y="26" width="320" height="52" rx="8" fill="#eef4fc" stroke="#2a78d6" stroke-width="2"/>
   <text x="658" y="47" class="mono" fill="#2a78d6" font-weight="700">assay: bcr_abl</text>
-  <text x="658" y="66" class="sub">41 jobs · 20 rules  (WGS route: 72)</text>
+  <text x="658" y="66" class="sub">43 jobs · 21 rules  (WGS route: 72)</text>
 
   <!-- ingest column -->
   <text x="40" y="112" class="hdr">INPUT</text>
@@ -34,9 +34,8 @@
 
   <rect class="box" x="40" y="216" width="250" height="68"/>
   <rect x="40" y="216" width="5" height="68" fill="#2a78d6" rx="2"/>
-  <text x="56" y="240" class="ttl">Read filter — nanostream</text>
-  <text x="56" y="259" class="sub">qs ≥ 14 · 800–2500 bp</text>
-  <text x="56" y="276" class="mono">dorado's own qs, not recomputed</text>
+  <text x="56" y="245" class="ttl">Read filter — nanostream</text>
+  <text x="56" y="266" class="sub">qs ≥ 14 · 800–2500 bp</text>
 
   <path class="edge" d="M165,284 L165,312"/>
 
@@ -49,7 +48,7 @@
   <path class="edge" d="M165,382 L165,410"/>
   <rect class="box" x="40" y="412" width="250" height="52"/>
   <text x="56" y="435" class="ttl">Merge + target BAM</text>
-  <text x="56" y="454" class="sub">BCR-ABL1 locus, chr9 + chr22</text>
+  <text x="56" y="454" class="sub">BCR::ABL1 locus, chr9 + chr22</text>
 
   <!-- fan out -->
   <path class="edge" d="M290,438 L340,438 L340,170 L384,170"/>
@@ -64,22 +63,22 @@
   <rect x="386" y="126" width="5" height="110" fill="#eb6834" rx="2"/>
   <text x="404" y="150" class="ttl">Which fusion?</text>
   <text x="404" y="170" class="mono">bcr_abl_fusion_counts</text>
-  <text x="404" y="192" class="sub">Split reads spanning the breakpoint, counted per isoform</text>
+  <text x="404" y="192" class="sub">Split reads across the breakpoint, per transcript type</text>
   <text x="404" y="210" class="sub">e13a2 · e14a2 · e1a2 · e19a2</text>
   <text x="404" y="228" class="sub">atypical: e13a3 · e14a3 · e1a3 · e6a2</text>
   <text x="724" y="160" class="num" fill="#eb6834" text-anchor="end">8</text>
-  <text x="742" y="160" class="sub" text-anchor="end" dy="14">isoforms</text>
+  <text x="742" y="160" class="sub" text-anchor="end" dy="14">transcript types</text>
 
   <!-- analysis 2 -->
   <rect class="box" x="386" y="286" width="368" height="150"/>
   <rect x="386" y="286" width="5" height="150" fill="#eb6834" rx="2"/>
-  <text x="404" y="310" class="ttl">Which resistance?</text>
+  <text x="404" y="310" class="ttl">Which variants?</text>
   <text x="404" y="330" class="mono">bcr_abl_branford_calling</text>
-  <text x="404" y="352" class="sub">ABL1 kinase domain, codons 244–499</text>
+  <text x="404" y="352" class="sub">ABL1 exons 2–9/10 · codons 220–500</text>
   <text x="404" y="370" class="sub">AF ≥ 1% · subclonal down to 0.2%</text>
-  <text x="404" y="388" class="sub">reads with errors within 3 bp of the Branford</text>
+  <text x="404" y="388" class="sub">reads with errors within 3 bp of the variant</text>
   <text x="404" y="406" class="sub">position are not counted</text>
-  <text x="404" y="426" class="sub" font-style="italic">optional: orthogonal caller bcftools</text>
+  <text x="404" y="426" class="sub" font-style="italic">orthogonal caller: bcftools, all ABL1 exons</text>
   <text x="724" y="320" class="num" fill="#eb6834" text-anchor="end">73</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="14">variants</text>
   <text x="742" y="320" class="sub" text-anchor="end" dy="30">at 52 positions</text>
@@ -87,10 +86,10 @@
   <!-- analysis 3 -->
   <rect class="box" x="386" y="464" width="368" height="92"/>
   <rect x="386" y="464" width="5" height="68" fill="#1baf7a" rx="2"/>
-  <text x="404" y="488" class="ttl">Same molecule?</text>
+  <text x="404" y="488" class="ttl">Clonal composition?</text>
   <text x="404" y="508" class="mono">bcr_abl_phasing</text>
-  <text x="404" y="530" class="sub">Single reads span the whole domain (~1 kb), so CIS</text>
-  <text x="404" y="548" class="sub">and TRANS are read off, not inferred</text>
+  <text x="404" y="530" class="sub">Single reads span the fusion transcript (~1.5–2 kb),</text>
+  <text x="404" y="548" class="sub">so CIS and TRANS are read off, not inferred</text>
   <text x="730" y="500" class="num" fill="#1baf7a" text-anchor="end">cis/trans</text>
 
   <!-- supporting -->

@@ -1,4 +1,4 @@
-# Postertext — BCR-ABL1 på nagini
+# Postertext — BCR::ABL1 på nagini
 
 Allt nedan är hämtat ur koden och resurserna i den här checkouten, inte ur minnet.
 Siffrorna går att verifiera med kommandona längst ned.
@@ -7,9 +7,9 @@ Siffrorna går att verifiera med kommandona längst ned.
 
 ## Metod (att klippa in)
 
-BCR-ABL1-analysen körs som en *assay* i nagini, Klinisk Genetik Uppsalas
+BCR::ABL1-analysen körs som en *assay* i nagini, Klinisk Genetik Uppsalas
 Snakemake-pipeline för Oxford Nanopore-data. Ett värde i `units.tsv`
-(`assay: bcr_abl`) väljer delgrafen: 20 regler och 41 jobb, mot 72 för
+(`assay: bcr_abl`) väljer delgrafen: 21 regler och 43 jobb, mot 72 för
 WGS-vägen. Det är ingen separat pipeline och ingen avgrening — samma regler,
 containrar och referenser som pipelinen i övrigt.
 
@@ -19,25 +19,27 @@ korsar introner, så alignment sker med `minimap2 -ax splice` mot GRCh37/hg19.
 
 Tre oberoende frågor ställs på samma BAM:
 
-**Vilken fusion?** Läsningar som korsar brytpunkten räknas per isoform. Åtta
-isoformer skiljs åt: e13a2 (b2a2) och e14a2 (b3a2), båda p210 vid KML; e1a2
-(p190, ALL); e19a2 (p230, KNL); samt de atypiska e13a3, e14a3 (p205), e1a3
-(p185) och e6a2 (p195). Varje läsning är en molekyl, så fraktionen är en
+**Vilken fusion?** Läsningar som korsar brytpunkten räknas per transkripttyp.
+Åtta skiljs åt: från M-bcr e13a2 (b2a2) och e14a2 (b3a2), båda p210 vid KML;
+från m-bcr e1a2 (p190, ALL); från μ-bcr e19a2 (p230, KNL); samt de atypiska
+e13a3, e14a3 (p205), e1a3 (p185) och e6a2 (p195). Varje läsning är en molekyl, så fraktionen är en
 direkt räkning och inte en modellskattning.
 
-**Vilken resistens?** 73 Branford-varianter på 52 genomiska positioner över 38
+**Vilken resistens?** 73 kurerade TKI-resistensvarianter på 52 genomiska positioner över 38
 kodon (244–499) i ABL1:s kinasdomän interrogeras. 38 av dem har en kurerad
 TKI-resistensprofil; övriga rapporteras som oklassade eller synonyma, inte som
 resistens. Varianter rapporteras från 1 % allelfraktion, och subklonalt ned
 till 0,2 %. Läsningar vars baser närmast positionen (±3 bp) avviker från
-referensen räknas inte — varken som referens eller som variant. För utvärdering
-kan en ortogonal caller, bcftools, slås på.
+referensen räknas inte — varken som referens eller som variant. bcftools körs
+alltid som ortogonal caller över alla ABL1-exoner, så att även varianter utanför
+den kurerade listan syns — men bara på klonal nivå eller som stora subkloner:
+som diploid caller anropade den inget under ~20 % i jämförelsen mot MiSeq.
 
 **Samma molekyl?** En ONT-läsning spänner hela kinasdomänen (~1 kb), så när två
 resistensmutationer hittas avgörs cis/trans genom att läsa av enskilda
 läsningar — utan statistisk fasning och utan haplotypantagande. Skillnaden är
-klinisk: en sammansatt mutation i cis ändrar TKI-valet, två kloner i trans gör
-det inte. Avläsningen är säker när båda mutationerna ligger väl över
+klinisk: en compound-mutation (i cis) ändrar TKI-valet, polyklonala mutationer
+(i trans) gör det inte. Avläsningen är säker när båda mutationerna ligger väl över
 positionsbakgrunden; se begränsningarna.
 
 Leverans är en xlsx-arbetsbok byggd med xlsxwriter i samma form som övriga
@@ -51,11 +53,11 @@ CGU-pipelines, med VCF, TSV och JSON bredvid för vidare bearbetning.
 |---|---|
 | **Pipeline** | nagini, Snakemake 7 (hydra-genetics-konventioner) |
 | **Val av analys** | `assay: bcr_abl` i `units.tsv`, eller `--assay bcr_abl` |
-| **Omfattning** | 20 regler / 41 jobb (WGS-vägen: 72) |
+| **Omfattning** | 21 regler / 43 jobb (WGS-vägen: 72) |
 | **Referens** | GRCh37 / hg19 |
 | **Läsfilter** | nanostream, `qs` ≥ 14, 800–2500 bp |
 | **Alignment** | minimap2 2.26, `-ax splice -y -Y --MD` |
-| **Fusionsisoformer** | 8 — e13a2, e14a2, e1a2, e19a2; atypiska e13a3, e14a3, e1a3, e6a2 |
+| **Fusionstranskript** | 8 — e13a2, e14a2, e1a2, e19a2; atypiska e13a3, e14a3, e1a3, e6a2 |
 | **Resistenspanel** | 73 varianter / 52 positioner / 38 kodon (244–499) |
 | **Kurerad TKI-profil** | 38 av de 73 varianterna |
 | **Detektionsgräns** | AF ≥ 1 %; subklonalt ≥ 0,2 % |
@@ -90,7 +92,7 @@ Att utelämna dem gör postern svagare, inte starkare.
   bakgrund som skulle sätta gränsen är mätt men inte inarbetad.
 - **Fasningen drar inte av bakgrundsfelet.** Sekvenseringsfel på bara den ena
   positionen ger skenbara enkelmutanta läsningar från vildtypsmolekyler. En ren
-  sammansatt mutation på 1 % med 0,3 % positionsfel klassas därför som
+  compound-mutation på 1 % med 0,3 % positionsfel klassas därför som
   `COEXISTING (Compound + Polyclonal)` — och på 5 % gör den det med 1,4 % fel.
   Nära detektionsgränsen ska en polyklonal tolkning inte tas för given.
 - **Ingen UMI.** Fraktionerna är rålästräkningar; PCR-duplikat går inte att
@@ -105,8 +107,8 @@ Att utelämna dem gör postern svagare, inte starkare.
 grep -vc '^#' workflow/resources/bcr_abl/branford_positions_hg19.bed   # 73
 
 # antal regler och jobb för assayen
-snakemake -s workflow/Snakefile --configfile <config> -n --quiet       # 41
+snakemake -s workflow/Snakefile --configfile <config> -n --quiet       # 43
 
-# isoformerna
+# transkripttyperna
 grep -A 6 'ISOFORMS' workflow/scripts/bcr_abl_fusion_counter.py
 ```

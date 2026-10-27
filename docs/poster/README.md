@@ -1,4 +1,4 @@
-# Postermaterial — BCR-ABL1 på nagini
+# Postermaterial — BCR::ABL1 på nagini
 
 Figurer och text för postern, plus ett körbart exempel så att påståendet
 "det är ingen separat pipeline" går att kontrollera i stället för att tros på.
@@ -6,7 +6,7 @@ Figurer och text för postern, plus ett körbart exempel så att påståendet
 | fil | vad |
 |---|---|
 | `fig1_architecture_sv.svg` / `_en.svg` | pipelinefiguren: från FASTQ till levererad arbetsbok |
-| `fig2_analysis_sv.svg` / `_en.svg` | analysfiguren: fusionsisoformer, Branford-panelen, cis/trans |
+| `fig2_analysis_sv.svg` / `_en.svg` | analysfiguren: fusionstranskript, TKI-resistensvarianterna, cis/trans |
 | `fig3_technology_comparison*.png/.svg` | ONT mot Illumina MiSeq: korrelation, VAF per variant, residualer |
 | `fig4_dilution_series*.png/.svg` | spädningsserien: linjäritet och detektionsgräns |
 | `metod_sv.md` / `methods_en.md` | metodstycke, specifikationstabell, begränsningar |
@@ -34,7 +34,7 @@ eftersom vilka två element som helst kan jämföras på en poster.
     -n
 ```
 
-Ger 41 jobb och 20 regler, varav fem BCR-ABL-specifika. Samma kommando utan
+Ger 43 jobb och 21 regler, varav sex BCR-ABL-specifika. Samma kommando utan
 `docs/poster/example/config.yaml` ger 72 jobb — WGS-vägen. Det är hela skillnaden,
 och den ligger i `assay`-kolumnen i `units.tsv`, inte i koden.
 

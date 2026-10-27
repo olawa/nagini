@@ -13,14 +13,14 @@
   <rect width="1000" height="816" fill="#fcfcfb"/>
 
   <text x="40" y="44" class="big">Vad analysen svarar på</text>
-  <text x="40" y="68" class="sub">Två frågor om samma amplikon: vilken fusion som finns, och om kinasdomänen bär resistens.</text>
+  <text x="40" y="68" class="sub">Tre frågor om samma amplikon: vilket fusionstranskript, vilka varianter i ABL1:s kinasdomän, och deras klonala sammansättning.</text>
 
   <!-- ===== 1. fusion ===== -->
-  <text x="40" y="110" class="hdr">1 — FUSIONEN   chr22 BCR  ×  chr9 ABL1</text>
-  <text x="40" y="132" class="sub">Varje läsning som korsar brytpunkten är en molekyl, och räknas till sin isoform.</text>
+  <text x="40" y="110" class="hdr">1 — FUSIONEN   BCR::ABL1 · t(9;22)(q34.1;q11.2)</text>
+  <text x="40" y="132" class="sub">Varje läsning som korsar brytpunkten är en molekyl, och räknas till sin transkripttyp.</text>
 
   <text x="40" y="170" class="ttl" fill="#2a78d6">BCR</text>
-  <text x="40" y="187" class="mono">chr22</text>
+  <text x="40" y="187" class="mono">22q11.2</text>
   <rect x="100" y="156" width="400" height="22" fill="#eef4fc" rx="3"/>
   <rect class="exon" x="108" y="152" width="32" height="30" fill="#2a78d6" rx="3"/>
   <text x="124" y="200" class="ax" text-anchor="middle">e1</text>
@@ -34,7 +34,7 @@
   <text x="468" y="200" class="ax" text-anchor="middle">e19</text>
 
   <text x="548" y="170" class="ttl" fill="#eb6834">ABL1</text>
-  <text x="548" y="187" class="mono">chr9</text>
+  <text x="548" y="187" class="mono">9q34.1</text>
   <rect x="612" y="156" width="150" height="22" fill="#fdf0ea" rx="3"/>
   <rect class="exon" x="620" y="152" width="32" height="30" fill="#eb6834" rx="3"/>
   <text x="636" y="200" class="ax" text-anchor="middle">a2</text>
@@ -55,21 +55,21 @@
     <path d="M468,216 L468,300 L636,300"/>
   </g>
 
-  <text x="652" y="233" class="ttl">e13a2</text><text x="722" y="233" class="sub">b2a2 · p210 · CML</text>
-  <text x="652" y="257" class="ttl">e14a2</text><text x="722" y="257" class="sub">b3a2 · p210 · CML</text>
-  <text x="652" y="281" class="ttl">e1a2</text> <text x="722" y="281" class="sub">p190 · ALL</text>
-  <text x="652" y="305" class="ttl">e19a2</text><text x="722" y="305" class="sub">p230 · CNL</text>
-  <text x="696" y="329" class="ttl" fill="#8a8982">e14a3</text><text x="766" y="329" class="sub">p205 · atypisk</text>
-  <text x="696" y="353" class="ttl" fill="#8a8982">e13a3</text><text x="766" y="353" class="sub">p205 · atypisk</text>
+  <text x="652" y="233" class="ttl">e13a2</text><text x="722" y="233" class="sub">M-bcr · b2a2 · p210 · CML</text>
+  <text x="652" y="257" class="ttl">e14a2</text><text x="722" y="257" class="sub">M-bcr · b3a2 · p210 · CML</text>
+  <text x="652" y="281" class="ttl">e1a2</text> <text x="722" y="281" class="sub">m-bcr · p190 · ALL</text>
+  <text x="652" y="305" class="ttl">e19a2</text><text x="722" y="305" class="sub">μ-bcr · p230 · CNL</text>
+  <text x="696" y="329" class="ttl" fill="#8a8982">e14a3</text><text x="766" y="329" class="sub">M-bcr · p205 · atypisk</text>
+  <text x="696" y="353" class="ttl" fill="#8a8982">e13a3</text><text x="766" y="353" class="sub">M-bcr · p205 · atypisk</text>
   <text x="652" y="377" class="ttl" fill="#8a8982">e6a2</text><text x="722" y="377" class="sub">p195 · atypisk</text>
-  <text x="696" y="401" class="ttl" fill="#8a8982">e1a3</text><text x="766" y="401" class="sub">p185 · atypisk</text>
+  <text x="696" y="401" class="ttl" fill="#8a8982">e1a3</text><text x="766" y="401" class="sub">m-bcr · p185 · atypisk</text>
 
   <g transform="translate(0,72)">
   <line x1="40" y1="366" x2="960" y2="366" stroke="#e4e3dc" stroke-width="2"/>
 
   <!-- ===== 2. kinase domain ===== -->
-  <text x="40" y="404" class="hdr">2 — RESISTENSEN   ABL1-KINASDOMÄNEN</text>
-  <text x="40" y="426" class="sub">73 Branford-varianter på 52 genomiska positioner, 38 kodon. Streckets höjd visar antalet rapporterade alternativa alleler.</text>
+  <text x="40" y="404" class="hdr">2 — ABL1-KINASDOMÄNEN</text>
+  <text x="40" y="426" class="sub">Amplikonet täcker exon 2–9/10, som omfattar 73 kurerade resistensvarianter i kodon 220–500.</text>
 
   <rect x="70" y="470" width="860" height="6" fill="#e4e3dc" rx="3"/>
   <rect x="81.8" y="451" width="2.4" height="19" fill="#8a8982" rx="1"/>
@@ -122,8 +122,6 @@
     <text x="751.5" y="500" class="ax" text-anchor="middle">450</text>
     <line x1="913.8" y1="476" x2="913.8" y2="482" stroke="#c9c8c0" stroke-width="2"/>
     <text x="913.8" y="500" class="ax" text-anchor="middle">500</text>
-  <text x="70" y="522" class="mono">kodon 244</text>
-  <text x="930" y="522" class="mono" text-anchor="end">kodon 499</text>
 
   <!-- T315I called out below the axis, clear of every tick -->
   <path d="M313.4,476 L313.4,532" stroke="#e34948" stroke-width="2"/>
@@ -140,15 +138,17 @@
 
   <!-- ===== 3. phasing ===== -->
   <line x1="40" y1="618" x2="960" y2="618" stroke="#e4e3dc" stroke-width="2"/>
-  <text x="40" y="650" class="hdr">3 — OCH OM TVÅ HITTAS: SAMMA MOLEKYL?</text>
-  <text x="40" y="672" class="sub">En läsning spänner hela domänen (~1 kb) —</text>
-  <text x="40" y="690" class="sub">frågan avgörs utan statistisk fasning.</text>
+  <text x="40" y="650" class="hdr">3 — KLONAL SAMMANSÄTTNING (FASNING)</text>
+  <text x="40" y="672" class="sub">En läsning täcker hela fusionstranskriptet, från</text>
+  <text x="40" y="690" class="sub">brytpunkten genom kinasdomänen (~1,5–2 kb, beroende</text>
+  <text x="40" y="708" class="sub">på brytpunkten) — cis eller trans avläses direkt,</text>
+  <text x="40" y="726" class="sub">utan statistisk fasning.</text>
 
   <g transform="translate(450,646)">
     <text x="0" y="5" class="ttl" fill="#1baf7a">CIS</text>
     <line x1="48" y1="0" x2="216" y2="0" stroke="#1baf7a" stroke-width="3.5"/>
     <circle cx="104" cy="0" r="5.5" fill="#1baf7a"/><circle cx="168" cy="0" r="5.5" fill="#1baf7a"/>
-    <text x="232" y="5" class="sub">båda på en läsning — sammansatt mutation</text>
+    <text x="232" y="5" class="sub">båda på en läsning — compound-mutation</text>
   </g>
   <g transform="translate(450,682)">
     <text x="0" y="11" class="ttl">TRANS</text>
@@ -156,7 +156,7 @@
     <circle cx="104" cy="0" r="5.5" fill="#8a8982"/>
     <line x1="48" y1="20" x2="216" y2="20" stroke="#8a8982" stroke-width="3.5"/>
     <circle cx="168" cy="20" r="5.5" fill="#8a8982"/>
-    <text x="232" y="11" class="sub">skilda läsningar — två oberoende kloner</text>
+    <text x="232" y="11" class="sub">skilda läsningar — polyklonala mutationer</text>
   </g>
   </g>
 </svg>
