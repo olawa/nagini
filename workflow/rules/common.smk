@@ -217,6 +217,9 @@ onstart:
         date_string=date_string,
         directory="results/versions/software",
     )
+    # Assigned below only with containers; without them (the --use-conda
+    # fallback) the export would otherwise raise UnboundLocalError.
+    update_config = config
     if use_container(workflow):
         update_config, software_info = add_software_version_to_config(config, workflow, False)
         export_software_version_as_file(
