@@ -455,7 +455,11 @@ bcr_abl:
   min_read_qs: 0
   enable_all_callers: false
   enable_vardictrust: false
-  enable_bcftools_pileup: false
+  # Always on: bcftools calls across every ABL1 (and BCR) exon of the target BED,
+  # so variants outside the curated list are seen too -- though as a diploid
+  # caller it does not call low-level subclones (none below ~20 % VAF in the
+  # MiSeq comparison, where nagini's caller found four at 1-2 %).
+  enable_bcftools_pileup: true
   enable_rindels: false
 
 annotate_small_variants: false

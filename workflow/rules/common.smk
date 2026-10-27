@@ -1383,10 +1383,12 @@ def all_callers_enabled(sample=None):
 
 
 def bcr_abl_bcftools_enabled(sample=None):
+    """bcftools runs by default, as an orthogonal caller over every target exon;
+    a config can still turn it off with bcr_abl.enable_bcftools_pileup: false."""
     if all_callers_enabled(sample):
         return True
     return bool(
-        config.get("bcr_abl", {}).get("enable_bcftools_pileup", False)
+        config.get("bcr_abl", {}).get("enable_bcftools_pileup", True)
         or config.get("enable_bcftools_pileup", False)
     )
 

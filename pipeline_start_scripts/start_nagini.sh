@@ -147,7 +147,7 @@ Options:
   --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
   --enable-all-callers          Enable all orthogonal callers (Branford, Rindels, bcftools) for BCR-ABL1.
   --enable-rindels              Enable Rindels caller for BCR-ABL1.
-  --enable-bcftools-pileup      Enable bcftools mpileup caller for BCR-ABL1 target exons.
+  --enable-bcftools-pileup      bcftools mpileup over the BCR-ABL1 target exons (on by default).
   --clairs-to-platform MODEL    ClairS-TO platform model (auto-selected from basecalling model if omitted).
   --clairs-to-container IMAGE   Override default ClairS-TO container image.
   --methylation Yes|No          Whether modified-base tags are expected (default: No).
