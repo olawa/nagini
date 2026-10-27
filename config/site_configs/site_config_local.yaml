@@ -5,10 +5,9 @@
 # Set a variable here only to override the inventory for this site.
 SITE_ID: local
 REFERENCE_ROOT: references
-CONTAINER_CACHE: vendor/containers
+CONTAINER_DIR: "{{PIPELINE_ROOT}}/vendor/containers"
 HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources/resources_local.yaml
-DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
 # The checkout-relative local profile does not ship an hs1/T2T bundle.
 
@@ -17,5 +16,3 @@ DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 container_runtime: singularity
 singularity_binds: []
 
-# Pin before clinical use.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"

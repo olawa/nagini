@@ -167,20 +167,24 @@ Snakemake-wrappers commit `d3e6a345acb4e03ac0662ade94d9970bb233bdab` i
 moduler läsas lokalt. Alla moduler används som de är, på sina uppströmstaggar.
 
 Referenser och containerimages laddas inte automatiskt av pipelinekörningen.
-För Singularity/Apptainer kan Hydra användas vid förberedelsen:
+Containrarna följer D10: config pekar på `{{CONTAINER_DIR}}/<sif>`, och
+[`containers/manifest.yaml`](containers/manifest.yaml) anger vilken image varje
+sif byggs från. `CONTAINER_DIR` sätts per site i `config/site_configs/`
+(workstation `/data/containers`, Marvin och Miarka CGU-bibliotekets
+containerkatalog, lokalt `vendor/containers` i checkouten). Bygg dem en gång,
+med nätverk, med verktyget i `harmonized_pipelines`:
 
 ```bash
-hydra-genetics prepare-environment create-singularity-files \
-  -c config/config_marvin.yaml \
-  -o vendor/containers
-hydra-genetics prepare-environment container-path-update \
-  -c config/config_marvin.yaml \
-  -n config/config_marvin.local.yaml \
-  -p vendor/containers
+harmonized_pipelines/tools/build_containers.sh nagini --dest /data/containers
 ```
 
+Startscriptet stoppar om någon sif som configen nämner saknas, och listar
+vilka; en `--dry-run` varnar bara. Ändras en container i config körs
+`tools/gen_container_manifest.py nagini` och `tools/apply_container_dir.py nagini`
+om, och båda har en `--check` för CI.
+
 När containers och referensfiler väl finns lokalt är själva DAG-bygget offline.
-För en lokal körning med containercache:
+För en lokal körning:
 
 ```bash
 WRAPPER_PREFIX="git+file://$(pwd)/vendor/snakemake-wrappers"

@@ -5,12 +5,11 @@
 # Set a variable here only to override the inventory for this site.
 SITE_ID: marvin
 REFERENCE_ROOT: /beegfs-storage/data/ref_genomes
-CONTAINER_CACHE: /beegfs-storage/projects/wp4/nobackup/singularity_cache
+CONTAINER_DIR: /projects/cgu/library/containers
 HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources/resources_marvin.yaml
 # SLURM allocates each job from resources_marvin.yaml; do not rescale threads.
 scale_threads_to_cores: false
-DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
 # No verified hs1/T2T path was present in the Marvin configuration.
 
@@ -32,5 +31,3 @@ singularity_binds:
   - /data
   - /projects
 
-# Pin before clinical use.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"

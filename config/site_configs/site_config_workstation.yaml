@@ -9,10 +9,9 @@
 # when it is ready.
 SITE_ID: workstation
 REFERENCE_ROOT: /data/references
-CONTAINER_CACHE: vendor/containers
+CONTAINER_DIR: /data/containers
 HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources/resources_workstation.yaml
-DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
 # The initial workstation test can run without VEP.  ClinVar is wired into
 # the VEP command and will be used automatically once this switch is enabled.
@@ -29,5 +28,3 @@ singularity_binds:
   - /home
   - /coldstorage
 
-# Pin before clinical use.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"

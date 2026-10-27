@@ -711,6 +711,8 @@ prepare_cmd=(
     --fastq-status "$fastq_status"
     --methylation "$methylation"
 )
+# A dry run starts no container, so it need not have them installed (D10).
+$dry_run && prepare_cmd+=(--allow-missing-containers)
 [[ -n "$assay" ]] && prepare_cmd+=(--assay "$assay")
 [[ -n "$reference_build" ]] && prepare_cmd+=(--reference-build "$reference_build")
 [[ -n "$sample_regex" ]] && prepare_cmd+=(--sample-regex "$sample_regex")

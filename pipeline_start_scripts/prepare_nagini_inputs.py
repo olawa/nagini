@@ -284,6 +284,11 @@ def parse_args() -> argparse.Namespace:
         help="Also verify registry checksums. Reads every file, so it is slow.",
     )
     parser.add_argument(
+        "--allow-missing-containers",
+        action="store_true",
+        help="Do not stop when a .sif the config names is missing (for dry runs).",
+    )
+    parser.add_argument(
         "--filter-reads",
         dest="filter_reads",
         action="store_true",
@@ -1720,6 +1725,29 @@ def resolve_config_path(value: object, base_dir: Path) -> object:
     return str(path if path.is_absolute() else (base_dir / path).resolve())
 
 
+def missing_containers(config: Any) -> list[str]:
+    """Every .sif the config points at that does not exist.
+
+    Containers come from CONTAINER_DIR and are never pulled at run time (D10),
+    so a missing image would otherwise surface as a failed job mid-run.
+    """
+
+    found: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, str) and value.endswith(".sif") and not Path(value).is_file():
+            found.add(value)
+
+    walk(config)
+    return sorted(found)
+
+
 def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     base_config = args.base_config.resolve()
     config = read_yaml(base_config)
@@ -1836,12 +1864,12 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     config["output"] = str(Path(resolve_config_path(config.get("output", "config/output_files.yaml"), base_dir)))
     config["resources"] = str(Path(resolve_config_path(config.get("resources", "config/resources/resources_local.yaml"), base_dir)))
     config["hydra_local_path"] = str(Path(resolve_config_path(config.get("hydra_local_path", "vendor"), base_dir)))
-    if config.get("container_cache"):
-        config["container_cache"] = str(resolve_config_path(config["container_cache"], base_dir))
+    if config.get("container_dir"):
+        config["container_dir"] = str(resolve_config_path(config["container_dir"], base_dir))
 
     for key in (
         "REFERENCE_ROOT",
-        "CONTAINER_CACHE",
+        "CONTAINER_DIR",
         "HG38_FASTA",
         "HG38_FAI",
         "HG38_DICT",
@@ -2206,6 +2234,17 @@ def main() -> None:
     write_tsv(samples_path, samples, sample_columns)
     write_tsv(units_path, units, unit_columns)
     runtime_config = make_runtime_config(args, args.analysis_dir)
+    missing = missing_containers(read_yaml(runtime_config))
+    if missing:
+        message = (
+            f"{len(missing)} container image(s) named in {runtime_config} are not installed:\n  "
+            + "\n  ".join(missing)
+            + "\nBuild them once with harmonized_pipelines/tools/build_containers.sh "
+            + f"{args.pipeline_root} --dest <CONTAINER_DIR>."
+        )
+        if not getattr(args, "allow_missing_containers", False):
+            raise SystemExit(message)
+        print("WARNING: " + message, file=sys.stderr)
     print(f"Created {samples_path}")
     print(f"Created {units_path}")
     print(f"Created {runtime_config}")

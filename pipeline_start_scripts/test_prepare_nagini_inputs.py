@@ -74,6 +74,38 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             self.assertEqual(config["references"][build]["fasta"], "", build)
         self.assertTrue((pipeline_root / "profiles/miarka/config.yaml").is_file())
 
+    def test_missing_containers_lists_only_absent_sif_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            present = Path(tmpdir) / "hydragenetics__common_3.1.1.sif"
+            present.write_text("")
+            absent = str(Path(tmpdir) / "hkubal__clairs-to_v0.4.4.sif")
+            config = {
+                "default_container": str(present),
+                "clairs_to_call": {"container": absent},
+                "dorado": {"container": "none"},
+                "steps": [absent, "docker://not/a/sif"],
+            }
+            self.assertEqual(PREPARE.missing_containers(config), [absent])
+
+    def test_every_site_points_its_containers_at_its_container_dir(self):
+        """D10: images come from CONTAINER_DIR, which only the site config sets."""
+
+        pipeline_root = Path(__file__).parents[1]
+        for site in ("local", "workstation", "marvin", "miarka"):
+            args = type("Args", (), {})()
+            args.base_config = pipeline_root / "config/config.yaml"
+            args.site_config = pipeline_root / f"config/site_configs/site_config_{site}.yaml"
+            args.reference_files = pipeline_root / f"config/reference_files/reference_files_{site}.yaml"
+            args.library_root = None
+            args.pipeline_root = pipeline_root
+            with tempfile.TemporaryDirectory() as tmpdir:
+                runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+                config = yaml.safe_load(runtime.read_text())
+            container_dir = config["container_dir"]
+            self.assertTrue(Path(container_dir).is_absolute(), site)
+            self.assertEqual(config["default_container"], f"{container_dir}/hydragenetics__common_3.1.1.sif")
+            self.assertNotIn("docker://", yaml.safe_dump(config))
+
     def test_workstation_reference_paths_are_preserved(self):
         pipeline_root = Path(__file__).parents[1]
         args = type("Args", (), {})()
@@ -718,7 +750,8 @@ class PrepareNaginiInputsTest(unittest.TestCase):
 
         self.assertEqual(
             config["dorado"]["container"],
-            "docker://ontresearch/dorado:shac8f356489fa8b44b31beba841b84d2879de2088e",
+            str(pipeline_root / "vendor/containers/"
+                "ontresearch__dorado_shac8f356489fa8b44b31beba841b84d2879de2088e.sif"),
         )
         self.assertEqual(config["dorado"]["kit"], "SQK-RBK114-24")
         self.assertEqual(config["dorado"]["device"], "cuda:all")

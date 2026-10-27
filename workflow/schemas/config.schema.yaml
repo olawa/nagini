@@ -350,9 +350,9 @@ properties:
       target_avg_size:
         type: integer
         description: 'target avg size (default: 50000)'
-  container_cache:
+  container_dir:
     type: string
-    description: Optional site-specific container cache or image directory.
+    description: Directory holding the .sif files in containers/manifest.yaml (D10).
   container_runtime:
     type: string
     description: Container runtime recorded by the selected site config.

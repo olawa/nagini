@@ -5,9 +5,13 @@
 SITE_ID: local
 HYDRA_LOCAL_PATH: "vendor"
 RESOURCES_FILE: "config/resources/resources_local.yaml"
-DEFAULT_CONTAINER: "docker://hydragenetics/common:3.1.1"
+DEFAULT_CONTAINER: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 REFERENCE_ROOT: "references"
-CONTAINER_CACHE: "vendor/containers"
+# Where the .sif files listed in containers/manifest.yaml are installed (D10).
+# Nothing is pulled at run time; build them once with harmonized_pipelines'
+# tools/build_containers.sh <nagini> --dest <CONTAINER_DIR>. Relative to the
+# checkout here, for direct runs from the repo root; each site config sets it.
+CONTAINER_DIR: "vendor/containers"
 
 # These defaults keep direct local Snakemake invocations useful. A site config
 # may replace any of them with absolute paths on a workstation or cluster.
@@ -53,9 +57,9 @@ SIMPLE_SV_FUSION_PAIRS: ""
 # Pinned deliberately: with a shared singularity cache, a floating :latest tag
 # means the workstation and the cluster can silently run different versions of
 # the caller. v0.4.4 is what :latest resolved to on 2026-05-11.
-CLAIRS_TO_CONTAINER: "docker://hkubal/clairs-to:v0.4.4"
-DEEPVARIANT_CONTAINER: "docker://google/deepvariant:1.6.0"
-ARRIBA_CONTAINER: "docker://uhrigs/arriba:2.4.0"
+CLAIRS_TO_CONTAINER: "{{CONTAINER_DIR}}/hkubal__clairs-to_v0.4.4.sif"
+DEEPVARIANT_CONTAINER: "{{CONTAINER_DIR}}/google__deepvariant_1.6.0.sif"
+ARRIBA_CONTAINER: "{{CONTAINER_DIR}}/uhrigs__arriba_2.4.0.sif"
 
 
 
@@ -70,7 +74,7 @@ units: "config/units.tsv"
 output: "config/output_files.yaml"
 resources: "{{RESOURCES_FILE}}"
 default_container: "{{DEFAULT_CONTAINER}}"
-container_cache: "{{CONTAINER_CACHE}}"
+container_dir: "{{CONTAINER_DIR}}"
 container_runtime: singularity
 singularity_binds: []
 
@@ -197,28 +201,28 @@ minimap2_align:
   index_preset: "map-ont"
   extra: "-y -Y --MD"
   read_group: ""
-  container: "docker://hydragenetics/minimap2:2.26"
+  container: "{{CONTAINER_DIR}}/hydragenetics__minimap2_2.26.sif"
 
 minimap2_index:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 # Structural variant calling: Sniffles2 and SAVANA (long-read somatic SV caller).
 # Runs in parallel as complements. Set sv_engine: sniffles2_only or savana_only to restrict.
 sv_engine: "both"  # options: both | sniffles2_only | savana_only
 
 sniffles2_call:
-  container: "docker://hydragenetics/sniffles2:2.2"
+  container: "{{CONTAINER_DIR}}/hydragenetics__sniffles2_2.2.sif"
   tandem_repeats: ""
   extra: ""
 
 savana_ont_to:
-  container: "docker://hydragenetics/savana:1.3.5"
+  container: "{{CONTAINER_DIR}}/hydragenetics__savana_1.3.5.sif"
   genome_version: ""  # empty for auto-resolution to 1000g_hg38 / 1000g_t2t / 1000g_hg19
   extra: "--min_support 5"
   threads: 16
 
 dorado:
-  container: "docker://ontresearch/dorado:shac8f356489fa8b44b31beba841b84d2879de2088e"
+  container: "{{CONTAINER_DIR}}/ontresearch__dorado_shac8f356489fa8b44b31beba841b84d2879de2088e.sif"
   input: ""
   model: "hac"
   kit: ""
@@ -240,13 +244,13 @@ dorado_alignment:
   extra: ""
 
 dorado_demux_bam:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 dorado_fastq:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 finalize_dorado_alignment:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 samtools_fastq:
   # -T carries MM/ML tags into FASTQ comments. minimap2 -y copies those
@@ -261,15 +265,15 @@ merged_fastq: false
 
 mosdepth:
   by: "500"
-  container: "docker://hydragenetics/mosdepth:0.3.2"
+  container: "{{CONTAINER_DIR}}/hydragenetics__mosdepth_0.3.2.sif"
   extra: "--fast-mode --no-per-base"
 
 mosdepth_bed:
-  container: "docker://hydragenetics/mosdepth:0.3.2"
+  container: "{{CONTAINER_DIR}}/hydragenetics__mosdepth_0.3.2.sif"
   extra: ""
 
 cramino:
-  container: "docker://hydragenetics/cramino:0.14.5"
+  container: "{{CONTAINER_DIR}}/hydragenetics__cramino_0.14.5.sif"
   extra: ""
 
 small_variant_caller: "auto"
@@ -291,11 +295,11 @@ clairs_to_call:
   extra: ""
 
 clairs_to_concat:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   extra: ""
 
 bcftools_norm_clairs_to:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   extra: "--multiallelics -both --check-ref w"
 
 deepvariant:
@@ -306,30 +310,30 @@ deepvariant:
   output_gvcf: false
 
 bcftools_norm_deepvariant:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   extra: "--multiallelics -both --check-ref w"
 
 
 gatk_mutect2:
-  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  container: "{{CONTAINER_DIR}}/hydragenetics__gatk4_4.2.2.0.sif"
   # Mutect2 is retained because it is part of the requested analysis, but
   # its ONT error model and filtering require validation for the intended use.
   extra: ""
 
 gatk_merge_mutect_stats:
-  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  container: "{{CONTAINER_DIR}}/hydragenetics__gatk4_4.2.2.0.sif"
   extra: ""
 
 gatk_filter_mutect_calls:
-  container: "docker://hydragenetics/gatk4:4.2.2.0"
+  container: "{{CONTAINER_DIR}}/hydragenetics__gatk4_4.2.2.0.sif"
   extra: ""
 
 bcftools_norm_mutect2:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   extra: "--multiallelics -both --check-ref w"
 
 vardictrust:
-  container: "docker://quay.io/biocontainers/vardictrust:1.0.2--hfa8f182_0"
+  container: "{{CONTAINER_DIR}}/quay.io__biocontainers__vardictrust_1.0.2--hfa8f182_0.sif"
   min_af: 0.15
   min_base_quality: 12.0
   max_mismatches: 150
@@ -340,7 +344,7 @@ vardictrust:
 # The normalized filtered VCF is used in the report when this is false.
 annotate_small_variants_with_vep: false
 vep:
-  container: "docker://hydragenetics/vep:111.0"
+  container: "{{CONTAINER_DIR}}/hydragenetics__vep_111.0.sif"
   vep_cache: "{{VEP_CACHE}}"
   skip: false
   mode: "--offline --cache --merged"
@@ -349,15 +353,15 @@ vep:
 nagini_excel_report:
   # The report is written with xlsxwriter, as in the other CGU pipelines.
   # It is present in hydragenetics/common and in envs/nagini.yaml.
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 snpeff:
-  container: "docker://hydragenetics/snpeff:5.0"
+  container: "{{CONTAINER_DIR}}/hydragenetics__snpeff_5.0.sif"
   db: "{{SNPEFF_DB}}"
   extra: "-nodownload"
 
 simple_sv_annotation:
-  container: "docker://hydragenetics/simple_sv_annotation:2019.02.18"
+  container: "{{CONTAINER_DIR}}/hydragenetics__simple_sv_annotation_2019.02.18.sif"
   panel: "{{SIMPLE_SV_PANEL}}"
   fusion_pairs: "{{SIMPLE_SV_FUSION_PAIRS}}"
 
@@ -392,7 +396,7 @@ rindels:
 # Runs in parallel with Rindels. Set cnv_engine: rindels_only to skip.
 cnv_engine: "both"  # options: both | rindels_only
 cnvkit_batch:
-  container: "docker://hydragenetics/cnvkit:0.9.11"
+  container: "{{CONTAINER_DIR}}/hydragenetics__cnvkit_0.9.11.sif"
   method: "wgs"
   # Bin size in base pairs. Used by the cnvkit_targets rule, which tiles the
   # accessible genome once per reference build; batch is then handed those bins
@@ -418,17 +422,17 @@ rindels_ideogram:
 
 # Interactive HTML CNV report (D3.js, mirrors Illumina pipeline reports).
 cnv_html_report:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   show_table: false   # No filtered CNV VCFs in tumor-only mode
   cytobands: true     # Visualise cytobands in the chromosome plot
   wide_plot_width: 2000
 
 merge_cnv_json:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   # cytobands: path to UCSC-format cytoband file; resolved from references.<build>.cytoband
 
 cnv_json:
-  container: "docker://hydragenetics/common:3.1.1"
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 
 bcr_abl:
   tolerance: 150
@@ -452,7 +456,7 @@ annotate_small_variants: false
 annotate_svs: false
 
 multiqc:
-  container: "docker://hydragenetics/multiqc:1.11"
+  container: "{{CONTAINER_DIR}}/hydragenetics__multiqc_1.11.sif"
   use_input_files_only: true
   reports:
     nanopore:

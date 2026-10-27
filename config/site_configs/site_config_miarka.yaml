@@ -8,6 +8,7 @@
 # with "reference_build=... has no fasta configured".
 SITE_ID: miarka
 REFERENCE_ROOT: /proj/ngi2024001/nobackup/cgu/library/references
+CONTAINER_DIR: /proj/ngi2024001/nobackup/cgu/library/containers
 HYDRA_LOCAL_PATH: vendor
 RESOURCES_FILE: config/resources/resources_miarka.yaml
 # SLURM allocates each job from resources_miarka.yaml; do not rescale threads.

@@ -213,7 +213,7 @@ rule bcr_abl_draw_fusions:
         threads=config.get("arriba", {}).get("threads", 1),
         time=config.get("arriba", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("arriba", {}).get("container", config.get("ARRIBA_CONTAINER", "docker://uhrigs/arriba:2.4.0"))
+        config.get("arriba", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     message:
@@ -269,7 +269,7 @@ rule bcr_abl_bcftools_pileup:
         threads=config.get("bcr_abl", {}).get("threads", 4),
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("bcftools", {}).get("container", "docker://hydragenetics/common:3.1.1")
+        config.get("bcftools", {}).get("container", config["default_container"])
     conda:
         "../../envs/nagini.yaml"
     message:
