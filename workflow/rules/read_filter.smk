@@ -7,7 +7,7 @@ __license__ = "GPL-3"
 rule read_filter_fastq:
     """Filter raw FASTQ reads by QV and length before alignment."""
     input:
-        fastq1=lambda wildcards: get_unit_input(wildcards, "fastq1"),
+        fastq1=lambda wildcards: get_fastq_for_read_filter(wildcards),
     output:
         fastq1=temp("reads/filtered/{sample}_{type}_{processing_unit}_{barcode}.fastq.gz"),
     params:

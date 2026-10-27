@@ -499,6 +499,8 @@ def get_unit_dorado_bam(wildcards):
     barcode = str(row.get("barcode_name", "")).strip()
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
+    if is_read_filtering_enabled(wildcards.sample):
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam".strip()
     return str(row.get("bam", f"basecalling/dorado_demux/{barcode}.bam"))
 
 
@@ -509,7 +511,21 @@ def get_unit_dorado_fastq(wildcards):
     barcode = str(row.get("barcode_name", "")).strip()
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
+    if is_read_filtering_enabled(wildcards.sample):
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
     return f"basecalling/dorado_fastq/{barcode}.fastq.gz"
+
+
+def get_fastq_for_read_filter(wildcards):
+    """Return raw FASTQ for read filtering: Dorado FASTQ or input unit FASTQ."""
+    input_type = get_unit_input_type(wildcards)
+    if input_type == "dorado_bam":
+        row = get_unit(wildcards)
+        barcode = str(row.get("barcode_name", "")).strip()
+        if not barcode:
+            raise WorkflowError("Dorado units require barcode_name in units.tsv.")
+        return f"basecalling/dorado_fastq/{barcode}.fastq.gz"
+    return get_unit_input(wildcards, "fastq1")
 
 
 def get_reference_index():
