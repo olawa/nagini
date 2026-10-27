@@ -447,6 +447,9 @@ PIPELINE_CONDITION_NAMES = {
     "sniffles2_enabled",
     "savana_enabled",
     "rindels_sv",
+    "dorado_demux",
+    "dorado_demux_bam",
+    "dorado_demux_fastq",
 }
 
 SAMPLE_CONDITION_NAMES = {

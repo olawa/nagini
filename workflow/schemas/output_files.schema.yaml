@@ -17,6 +17,9 @@ properties:
             - "null"
         output:
           type: string
+          description: >-
+            Path of the deliverable. {sample} and {type} expand per sample and
+            unit type, {barcode} per Dorado barcode.
         types:
           type: array
           items:

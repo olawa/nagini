@@ -1415,6 +1415,9 @@ _PIPELINE_CONDITIONS = {
     "rindels_sv": lambda: any(
         sample_has_rindels_sv(s) for s in get_samples(samples)
     ),
+    "dorado_demux": lambda: bool(dorado_barcodes),
+    "dorado_demux_bam": lambda: bool(dorado_barcodes) and dorado_demux_output_format in ("bam", "both"),
+    "dorado_demux_fastq": lambda: bool(dorado_barcodes) and dorado_demux_output_format in ("fastq", "both"),
     "cnv_calling": lambda: any(sample_needs_cnv_calling(s) for s in get_samples(samples)),
     "cnvkit_enabled": lambda: any(cnvkit_enabled(s) for s in get_samples(samples)),
     "sniffles2_enabled": lambda: any(sniffles2_enabled(s) for s in get_samples(samples)),
@@ -1535,21 +1538,11 @@ def compile_output_file_list(wildcards):
                             )
                         )
                     )
+        elif "{barcode}" in template:
+            output_files.extend(
+                outdir / clean_report_path(template.format(barcode=barcode))
+                for barcode in dorado_barcodes
+            )
         else:
             output_files.append(outdir / clean_report_path(template))
-
-
-    if dorado_barcodes:
-        output_files.append(outdir / "basecalling/dorado_demux/demux_summary.tsv")
-        output_files.append(outdir / "qc/dorado_demux/dorado_demux_mqc.tsv")
-        if dorado_demux_output_format in ("bam", "both"):
-            output_files.extend(
-                outdir / f"basecalling/dorado_demux/{barcode}.bam"
-                for barcode in dorado_barcodes
-            )
-        if dorado_demux_output_format in ("fastq", "both"):
-            output_files.extend(
-                outdir / f"basecalling/dorado_fastq/{barcode}.fastq.gz"
-                for barcode in dorado_barcodes
-            )
     return output_files

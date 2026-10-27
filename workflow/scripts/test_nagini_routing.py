@@ -333,6 +333,18 @@ class OutputConditionTest(unittest.TestCase):
         self.assertIn("savana_enabled", routing.PIPELINE_CONDITION_NAMES)
         self.assertIn("sniffles2_enabled", routing.SAMPLE_CONDITION_NAMES)
         self.assertIn("sniffles2_enabled", routing.PIPELINE_CONDITION_NAMES)
+
+    def test_dorado_deliverables_are_declared_in_the_output_spec(self):
+        """They used to be appended in compile_output_file_list (D3)."""
+
+        output_spec = yaml.safe_load((REPO / "config/output_files.yaml").read_text())
+        declared = {entry["output"]: entry.get("when") for entry in output_spec["files"]}
+        self.assertEqual(declared["basecalling/dorado_demux/demux_summary.tsv"], "dorado_demux")
+        self.assertEqual(declared["qc/dorado_demux/dorado_demux_mqc.tsv"], "dorado_demux")
+        self.assertEqual(declared["basecalling/dorado_demux/{barcode}.bam"], "dorado_demux_bam")
+        self.assertEqual(declared["basecalling/dorado_fastq/{barcode}.fastq.gz"], "dorado_demux_fastq")
+        for name in ("dorado_demux", "dorado_demux_bam", "dorado_demux_fastq"):
+            self.assertIn(name, routing.PIPELINE_CONDITION_NAMES)
         self.assertTrue(routing.is_known_condition("savana_enabled", self.assays))
         self.assertTrue(routing.is_known_condition("sniffles2_enabled", self.assays))
 

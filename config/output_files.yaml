@@ -1,6 +1,22 @@
 ---
 directory: "."
 files:
+  - name: Dorado demultiplexing summary
+    input: null
+    output: "basecalling/dorado_demux/demux_summary.tsv"
+    when: dorado_demux
+  - name: Dorado demultiplexing table for MultiQC
+    input: null
+    output: "qc/dorado_demux/dorado_demux_mqc.tsv"
+    when: dorado_demux
+  - name: demultiplexed BAM per barcode
+    input: null
+    output: "basecalling/dorado_demux/{barcode}.bam"
+    when: dorado_demux_bam
+  - name: demultiplexed FASTQ per barcode
+    input: null
+    output: "basecalling/dorado_fastq/{barcode}.fastq.gz"
+    when: dorado_demux_fastq
   - name: aligned BAM
     input: null
     output: "alignment/merged/{sample}_{type}.bam"
