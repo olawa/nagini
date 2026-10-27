@@ -157,9 +157,7 @@ cd nagini
 Scriptet lägger de pinnade modulerna i `vendor/hydra-genetics/` och
 Snakemake-wrappers commit `d3e6a345acb4e03ac0662ade94d9970bb233bdab` i
 `vendor/snakemake-wrappers/`. Därefter kan Snakefile och
-moduler läsas lokalt. `snv_indels` får en lokal kompatibilitetstagg
-`v2.1.0-nagini`, en lokal patch-tagg baserad på Hydra `v2.1.0` som inte inkluderar den
-oanvända DeepTrio-regeln som inte kan parsas av den här Snakemake-versionen.
+moduler läsas lokalt. Alla moduler används som de är, på sina uppströmstaggar.
 
 Referenser och containerimages laddas inte automatiskt av pipelinekörningen.
 För Singularity/Apptainer kan Hydra användas vid förberedelsen:

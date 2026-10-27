@@ -76,9 +76,7 @@ modules:
   annotation: "v1.5.0"
   cnv_sv: "v3.4.0"
   qc: "v0.8.0"
-  # Local compatibility tag derived from Hydra snv_indels v2.1.0; see
-  # build/patches/snv_indels_v2.1.0_snakemake7.patch.
-  snv_indels: "v2.1.0-nagini"
+  snv_indels: "v2.1.0"
 
 reference_build: "hg38"
 references:

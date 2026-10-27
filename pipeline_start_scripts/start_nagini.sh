@@ -539,7 +539,7 @@ needs_vendor=false
 if [[ ! -d "$pipeline_path/vendor/hydra-genetics" || ! -d "$pipeline_path/vendor/snakemake-wrappers" ]]; then
     needs_vendor=true
 else
-    for mod_tag in "alignment:v0.9.0" "annotation:v1.5.0" "cnv_sv:v3.4.0" "qc:v0.8.0" "reports:v1.1.1" "snv_indels:v2.1.0-nagini"; do
+    for mod_tag in "alignment:v0.9.0" "annotation:v1.5.0" "cnv_sv:v3.4.0" "qc:v0.8.0" "reports:v1.1.1" "snv_indels:v2.1.0"; do
         mod="${mod_tag%%:*}"
         tag="${mod_tag##*:}"
         dest="$pipeline_path/vendor/hydra-genetics/$mod"

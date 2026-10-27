@@ -38,27 +38,6 @@ for module_tag in \
   fi
 done
 
-# snv_indels v2.1.0 contains an unused DeepTrio rule whose formatted
-# ``expand`` expression is not parseable by the Snakemake 7.32 runtime used
-# for this pipeline. Keep the Mutect2/BCFtools rules from the pinned module,
-# but remove that unused include in a local compatibility commit.
-snv_module="${module_root}/snv_indels"
-snv_patch="${pipeline_root}/build/patches/snv_indels_v2.1.0_snakemake7.patch"
-if git -C "${snv_module}" rev-parse --verify refs/tags/v2.1.0-nagini >/dev/null 2>&1; then
-  echo "Keeping existing snv_indels compatibility tag v2.1.0-nagini"
-elif git -C "${snv_module}" rev-parse --verify refs/tags/v2.1.0-quicken >/dev/null 2>&1; then
-  # Migrate a vendor checkout created before the pipeline was renamed.
-  git -C "${snv_module}" tag -f "v2.1.0-nagini" "refs/tags/v2.1.0-quicken" >/dev/null
-  echo "Migrated existing snv_indels tag v2.1.0-quicken to v2.1.0-nagini"
-elif git -C "${snv_module}" apply --check "${snv_patch}" >/dev/null 2>&1; then
-  git -C "${snv_module}" apply "${snv_patch}"
-  git -C "${snv_module}" -c user.name="nagini builder" -c user.email="nagini@localhost" commit -am "Compatibility patch for Snakemake 7" >/dev/null
-  git -C "${snv_module}" tag -f "v2.1.0-nagini" >/dev/null
-else
-  echo "snv_indels is neither pristine v2.1.0 nor tagged v2.1.0-nagini; refusing to overwrite it" >&2
-  exit 1
-fi
-
 if [[ -d "${wrapper_root}/.git" ]]; then
   echo "Keeping existing ${wrapper_root}"
 else
