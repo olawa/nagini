@@ -1,0 +1,26 @@
+---
+# Miarka (UPPMAX): runtime settings only.
+#
+# Reference paths live in config/reference_files/reference_files_miarka.yaml,
+# and none are filled in yet: which FASTA nagini uses on Miarka is still to be
+# decided (the CGU library's GRCh38 there is GIABv3 with masking and decoys,
+# not the GRCmasked build marvin uses). Until then a run stops at parse time
+# with "reference_build=... has no fasta configured".
+SITE_ID: miarka
+REFERENCE_ROOT: /proj/ngi2024001/nobackup/cgu/library/references
+HYDRA_LOCAL_PATH: vendor
+RESOURCES_FILE: config/resources/resources_miarka.yaml
+# SLURM allocates each job from resources_miarka.yaml; do not rescale threads.
+scale_threads_to_cores: false
+
+# No VEP cache, snpEff database or SV annotation panel is registered for
+# Miarka yet.
+annotate_small_variants_with_vep: false
+vep:
+  skip: true
+annotate_svs: false
+
+container_runtime: singularity
+singularity_binds:
+  - /proj
+  - /scratch

@@ -98,7 +98,7 @@ Options:
   --analysis-dir PATH           Analysis/output directory (default: current directory).
   --pipeline-path PATH          Nagini checkout (default: this checkout).
   --configfile PATH             Base config (default: config/config.yaml).
-  --site NAME                   Runtime site: local, workstation, or marvin (default: local).
+  --site NAME                   Runtime site: local, workstation, marvin or miarka (default: local).
   --site-config PATH            Site config (default: config/site_configs/site_config_<site>.yaml).
   --reference-files PATH        Reference registry (default: config/reference_files/reference_files_<site>.yaml).
   --library-root PATH           Optional cgu/library root recorded in the run snapshot.
@@ -527,8 +527,8 @@ fi
 [[ -f "$base_config" ]] || die "Config file does not exist: $base_config"
 [[ -z "$barcode_map" || -f "$barcode_map" ]] || die "Barcode map does not exist: $barcode_map"
 case "$site" in
-    local|workstation|marvin) ;;
-    *) die "Unsupported --site: $site (expected local, workstation, or marvin)" ;;
+    local|workstation|marvin|miarka) ;;
+    *) die "Unsupported --site: $site (expected local, workstation, marvin or miarka)" ;;
 esac
 [[ -f "$site_config" ]] || die "Site config does not exist: $site_config"
 [[ -f "$reference_files" ]] || die "Reference registry does not exist: $reference_files"

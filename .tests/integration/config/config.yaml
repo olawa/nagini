@@ -4,7 +4,7 @@ samples: ".tests/integration/samples.tsv"
 units: ".tests/integration/units.tsv"
 hydra_local_path: "vendor"
 output: "config/output_files.yaml"
-resources: "config/resources.yaml"
+resources: "config/resources/resources_local.yaml"
 default_container: "docker://hydragenetics/common:3.1.1"
 modules:
   alignment: "v0.9.0"

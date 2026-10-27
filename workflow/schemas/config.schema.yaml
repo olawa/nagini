@@ -856,6 +856,11 @@ properties:
   site:
     type: string
     description: Runtime site selected by the launcher, for example local or marvin.
+  scale_threads_to_cores:
+    type: boolean
+    description: >-
+      Give compute-heavy rules all the cores Snakemake was started with. For
+      single-host sites; cluster sites set it false.
   site_config_path:
     type: string
     description: site config the launcher merged in

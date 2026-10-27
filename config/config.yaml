@@ -4,7 +4,7 @@
 # expands the {{VARIABLE}} values before Snakemake starts.
 SITE_ID: local
 HYDRA_LOCAL_PATH: "vendor"
-RESOURCES_FILE: "config/resources.yaml"
+RESOURCES_FILE: "config/resources/resources_local.yaml"
 DEFAULT_CONTAINER: "docker://hydragenetics/common:3.1.1"
 REFERENCE_ROOT: "references"
 CONTAINER_CACHE: "vendor/containers"
@@ -60,6 +60,9 @@ ARRIBA_CONTAINER: "docker://uhrigs/arriba:2.4.0"
 
 
 site: "{{SITE_ID}}"
+# Give the compute-heavy rules all the cores Snakemake was started with. Right
+# for a single host; cluster sites set it false in their site config.
+scale_threads_to_cores: true
 hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
 
 samples: "config/samples.tsv"

@@ -232,10 +232,13 @@ validate(config, schema="../schemas/resources.schema.yaml")
 
 
 def _scale_workstation_resources(cfg):
-    """Dynamically scale compute-heavy sequential rules to the allocated core budget."""
-    site = str(cfg.get("site", "")).strip().lower()
-    # Apply dynamic scaling on workstation and local runs (not cluster scheduler environments like marvin)
-    if site not in ("workstation", "local", ""):
+    """Dynamically scale compute-heavy sequential rules to the allocated core budget.
+
+    For single-host sites, where the jobs share the cores given to Snakemake.
+    A site config switches it off with scale_threads_to_cores: false where a
+    scheduler allocates each job its own resources (marvin, miarka).
+    """
+    if not cfg.get("scale_threads_to_cores", True):
         return cfg
 
     cores = None

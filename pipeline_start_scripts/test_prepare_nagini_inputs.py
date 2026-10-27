@@ -43,13 +43,36 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             config = yaml.safe_load(runtime.read_text())
 
         self.assertEqual(config["site"], "marvin")
-        self.assertEqual(config["resources"], str(pipeline_root / "config/resources_marvin.yaml"))
+        self.assertEqual(config["resources"], str(pipeline_root / "config/resources/resources_marvin.yaml"))
         self.assertTrue(config["references"]["hg38"]["fasta"].startswith("/beegfs-storage/"))
         self.assertTrue(config["annotate_small_variants_with_vep"])
         self.assertTrue(config["annotate_svs"])
         self.assertIn("--everything", config["vep"]["extra"])
         self.assertEqual(config["site_config_path"], str(args.site_config.resolve()))
         self.assertEqual(config["reference_files_path"], str(args.reference_files.resolve()))
+
+    def test_miarka_has_its_own_layers_and_no_reference_yet(self):
+        """Miarka gets every site layer; its references wait for a decision."""
+
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_miarka.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_miarka.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+
+        self.assertEqual(config["site"], "miarka")
+        self.assertEqual(config["resources"], str(pipeline_root / "config/resources/resources_miarka.yaml"))
+        self.assertFalse(config["scale_threads_to_cores"])
+        for build in ("hg38", "hs1", "hg19"):
+            # An empty fasta is what common.smk reports as "not installed".
+            self.assertEqual(config["references"][build]["fasta"], "", build)
+        self.assertTrue((pipeline_root / "profiles/miarka/config.yaml").is_file())
 
     def test_workstation_reference_paths_are_preserved(self):
         pipeline_root = Path(__file__).parents[1]
@@ -1292,7 +1315,7 @@ class ReferenceRegistryTest(unittest.TestCase):
         for build in ("HG38", "HS1"):
             for suffix in set(PREPARE.REGISTRY_BUILD_VARIABLES.values()):
                 reference_variables.add(f"{build}_{suffix}")
-        for site in ("local", "workstation", "marvin"):
+        for site in ("local", "workstation", "marvin", "miarka"):
             site_config = PREPARE.read_yaml(
                 self.PIPELINE_ROOT / f"config/site_configs/site_config_{site}.yaml"
             )
@@ -1300,7 +1323,7 @@ class ReferenceRegistryTest(unittest.TestCase):
             self.assertEqual(overlap, [], f"{site} still declares {overlap}")
 
     def test_every_shipped_registry_matches_its_site(self):
-        for site in ("local", "workstation", "marvin"):
+        for site in ("local", "workstation", "marvin", "miarka"):
             registry = PREPARE.read_yaml(
                 self.PIPELINE_ROOT / f"config/reference_files/reference_files_{site}.yaml"
             )
@@ -1368,7 +1391,7 @@ class ReferenceRootTest(unittest.TestCase):
     def test_shipped_registries_declare_a_root_and_use_relative_paths(self):
         """Guards against a site's tree location creeping back onto every line."""
 
-        for site in ("local", "workstation", "marvin"):
+        for site in ("local", "workstation", "marvin", "miarka"):
             registry = PREPARE.read_yaml(
                 self.PIPELINE_ROOT / f"config/reference_files/reference_files_{site}.yaml"
             )

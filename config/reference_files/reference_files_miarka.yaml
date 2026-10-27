@@ -1,0 +1,83 @@
+---
+# Reference inventory for the miarka site.
+#
+# Every path is empty: no reference is registered for nagini on Miarka yet.
+# Which GRCh38 FASTA to use there is a decision of its own (see
+# site_config_miarka.yaml), and hg19 for the BCR-ABL1 assay is not in the CGU
+# library. An empty path means "not installed"; once a build's fasta/fai/dict
+# are filled in, paths are relative to reference_root.
+#
+# type: file | directory | optional. Empty checksums are not verified; fill
+# them in and run the launcher with --verify-references to check them.
+site: miarka
+reference_root: "{{REFERENCE_ROOT}}"
+reference_builds:
+  hg38:
+    fasta:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+  hs1:
+    fasta:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+  hg19:
+    fasta:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    fai:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+    dict:
+      path: ''
+      type: file
+      url: ''
+      checksum: ''
+annotations:
+  vep_cache:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''
+  snpeff_db:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''
+  simple_sv_panel:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''
+  simple_sv_fusion_pairs:
+    path: ''
+    type: optional
+    url: ''
+    checksum: ''

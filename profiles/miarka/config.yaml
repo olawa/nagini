@@ -1,0 +1,17 @@
+jobs: 100
+keep-going: true
+restart-times: 1
+rerun-incomplete: true
+rerun-triggers: [mtime, input]
+max-jobs-per-second: 20
+resources: "load=100"
+max-status-checks-per-second: 100
+use-singularity: true
+# As the other CGU pipelines on Miarka (hastings_rd_wes, marple_rd_tc): drmaa
+# with each rule's resources from config/resources/resources_miarka.yaml.
+drmaa: "-p {resources.partition} -t {resources.time} -n {resources.threads} --mem={resources.mem_mb} --mem-per-cpu={resources.mem_per_cpu} {resources.gres} -J {rule} -A ngi2024001 -e slurm/{rule}_%j.err -o slurm/{rule}_%j.out --nodes=1-1"
+# Rules that do not request a GPU expand {resources.gres} to nothing.
+default-resources: [gres="", ]
+drmaa-log-dir: "slurm"
+# /scratch: the jobs' node-local TMPDIR must be visible inside the containers.
+singularity-args: "-e --cleanenv -B /proj -B /scratch --nv"

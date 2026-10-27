@@ -1,0 +1,186 @@
+# Per-rule resources on Miarka: resources_marvin.yaml with Miarka's partitions
+# (core, gpu) and GPU request, as the other CGU pipelines on Miarka use.
+---
+default_resources:
+  threads: 1
+  time: "24:00:00"
+  mem_mb: 6144
+  mem_per_cpu: 6144
+  partition: "core"
+  gres: ""
+
+stage_aligned_bam:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+dorado:
+  basecaller_threads: 24
+  basecaller_time: "72:00:00"
+  basecaller_mem_mb: 120000
+  basecaller_mem_per_cpu: 5000
+  # Partition and gres follow hastings_rd_wes on Miarka (gpu, L40S). Verify
+  # both against sinfo before the first run.
+  basecaller_partition: "gpu"
+  basecaller_gres: "--gres=gres:gpu:l40s:3"
+  demux_threads: 20
+  demux_time: "12:45:00"
+  demux_mem_mb: 122880
+  demux_mem_per_cpu: 6144
+  demux_partition: "core"
+dorado_demux_bam:
+  threads: 1
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+dorado_fastq:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+dorado_alignment:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core"
+finalize_dorado_alignment:
+  threads: 8
+  time: "12:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core"
+minimap2_fastq_align:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core"
+minimap2_unmapped_bam_align:
+  threads: 32
+  time: "72:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core"
+samtools_merge_bam:
+  threads: 8
+  time: "12:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core"
+sniffles2_call:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 4096
+  partition: "core"
+
+savana_ont_to:
+  threads: 16
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 2048
+  partition: "core"
+
+cramino:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+mosdepth:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+mosdepth_bed:
+  threads: 4
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+gatk_mutect2:
+  threads: 8
+  time: "48:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 8192
+  partition: "core"
+gatk_merge_mutect_stats:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 16384
+  partition: "core"
+gatk_filter_mutect_calls:
+  threads: 1
+  time: "08:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 32768
+  partition: "core"
+bcftools_concat:
+  threads: 2
+  time: "08:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+bcftools_norm_mutect2:
+  threads: 2
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 8192
+  partition: "core"
+clairs_to_call:
+  threads: 24
+  time: "48:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 4096
+  partition: "core"
+clairs_to_concat:
+  threads: 4
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 4096
+  partition: "core"
+bcftools_norm_clairs_to:
+  threads: 2
+  time: "04:00:00"
+  mem_mb: 16384
+  mem_per_cpu: 8192
+  partition: "core"
+vep:
+  threads: 8
+  time: "24:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 8192
+  partition: "core"
+nagini_excel_report:
+  threads: 1
+  time: "02:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: "core"
+sv_summary:
+  threads: 1
+  time: "04:00:00"
+  mem_mb: 8192
+  mem_per_cpu: 8192
+  partition: "core"
+
+cnv_rindels:
+  threads: 32
+  time: "04:00:00"
+  mem_mb: 65536
+  mem_per_cpu: 2048
+  partition: "core"
+
+bcr_abl_rindels:
+  threads: 16
+  time: "02:00:00"
+  mem_mb: 32768
+  mem_per_cpu: 2048
+  partition: "core"
+

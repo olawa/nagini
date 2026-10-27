@@ -7,7 +7,9 @@ SITE_ID: marvin
 REFERENCE_ROOT: /beegfs-storage/data/ref_genomes
 CONTAINER_CACHE: /beegfs-storage/projects/wp4/nobackup/singularity_cache
 HYDRA_LOCAL_PATH: vendor
-RESOURCES_FILE: config/resources_marvin.yaml
+RESOURCES_FILE: config/resources/resources_marvin.yaml
+# SLURM allocates each job from resources_marvin.yaml; do not rescale threads.
+scale_threads_to_cores: false
 DEFAULT_CONTAINER: docker://hydragenetics/common:3.1.1
 
 # No verified hs1/T2T path was present in the Marvin configuration.

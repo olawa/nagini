@@ -129,7 +129,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--site",
-        choices=("local", "workstation", "marvin"),
+        choices=("local", "workstation", "marvin", "miarka"),
         default="workstation",
         help="Runtime site for default site-config and reference-files (default: workstation).",
     )
@@ -1834,7 +1834,7 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     config["samples"] = str((analysis_dir / "samples.tsv").resolve())
     config["units"] = str((analysis_dir / "units.tsv").resolve())
     config["output"] = str(Path(resolve_config_path(config.get("output", "config/output_files.yaml"), base_dir)))
-    config["resources"] = str(Path(resolve_config_path(config.get("resources", "config/resources.yaml"), base_dir)))
+    config["resources"] = str(Path(resolve_config_path(config.get("resources", "config/resources/resources_local.yaml"), base_dir)))
     config["hydra_local_path"] = str(Path(resolve_config_path(config.get("hydra_local_path", "vendor"), base_dir)))
     if config.get("container_cache"):
         config["container_cache"] = str(resolve_config_path(config["container_cache"], base_dir))

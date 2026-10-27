@@ -87,13 +87,21 @@ ligger i:
 * [`config/site_configs/site_config_workstation.yaml`](config/site_configs/site_config_workstation.yaml)
   för den delade `/data/references`-mappen på workstation;
 * [`config/site_configs/site_config_marvin.yaml`](config/site_configs/site_config_marvin.yaml)
-  för Marvin.
+  för Marvin;
+* [`config/site_configs/site_config_miarka.yaml`](config/site_configs/site_config_miarka.yaml)
+  för Miarka. Referensposterna står tomma tills valet av fasta där är gjort,
+  så en körning stoppar med ett tydligt fel i stället för att gissa.
+
+Varje site har också en profil, `profiles/<site>/`, och en resursfil,
+`config/resources/resources_<site>.yaml`.
 
 De separata registren
 [`config/reference_files/reference_files_local.yaml`](config/reference_files/reference_files_local.yaml),
 [`config/reference_files/reference_files_workstation.yaml`](config/reference_files/reference_files_workstation.yaml)
-och
+,
 [`config/reference_files/reference_files_marvin.yaml`](config/reference_files/reference_files_marvin.yaml)
+och
+[`config/reference_files/reference_files_miarka.yaml`](config/reference_files/reference_files_miarka.yaml)
 beskriver samma referenser med logiskt namn, path, källa och checksumfält.
 Registret är en reproducerbar provenance-snapshot; den aktiva Snakemake-
 konfigurationen är den körspecifika `config.nagini.yaml` som startscriptet
@@ -101,8 +109,7 @@ skriver.
 
 Site-konfigurationen slås ihop med den gemensamma konfigurationen före start.
 Relativa paths löses mot pipeline-roten och placeholders expanderas innan
-Snakemake validerar configen. `config/config_marvin.yaml` finns kvar som en
-äldre kompatibilitetsfil, men nya körningar bör använda `--site marvin`.
+Snakemake validerar configen.
 
 ## Vad som produceras
 
@@ -231,20 +238,9 @@ pipeline_start_scripts/start_nagini.sh \
 ```
 
 Detta använder gemensam `config/config.yaml`, Marvin-site-config,
-Marvin-reference registry och `profiles/marvin`. Den äldre direkta varianten
-med `config/config_marvin.yaml` fungerar fortfarande för kompatibilitet.
-
-```bash
-WRAPPER_PREFIX="git+file://$(pwd)/vendor/snakemake-wrappers"
-snakemake \
-  --profile profiles/marvin \
-  --configfile config/config_marvin.yaml \
-  --wrapper-prefix "${WRAPPER_PREFIX}"
-```
-
-`config/config_marvin.yaml` använder de hg38-vägar som redan förekommer i
-Fluffy/CGU-konfigurationerna och resursprofilen följer samma Marvin/DRMAA-
-mönster. Kontrollera alltid att just ditt Marvinprojekt har rätt bind mounts,
+Marvin-reference registry och `profiles/marvin`. Den tidigare sammansatta
+`config/config_marvin.yaml` är borttagen: den upprepade modulversioner och
+sökvägar som redan finns i lagren ovan, och drev isär från dem. Kontrollera alltid att just ditt Marvinprojekt har rätt bind mounts,
 konto och partition innan fullskalig körning.
 
 ## Mutect2 på ONT
