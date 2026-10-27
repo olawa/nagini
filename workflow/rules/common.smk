@@ -20,8 +20,10 @@ available to every module as ``config["reference"]``.
 import json
 import os
 import pathlib
+import platform
 import re
 import shlex
+import shutil
 import sys
 from datetime import datetime
 
@@ -78,6 +80,13 @@ if not workflow.overwrite_configfiles:
     sys.exit("Pass a config file with --configfile or --configfiles.")
 
 
+# {{VAR}} expansion, used instead of hydra_genetics.utils.misc.replace_dict_variables.
+# That one makes a single pass, so a variable whose value holds another {{VAR}}
+# (a path built on another variable) stays half-expanded; it skips dicts inside
+# lists; it fails on a variable whose value is not a string; and a missing
+# variable is a bare KeyError.
+# This one resolves nested variables, walks the whole config, and names every
+# variable left unresolved.
 _config_template = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
@@ -1546,3 +1555,370 @@ def compile_output_file_list(wildcards):
         else:
             output_files.append(outdir / clean_report_path(template))
     return output_files
+
+
+# ---------------------------------------------------------------------------
+# Input functions and helpers for the local rule files. They used to sit at the
+# top of the rule files; as in the hydra templates, rule files now hold rules
+# and the functions they call live here. One section per rule file.
+# ---------------------------------------------------------------------------
+
+
+# --- read filtering (read_filter.smk) ---
+
+
+def get_nanostream_binary():
+    """Resolve the nanostream executable, or fail with what to do about it.
+
+    There is deliberately no Python fallback. A fallback that reimplements the
+    filter is worse than no filter at all: it computed mean read quality as the
+    arithmetic mean of Phred scores, which overestimates quality on exactly the
+    ONT failure mode this filter exists to catch (a good read with a bad tail),
+    so the same config silently kept different reads depending on which
+    implementation happened to be resolved on that host.
+
+    nanostream computes it as -10*log10(mean(10^(-q/10))) on the FASTQ path and
+    reads the qs tag directly on the BAM path.
+    """
+
+    configured = config.get("read_filter", {}).get("binary", "")
+    if configured:
+        expanded = os.path.expanduser(os.path.expandvars(configured))
+        if os.path.isabs(expanded):
+            if os.path.exists(expanded) and os.access(expanded, os.X_OK):
+                return expanded
+            raise WorkflowError(
+                f"read_filter.binary points at {expanded}, which is not an executable file."
+            )
+        resolved = shutil.which(configured)
+        if resolved:
+            return resolved
+        raise WorkflowError(f"read_filter.binary={repr(configured)} is not on PATH.")
+
+    for name in ("nanostream", "nanofilter"):
+        resolved = shutil.which(name)
+        if resolved:
+            return resolved
+
+    # Resolved on the submitting host, so a bundled binary has to be one the
+    # compute nodes can also execute; keep it in the repo on shared storage.
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    arch_alias = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x86_64", "amd64": "x86_64"}.get(
+        machine, machine
+    )
+    bundled = os.path.join(workflow.basedir, "bin", f"{system}-{arch_alias}", "nanostream")
+    if os.path.exists(bundled) and os.access(bundled, os.X_OK):
+        return bundled
+
+    raise WorkflowError(
+        "read_filter is enabled but nanostream was not found. Put it on PATH, set "
+        "read_filter.binary to its path, drop the binary in "
+        f"workflow/bin/{system}-{arch_alias}/nanostream, or set read_filter.enabled: "
+        "false to skip filtering."
+    )
+
+
+def is_read_filtering_enabled(sample):
+    """Check if read pre-filtering is enabled for a given sample/assay."""
+    if config.get("read_filter", {}).get("enabled") is False:
+        return False
+    setting = get_assay_setting(sample, "read_filter", "enabled", None)
+    if setting is not None:
+        return bool(setting)
+    return bool(config.get("read_filter", {}).get("enabled", False))
+
+
+def get_fastq_for_alignment(wildcards):
+    """Return filtered FASTQ if filtering is enabled, else raw unit FASTQ."""
+    if is_read_filtering_enabled(wildcards.sample):
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
+    return get_unit_input(wildcards, "fastq1")
+
+
+def get_unmapped_bam_for_alignment(wildcards):
+    """Return filtered unmapped BAM if filtering is enabled, else raw BAM."""
+    if is_read_filtering_enabled(wildcards.sample):
+        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.unmapped.bam".strip()
+    return get_unit_input(wildcards, "bam")
+
+
+# --- BCR-ABL1 resources (bcr_abl.smk) ---
+
+
+def _bcr_abl_resource(filename):
+    """Return absolute path to a bundled BCR-ABL1 resource file."""
+    return os.path.join(workflow.basedir, "resources", "bcr_abl", filename)
+
+
+def _bcr_abl_build():
+    """Only select bundled coordinates for a reference they describe."""
+    build = str(config.get("reference_build", "hg38")).strip().lower()
+    aliases = {"hg19": "hg19", "grch37": "hg19", "b37": "hg19",
+               "hg38": "hg38", "grch38": "hg38"}
+    if build not in aliases:
+        raise WorkflowError(
+            "No bundled BCR-ABL1 resources for reference_build={!r}; "
+            "supported builds are hg19/GRCh37 and hg38/GRCh38.".format(build)
+        )
+    return aliases[build]
+
+
+def _branford_bed():
+    """Pick the branford positions BED that matches the configured reference build."""
+    override = config.get("bcr_abl", {}).get("branford_bed", "")
+    if override:
+        return override
+    bed_name = f"branford_positions_{_bcr_abl_build()}.bed"
+    return _bcr_abl_resource(bed_name)
+
+
+def _bcr_abl_exons_bed():
+    """Pick the BCR-ABL1 exon coordinates BED that matches the configured reference build."""
+    override = config.get("bcr_abl", {}).get("exons_bed", "")
+    if override:
+        return override
+    bed_name = f"bcr_abl1_exons_{_bcr_abl_build()}.bed"
+    return _bcr_abl_resource(bed_name)
+
+
+def _bcr_abl_gtf():
+    """Pick the gene annotation GTF for BCR-ABL1 fusion plotting."""
+    override = config.get("bcr_abl", {}).get("gtf", "")
+    if override and os.path.isfile(override):
+        return override
+    ref_gtf = config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", "")
+    if ref_gtf and os.path.isfile(ref_gtf):
+        return ref_gtf
+    gtf_name = f"bcr_abl_{_bcr_abl_build()}.gtf"
+    return _bcr_abl_resource(gtf_name)
+
+
+# --- CNVkit and the CNV HTML report (cnvkit.smk / cnv_html_report.smk) ---
+
+
+def _get_ref(key, config):
+    """Return a reference file path resolved via reference_build."""
+    build = config.get("reference_build", "hg38")
+    return config["references"][build][key]
+
+
+def _cnvkit_cytoband(wildcards):
+    """Return cytoband file if cytobands are enabled and file exists, else empty list.
+
+    If the configured cytoband file is gzipped (.gz), return the path to the
+    decompressed intermediate generated by rule decompress_cytoband, because
+    the vendored merge_cnv_json.py opens cytobands as plain text with open().
+    """
+    if config.get("cnv_html_report", {}).get("cytobands", False):
+        build = config.get("reference_build", "hg38")
+        cytoband = config["references"][build].get("cytoband", "")
+        if cytoband:
+            if cytoband.endswith(".gz"):
+                return f"reports/cnv_html_report/cytobands_{build}.txt"
+            return cytoband
+    return []
+
+
+# --- small-variant post-processing (snv_postprocess.smk) ---
+
+
+def get_vep_custom_annotations(wildcards):
+    """Add ClinVar as an optional, indexed VEP custom annotation."""
+
+    clinvar = get_clinvar_vcf(wildcards)
+    if not clinvar or not os.path.isfile(f"{clinvar}.tbi"):
+        return ""
+    return (
+        f"--custom {clinvar},short_name=ClinVar,format=vcf,type=exact,"
+        "fields=CLNSIG%CLNREVSTAT%CLNDN"
+    )
+
+
+# --- summary Excel report (excel_report.smk) ---
+
+
+# Keys whose file exists only for some assays. Everything that reads them has
+# to align them to the sample list by position, so they are built once, per
+# sample, with an empty string where the file does not exist.
+_SUMMARY_OPTIONAL_KEYS = (
+    "target_coverages",
+    "target_craminos",
+    "sv_tsvs",
+    "translocation_tsvs",
+    "rindels_sv_tsvs",
+    "rindels_translocation_tsvs",
+    "savana_sv_tsvs",
+    "savana_translocation_tsvs",
+    "cnv_tsvs",
+    "snv_vcfs",
+    "bcr_abl_fusions",
+    "bcr_abl_mutations",
+    "bcr_abl_all_sites",
+    "bcr_abl_phasings",
+    "bcr_abl_exons",
+    "bcr_abl_plots",
+    "bcr_abl_vardictrust_vcfs",
+    "bcr_abl_rindels_vcfs",
+    "bcr_abl_bcftools_vcfs",
+)
+
+
+def summary_report_files():
+    """One row per sample/type with every summary input, "" when absent.
+
+    The optional files exist only for some assays. Appending them only for
+    qualifying samples and then indexing the compacted list by sample position
+    attributed one sample's variants to another as soon as a run mixed assays,
+    so the alignment is built here and both the rule's input and its params
+    are derived from it.
+    """
+
+    rows = []
+    for sample in get_samples(samples):
+        s = clean_report_path(sample)
+        for unit_type in get_unit_types_for_sample(sample):
+            t = clean_report_path(unit_type)
+            snv_vcf = ""
+            if sample_needs_dna_variant_calling(s):
+                caller = get_small_variant_caller(s, t)
+                if caller == "deepvariant":
+                    caller_dir = "snv_indels/deepvariant_postprocess"
+                elif caller == "mutect2":
+                    caller_dir = "snv_indels/mutect2_postprocess"
+                else:
+                    caller_dir = "snv_indels/clairs_to_postprocess"
+                suffix = ".filtered.norm.vep.vcf.gz" if vep_enabled() else ".filtered.norm.vcf.gz"
+                snv_vcf = clean_report_path(f"{caller_dir}/{s}_{t}{suffix}")
+            bcr = sample_has_assay_module(s, "bcr_abl")
+            rows.append(
+                {
+                    "reports": clean_report_path(f"reports/{s}_{t}.nagini_report.xlsx"),
+                    "craminos": clean_report_path(f"qc/cramino/{s}_{t}.txt"),
+                    "wgs_coverages": clean_report_path(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt"),
+                    "target_craminos": (
+                        clean_report_path(f"qc/cramino_target/{s}_{t}.txt")
+                        if sample_has_target_metrics(s)
+                        else ""
+                    ),
+                    "target_coverages": (
+                        clean_report_path(f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt")
+                        if sample_has_target_metrics(s)
+                        else ""
+                    ),
+                    "snv_vcfs": snv_vcf,
+                    "sv_tsvs": (
+                        clean_report_path(f"reports/sv_summary/{s}_{t}.tsv")
+                        if sniffles2_enabled(s)
+                        else ""
+                    ),
+                    "translocation_tsvs": (
+                        clean_report_path(f"reports/sv_summary/{s}_{t}.translocations.tsv")
+                        if sniffles2_enabled(s)
+                        else ""
+                    ),
+                    "rindels_sv_tsvs": (
+                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.tsv")
+                        if sample_has_rindels_sv(s)
+                        else ""
+                    ),
+                    "rindels_translocation_tsvs": (
+                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv")
+                        if sample_has_rindels_sv(s)
+                        else ""
+                    ),
+                    "savana_sv_tsvs": (
+                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.tsv")
+                        if savana_enabled(s)
+                        else ""
+                    ),
+                    "savana_translocation_tsvs": (
+                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.translocations.tsv")
+                        if savana_enabled(s)
+                        else ""
+                    ),
+                    "cnv_tsvs": (
+                        clean_report_path(f"reports/cnv_summary/{s}_{t}.cnv.tsv")
+                        if sample_needs_cnv_calling(s)
+                        else ""
+                    ),
+                    "bcr_abl_fusions": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv") if bcr else "",
+                    "bcr_abl_mutations": clean_report_path(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv") if bcr else "",
+                    "bcr_abl_all_sites": clean_report_path(f"reports/bcr_abl/{s}_{t}.branford_all_sites.tsv") if bcr else "",
+                    "bcr_abl_phasings": clean_report_path(f"reports/bcr_abl/{s}_{t}.phasing.tsv") if bcr else "",
+                    "bcr_abl_exons": clean_report_path(f"reports/bcr_abl/{s}_{t}.exon_coverage.tsv") if bcr else "",
+                    "bcr_abl_plots": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_plot.png") if bcr else "",
+                    "bcr_abl_vardictrust_vcfs": (
+                        clean_report_path(f"snv_indels/vardictrust/{s}_{t}.bcr_abl.vcf.gz")
+                        if bcr and bcr_abl_vardictrust_enabled(s)
+                        else ""
+                    ),
+                    "bcr_abl_rindels_vcfs": (
+                        clean_report_path(f"snv_indels/rindels/{s}_{t}.rindels.vcf.gz")
+                        if bcr and bcr_abl_rindels_enabled(s)
+                        else ""
+                    ),
+                    "bcr_abl_bcftools_vcfs": (
+                        clean_report_path(f"snv_indels/bcftools_mpileup/{s}_{t}.bcr_abl.vcf.gz")
+                        if bcr and bcr_abl_bcftools_enabled(s)
+                        else ""
+                    ),
+                }
+            )
+    return rows
+
+
+def get_summary_report_inputs(wildcards):
+    """The files the summary depends on. Snakemake inputs cannot be empty."""
+
+    rows = summary_report_files()
+    return {
+        key: [clean_report_path(row[key]) for row in rows if clean_report_path(row[key])]
+        for key in rows[0]
+    } if rows else {}
+
+
+def get_summary_report_paths(key):
+    """One entry per sample for an optional input, "" where it does not exist."""
+
+    return [clean_report_path(row[key]) for row in summary_report_files()]
+
+
+# --- MultiQC (Snakefile) ---
+
+
+def get_multiqc_input_files(wildcards):
+    report_name = getattr(wildcards, "report", "nanopore")
+    report_cfg = config.get("multiqc", {}).get("reports", {}).get(report_name, {})
+    template_files = report_cfg.get("qc_files", [])
+    included_types = set(report_cfg.get("included_unit_types", ["N", "T", "R"]))
+    resolved = []
+    # Run-level QC belongs to the flowcell, not to a sample, so it is listed
+    # separately and only when the run actually produced it.
+    for run_file in report_cfg.get("run_files", []):
+        if "dorado_demux" in run_file and not dorado_barcodes:
+            continue
+        resolved.append(run_file)
+    for _, row in units.iterrows():
+        sample = str(row.get("sample", "")).strip()
+        unit_type = str(row.get("type", "")).strip()
+        pu = str(row.get("processing_unit", "")).strip()
+        barcode = str(row.get("barcode", "")).strip()
+        if unit_type in included_types:
+            for tf in template_files:
+                if "mosdepth_bed" in tf and not sample_has_target_metrics(sample):
+                    continue
+                if "sv_summary" in tf and not sample_needs_sv_calling(sample):
+                    continue
+                resolved.append(
+                    tf.format(
+                        sample=sample,
+                        type=unit_type,
+                        processing_unit=pu,
+                        barcode=barcode,
+                    )
+                )
+    return sorted(set(resolved))
+
+
+# --- end of rule-file helpers ---

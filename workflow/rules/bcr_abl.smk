@@ -4,56 +4,6 @@ __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
 
-def _bcr_abl_resource(filename):
-    """Return absolute path to a bundled BCR-ABL1 resource file."""
-    return os.path.join(workflow.basedir, "resources", "bcr_abl", filename)
-
-
-def _bcr_abl_build():
-    """Only select bundled coordinates for a reference they describe."""
-    build = str(config.get("reference_build", "hg38")).strip().lower()
-    aliases = {"hg19": "hg19", "grch37": "hg19", "b37": "hg19",
-               "hg38": "hg38", "grch38": "hg38"}
-    if build not in aliases:
-        raise WorkflowError(
-            "No bundled BCR-ABL1 resources for reference_build={!r}; "
-            "supported builds are hg19/GRCh37 and hg38/GRCh38.".format(build)
-        )
-    return aliases[build]
-
-
-def _branford_bed():
-    """Pick the branford positions BED that matches the configured reference build."""
-    override = config.get("bcr_abl", {}).get("branford_bed", "")
-    if override:
-        return override
-    bed_name = f"branford_positions_{_bcr_abl_build()}.bed"
-    return _bcr_abl_resource(bed_name)
-
-
-def _bcr_abl_exons_bed():
-    """Pick the BCR-ABL1 exon coordinates BED that matches the configured reference build."""
-    override = config.get("bcr_abl", {}).get("exons_bed", "")
-    if override:
-        return override
-    bed_name = f"bcr_abl1_exons_{_bcr_abl_build()}.bed"
-    return _bcr_abl_resource(bed_name)
-
-
-def _bcr_abl_gtf():
-    """Pick the gene annotation GTF for BCR-ABL1 fusion plotting."""
-    override = config.get("bcr_abl", {}).get("gtf", "")
-    if override and os.path.isfile(override):
-        return override
-    ref_gtf = config.get("reference", {}).get("gene_annotation", "") or config.get("reference", {}).get("gtf", "")
-    if ref_gtf and os.path.isfile(ref_gtf):
-        return ref_gtf
-    gtf_name = f"bcr_abl_{_bcr_abl_build()}.gtf"
-    return _bcr_abl_resource(gtf_name)
-
-
-
-
 rule bcr_abl_fusion_counts:
     """Identify and quantify BCR-ABL1 fusion isoforms from spliced alignments."""
     input:

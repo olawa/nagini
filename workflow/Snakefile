@@ -862,40 +862,6 @@ use rule cramino from qc as qc_cramino_target with:
         )
 
 
-def get_multiqc_input_files(wildcards):
-    report_name = getattr(wildcards, "report", "nanopore")
-    report_cfg = config.get("multiqc", {}).get("reports", {}).get(report_name, {})
-    template_files = report_cfg.get("qc_files", [])
-    included_types = set(report_cfg.get("included_unit_types", ["N", "T", "R"]))
-    resolved = []
-    # Run-level QC belongs to the flowcell, not to a sample, so it is listed
-    # separately and only when the run actually produced it.
-    for run_file in report_cfg.get("run_files", []):
-        if "dorado_demux" in run_file and not dorado_barcodes:
-            continue
-        resolved.append(run_file)
-    for _, row in units.iterrows():
-        sample = str(row.get("sample", "")).strip()
-        unit_type = str(row.get("type", "")).strip()
-        pu = str(row.get("processing_unit", "")).strip()
-        barcode = str(row.get("barcode", "")).strip()
-        if unit_type in included_types:
-            for tf in template_files:
-                if "mosdepth_bed" in tf and not sample_has_target_metrics(sample):
-                    continue
-                if "sv_summary" in tf and not sample_needs_sv_calling(sample):
-                    continue
-                resolved.append(
-                    tf.format(
-                        sample=sample,
-                        type=unit_type,
-                        processing_unit=pu,
-                        barcode=barcode,
-                    )
-                )
-    return sorted(set(resolved))
-
-
 # Hydra's qc module supplies cramino, mosdepth and MultiQC.  The mosdepth rules
 # keep nagini's output paths, and keep the outputs (Hydra marks them temp)
 # because the QC report and the deliverables read them.

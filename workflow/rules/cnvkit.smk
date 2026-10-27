@@ -3,14 +3,6 @@ __copyright__ = "Copyright 2026, Ola Wallerman"
 __email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
-import os
-
-
-def _get_ref(key, config):
-    """Return a reference file path resolved via reference_build."""
-    build = config.get("reference_build", "hg38")
-    return config["references"][build][key]
-
 
 rule cnvkit_targets:
     """Tile the accessible genome into fixed bins, once per reference build.

@@ -11,14 +11,22 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+def common_section(title):
+    """The helpers common.smk holds for one rule file, as source text."""
+
+    source = (ROOT / "workflow/rules/common.smk").read_text()
+    start = source.index(f"# --- {title} (")
+    return source[start:source.index("\n# --- ", start + 1)]
+
+
 class WorkflowContractTest(unittest.TestCase):
     def test_reference_aliases_never_silently_select_wrong_bundled_build(self):
-        source = (ROOT / "workflow/rules/bcr_abl.smk").read_text().split("rule bcr_abl_fusion_counts:")[0]
+        source = common_section("BCR-ABL1 resources")
         for configured, expected in (("hg19", "hg19"), ("GRCh37", "hg19"),
                                      ("b37", "hg19"), ("hg38", "hg38"), ("GRCh38", "hg38")):
             scope = {"os": os, "config": {"reference_build": configured},
                      "WorkflowError": ValueError, "workflow": SimpleNamespace(basedir="workflow")}
-            exec(compile(source, "bcr_abl.smk", "exec"), scope)
+            exec(compile(source, "common.smk", "exec"), scope)
             self.assertTrue(scope["_branford_bed"]().endswith(f"branford_positions_{expected}.bed"))
             self.assertTrue(scope["_bcr_abl_exons_bed"]().endswith(f"bcr_abl1_exons_{expected}.bed"))
             self.assertTrue(scope["_bcr_abl_gtf"]().endswith(f"bcr_abl_{expected}.gtf"))
@@ -27,8 +35,7 @@ class WorkflowContractTest(unittest.TestCase):
             scope["_branford_bed"]()
 
     def test_all_sites_inputs_stay_aligned_in_a_mixed_assay_run(self):
-        source = (ROOT / "workflow/rules/excel_report.smk").read_text()
-        source = source[source.index("_SUMMARY_OPTIONAL_KEYS ="):source.index("rule nagini_summary_excel_report:")]
+        source = common_section("summary Excel report")
         scope = {
             "samples": ["wgs_sample", "bcr_sample"],
             "get_samples": lambda samples: samples,
@@ -41,7 +48,7 @@ class WorkflowContractTest(unittest.TestCase):
                      "savana_enabled", "sample_needs_cnv_calling",
                      "bcr_abl_vardictrust_enabled", "bcr_abl_rindels_enabled", "bcr_abl_bcftools_enabled"):
             scope[name] = lambda sample: False
-        exec(compile(source, "excel_report.smk", "exec"), scope)
+        exec(compile(source, "common.smk", "exec"), scope)
         expected = "reports/bcr_abl/bcr_sample_T.branford_all_sites.tsv"
         self.assertEqual(scope["get_summary_report_paths"]("bcr_abl_all_sites"), ["", expected])
         self.assertEqual(scope["get_summary_report_inputs"](None)["bcr_abl_all_sites"], [expected])
