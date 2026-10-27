@@ -534,7 +534,7 @@ def parse_bcr_abl_tsv(path):
     with open_text(path) as handle:
         header = None
         for line in handle:
-            text = line.strip()
+            text = line.rstrip("\r\n")
             if not text or text.startswith("#"):
                 continue
             fields = text.split("\t")

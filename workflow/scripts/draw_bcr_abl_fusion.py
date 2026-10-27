@@ -27,7 +27,7 @@ def parse_tsv(path: Optional[str]) -> List[Dict[str, str]]:
     with open(path, "r", encoding="utf-8") as handle:
         header = None
         for line in handle:
-            line = line.strip()
+            line = line.rstrip("\r\n")
             if not line or line.startswith("#"):
                 continue
             fields = line.split("\t")

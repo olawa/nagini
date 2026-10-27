@@ -169,6 +169,17 @@ class TestBcrAblPhasingRegressions(unittest.TestCase):
             result = PHASER.load_detected_mutations(path)
             self.assertEqual([row["mutation"] for row in result], ["E255K"])
 
+    def test_load_detected_mutations_handles_trailing_empty_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mutations.tsv"
+            path.write_text(
+                "chrom\tpos\tref\talt\tstatus\tmutation\textra1\textra2\n"
+                "chr9\t30\tA\tG\tDETECTED\tE255K\t\t\n"
+            )
+            result = PHASER.load_detected_mutations(path)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["mutation"], "E255K")
+
     def test_missing_or_malformed_mutation_tsv_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             tmp = Path(directory)

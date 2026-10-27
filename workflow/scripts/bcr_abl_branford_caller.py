@@ -1039,6 +1039,7 @@ def main(argv=None) -> None:
                     "asciminib": profile.get("Asciminib", "Unknown"), "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
                     "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0), "ad_alt_fwd": values["fwd"],
                     "ad_alt_rev": values["rev"], "n_refskip": "NA", "n_deletion": "NA", "n_insertion": "NA",
+                    "depth_context_excluded": 0, "ad_alt_context_excluded": 0,
                 }
                 if hap_status in ("DETECTED", "SUBCLONAL"):
                     passing_haplotypes += 1

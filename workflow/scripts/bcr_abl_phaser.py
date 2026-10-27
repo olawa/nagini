@@ -53,7 +53,7 @@ def load_detected_mutations(tsv_path: Path) -> List[Dict[str, Any]]:
     with tsv_path.open() as handle:
         header = None
         for line in handle:
-            text = line.strip()
+            text = line.rstrip("\r\n")
             if not text or text.startswith("#"):
                 continue
             fields = text.split("\t")
