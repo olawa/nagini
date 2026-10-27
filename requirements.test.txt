@@ -1,4 +1,6 @@
 networkx==2.7
+openpyxl==3.1.5
 pycodestyle==2.8.0
 pytest==6.2.5
-snakefmt==0.6.0
+snakefmt==0.8.5
+xlsxwriter==3.2.9
