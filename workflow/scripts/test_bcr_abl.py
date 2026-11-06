@@ -27,8 +27,6 @@ except ImportError:
     REPORT = None
 
 
-
-
 def create_synthetic_bam(bam_path: Path, reads: list[dict], references: list[tuple[str, int]]):
     """Create a synthetic BAM file for testing."""
     header = {"HD": {"VN": "1.0"}, "SQ": [{"SN": name, "LN": length} for name, length in references]}
@@ -117,7 +115,7 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
             hdr = all_lines[0].split("\t")
             self.assertIn("count_A", hdr)
             self.assertIn("count_T", hdr)
-            rows_by_mut = {row["mutation"]: row for row in [dict(zip(hdr, l.split("\t"))) for l in all_lines[1:]]}
+            rows_by_mut = {row["mutation"]: row for row in [dict(zip(hdr, line.split("\t"))) for line in all_lines[1:]]}
             self.assertIn("T315I", rows_by_mut)
             t315i_row = rows_by_mut["T315I"]
             self.assertEqual(t315i_row["count_T"], "20")
@@ -134,8 +132,10 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
             muts_tsv = tmp / "muts_noise.tsv"
 
             # 2 sites on chr9:
-            # Site 1: E255 (pos 50, G>A) -> will have background noise (A=12, C=10, T=11) out of 1000 reads -> SNR ~ 1.09x -> ARTIFACT
-            # Site 2: T315 (pos 100, C>T) -> will have 25 alt reads ALL forward (0 reverse) with Ref balanced (400 fwd, 400 rev) -> STRAND_BIAS -> ARTIFACT
+            # Site 1: E255 (pos 50, G>A) -> will have background noise (A=12, C=10, T=11) out of 1000 reads
+            #         -> SNR ~ 1.09x -> ARTIFACT
+            # Site 2: T315 (pos 100, C>T) -> will have 25 alt reads ALL forward (0 reverse) with Ref balanced
+            #         (400 fwd, 400 rev) -> STRAND_BIAS -> ARTIFACT
             bed_path.write_text(
                 "chr9\t49\t50\tNM_1:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
                 "chr9\t99\t100\tNM_1:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
@@ -196,11 +196,11 @@ class TestBcrAblBranfordCaller(unittest.TestCase):
             BRANFORD_CALLER.main()
 
             # muts_tsv should have NO detected mutations (both filtered as ARTIFACT)
-            mut_content = [l for l in muts_tsv.read_text().splitlines() if not l.startswith("#") and l.strip()]
+            mut_content = [line for line in muts_tsv.read_text().splitlines() if not line.startswith("#") and line.strip()]
             self.assertEqual(len(mut_content), 1)  # Only header line, no detected mutations
 
             # all_sites_tsv should list both with ARTIFACT and specific filter_reasons
-            all_content = [l for l in all_sites_tsv.read_text().splitlines() if not l.startswith("#") and l.strip()]
+            all_content = [line for line in all_sites_tsv.read_text().splitlines() if not line.startswith("#") and line.strip()]
             header = all_content[0].split("\t")
             status_idx = header.index("status")
             reason_idx = header.index("filter_reason")
@@ -406,11 +406,13 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
                 reads.append({"name": f"wt_r{i}", "chrom": "chr9", "start": 0,
                               "seq": self.REF[:150], "is_reverse": True})
             for i in range(100):                       # alt, same 97% skew
-                seq = list(self.REF[:150]); seq[99] = alt_base
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
                 reads.append({"name": f"alt_f{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": False})
             for i in range(3):
-                seq = list(self.REF[:150]); seq[99] = alt_base
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
                 reads.append({"name": f"alt_r{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": True})
 
@@ -442,7 +444,8 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
                 reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
                               "seq": self.REF[:150], "is_reverse": i % 2 == 0})
             for i in range(60):                        # every alt read forward
-                seq = list(self.REF[:150]); seq[99] = alt_base
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
                 reads.append({"name": f"alt{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": False})
 
@@ -471,11 +474,13 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
                 reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
                               "seq": self.REF[:150], "is_reverse": i % 2 == 0, "qual": 30})
             for i in range(60):                        # good-quality alt
-                seq = list(self.REF[:150]); seq[99] = alt_base
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
                 reads.append({"name": f"good{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": i % 2 == 0, "qual": 30})
             for i in range(40):                        # alt below the Q12 floor
-                seq = list(self.REF[:150]); seq[99] = alt_base
+                seq = list(self.REF[:150])
+                seq[99] = alt_base
                 reads.append({"name": f"lowq{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": i % 2 == 0, "qual": 5})
 
@@ -699,7 +704,7 @@ class TestBcrAblFusionCounter(unittest.TestCase):
                 read_stats=stats,
             )
 
-            lines = [l for l in out_tsv.read_text().splitlines() if not l.startswith("#")]
+            lines = [line for line in out_tsv.read_text().splitlines() if not line.startswith("#")]
             header = lines[0].split("\t")
             row1 = dict(zip(header, lines[1].split("\t")))
             self.assertEqual(row1["fusion_isoform"], "e1a3")
@@ -734,7 +739,6 @@ class TestBcrAblFusionCounter(unittest.TestCase):
             self.assertAlmostEqual(stats["yield_gb"], 4500 / 1e9, places=6)
 
 
-
 @unittest.skipIf(REPORT is None or getattr(REPORT, "xlsxwriter", None) is None, "xlsxwriter not available")
 class TestBcrAblReportIntegration(unittest.TestCase):
     def test_generates_workbook_with_bcr_abl_tab(self):
@@ -747,20 +751,26 @@ class TestBcrAblReportIntegration(unittest.TestCase):
             phasing_tsv = tmp / "phasing.tsv"
 
             fusion_tsv.write_text(
-                "sample\tfusion_isoform\talt_name\tprotein_form\tcluster\tbcr_exon\tabl_exon\tread_count\tfraction_percent\tstatus\tdescription\n"
+                "sample\tfusion_isoform\talt_name\tprotein_form\tcluster\tbcr_exon\t"
+                "abl_exon\tread_count\tfraction_percent\tstatus\tdescription\n"
                 "SAMPLE_1\te14a2\tb3a2\tp210\tM-BCR\te14\ta2\t1500\t95.5\tPRIMARY\tMajor CML fusion\n"
             )
             muts_tsv.write_text(
-                "sample\tchrom\tpos\tref\talt\tmutation\taa_change\tname\tdepth\tad_ref\tad_alt\tvaf_percent\tstatus\timatinib\tdasatinib\tnilotinib\tbosutinib\tponatinib\tasciminib\n"
-                "SAMPLE_1\tchr9\t130872896\tC\tT\tT315I\tp.Thr315Ile\tNM_1\t5000\t4000\t1000\t20.0\tDETECTED\tResistant\tResistant\tResistant\tResistant\tSensitive\tSensitive\n"
+                "sample\tchrom\tpos\tref\talt\tmutation\taa_change\tname\tdepth\tad_ref\t"
+                "ad_alt\tvaf_percent\tstatus\timatinib\tdasatinib\tnilotinib\tbosutinib\tponatinib\tasciminib\n"
+                "SAMPLE_1\tchr9\t130872896\tC\tT\tT315I\tp.Thr315Ile\tNM_1\t5000\t4000\t"
+                "1000\t20.0\tDETECTED\tResistant\tResistant\tResistant\tResistant\tSensitive\tSensitive\n"
             )
             phasing_tsv.write_text(
-                "sample\tmutation_1\tmutation_2\tphase_state\tcis_fraction_percent\tcis_vaf_percent\tcis_reads_11\ttrans_reads_10\ttrans_reads_01\twt_reads_00\tother_reads\ttotal_spanning_reads\tpos_1\tpos_2\tref_1\talt_1\tref_2\talt_2\tclinical_interpretation\n"
+                "sample\tmutation_1\tmutation_2\tphase_state\tcis_fraction_percent\t"
+                "cis_vaf_percent\tcis_reads_11\ttrans_reads_10\ttrans_reads_01\twt_reads_00\t"
+                "other_reads\ttotal_spanning_reads\tpos_1\tpos_2\tref_1\talt_1\tref_2\talt_2\tclinical_interpretation\n"
             )
 
             exon_cov_tsv = tmp / "exon_cov.tsv"
             exon_cov_tsv.write_text(
-                "sample\texon\tchrom\tstart\tend\tlength_bp\tmean_depth\tmedian_depth\tmin_depth\tmax_depth\tpct_gte_100x\tpct_gte_500x\tpct_gte_1000x\tspanning_reads\n"
+                "sample\texon\tchrom\tstart\tend\tlength_bp\tmean_depth\tmedian_depth\t"
+                "min_depth\tmax_depth\tpct_gte_100x\tpct_gte_500x\tpct_gte_1000x\tspanning_reads\n"
                 "SAMPLE_1\tABL1_Exon2\tchr9\t130854065\t130854237\t173\t4500.0\t4500.0\t3200\t5800\t100.0\t100.0\t100.0\t4500\n"
             )
 
@@ -847,8 +857,22 @@ class TestBcrAblArribaOutput(unittest.TestCase):
 
             isoform_counts = {"e14a2": 500, "e13a2": 50}
             raw_events = [
-                {"isoform": "e14a2", "bcr_pos": 23290413, "abl_pos": 130854065, "bcr_exon": "e14", "abl_exon": "a2", "read_name": "r1"},
-                {"isoform": "e13a2", "bcr_pos": 23289621, "abl_pos": 130854065, "bcr_exon": "e13", "abl_exon": "a2", "read_name": "r2"},
+                {
+                    "isoform": "e14a2",
+                    "bcr_pos": 23290413,
+                    "abl_pos": 130854065,
+                    "bcr_exon": "e14",
+                    "abl_exon": "a2",
+                    "read_name": "r1",
+                },
+                {
+                    "isoform": "e13a2",
+                    "bcr_pos": 23289621,
+                    "abl_pos": 130854065,
+                    "bcr_exon": "e13",
+                    "abl_exon": "a2",
+                    "read_name": "r2",
+                },
             ]
 
             FUSION_COUNTER.write_arriba_tsv(
@@ -1013,5 +1037,3 @@ class TestBcrAblReport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

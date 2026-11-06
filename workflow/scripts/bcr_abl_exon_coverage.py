@@ -212,6 +212,7 @@ def main(argv=None) -> None:
     write_exon_coverage_tsv(results, args.output)
     print(f"Wrote coverage statistics for {len(results)} exons to {args.output}")
 
+
 def snakemake_argv(smk) -> list:
     """The command-line arguments the bcr_abl_exon_coverage rule stands for."""
     p = smk.params

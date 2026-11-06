@@ -54,7 +54,9 @@ class DiscoveryTest(unittest.TestCase):
         """The Arriba image holds both builds; hg19 used to win for hg38 runs
         only because it was listed first."""
 
-        everything = lambda p: True  # noqa: E731 -- both builds present, as in the image
+        def everything(p):
+            return True  # both builds present, as in the image
+
         for build, want, never in (("hg38", "hg38", "hg19"), ("hg19", "hg19", "hg38")):
             cyto = draw.first_existing("", draw.candidates_for_build(draw.CYTOBAND_CANDIDATES, build), everything)
             dom = draw.first_existing("", draw.candidates_for_build(draw.PROTEIN_DOMAIN_CANDIDATES, build), everything)

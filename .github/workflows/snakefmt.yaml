@@ -20,15 +20,22 @@ jobs:
     name: Snakefmt
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      # Snakemake 7.32.4 mangles f-strings in .smk files on Python 3.12+, and
+      # workflow/rules/common.smk refuses to start there. Stay on 3.11.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      - name: Lint Code Base
-        uses: super-linter/super-linter@v5.3.1
-        env:
-          VALIDATE_ALL_CODEBASE: false
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VALIDATE_SNAKEMAKE_SNAKEFMT: true
-          DEFAULT_BRANCH: main
-          OUTPUT_FOLDER: .github/linters/report
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.test.txt
+      # snakefmt is pinned in requirements.test.txt and checks every rule
+      # file, so the result no longer depends on which files a commit touches.
+      - name: Install snakefmt
+        run: |
+          pip install $(grep '^snakefmt==' requirements.test.txt)
+      - name: snakefmt --check
+        run: |
+          snakefmt --check --config .github/linters/.snakefmt.toml workflow/Snakefile workflow/rules

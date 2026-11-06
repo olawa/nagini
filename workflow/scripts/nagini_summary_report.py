@@ -172,12 +172,17 @@ def build_summary_report(
     # 1. OVERVIEW SHEET
     # -----------------------------------------------------------------------
     overview_rows = [
-        [(f"NAGINI RUN SUMMARY - {display_id} ({date_str})", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
-        [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
+        [(f"NAGINI RUN SUMMARY - {display_id} ({date_str})", 2)] + [("", 2)] * 15,
+        [("", 0)] * 16,
         [("RUN & PIPELINE METADATA", 3), ("", 3), ("", 3), ("", 3)],
         [("Sequence ID / Run", 7), (display_id, 0), ("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0)],
         [("Reference Genome", 7), (reference_build, 0), ("Total Samples", 7), (len(sample_records), 0)],
-        [("Report Generated", 7), (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
+        [
+            ("Report Generated", 7),
+            (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), 0),
+            ("Pipeline Status", 7),
+            ("COMPLETED", 5),
+        ],
         [
             ("Target Region / Panel", 7),
             (os.path.basename(design_bed) if design_bed else "Whole Genome (WGS)", 0),
@@ -196,9 +201,8 @@ def build_summary_report(
                 0,
             ),
         ],
-
         [("", 0), ("", 0), ("", 0), ("", 0)],
-        [("SAMPLE QUALITY CONTROL & SEQUENCING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
+        [("SAMPLE QUALITY CONTROL & SEQUENCING SUMMARY", 3)] + [("", 3)] * 15,
         [
             ("DNA Number", 1),
             ("Sample ID", 1),
@@ -210,7 +214,7 @@ def build_summary_report(
             ("Mean Q", 1),
             ("N50 [bp]", 1),
             ("Median [bp]", 1),
-                ("Mean ABL1 Panel-site Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
+            ("Mean ABL1 Panel-site Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
             ("Mean WGS Depth", 1),
             ("Fold Enrichment", 1),
             ("On-Target Accuracy", 1),
@@ -305,7 +309,6 @@ def build_summary_report(
             target_cramino_dict, "Median read length", "Median length", "Median"
         )
 
-
         # Parse BCR-ABL1 metrics if present
         fusion_rows = parse_bcr_abl_tsv(fusion_tsv_path)
         mutation_rows = parse_bcr_abl_tsv(mut_tsv_path)
@@ -369,7 +372,6 @@ def build_summary_report(
                 if "on_target_median_bp" in bcr_read_stats and bcr_read_stats["on_target_median_bp"] is not None:
                     on_target_median = f"{float(bcr_read_stats['on_target_median_bp']):.2f}"
 
-
         total_fusion_reads = sum(int(r.get("read_count", 0)) for r in fusion_rows)
         raw_reads_num = 0
 
@@ -410,7 +412,10 @@ def build_summary_report(
             abl_exons = [r for r in exon_rows if "ABL1" in str(r.get("exon", "")).upper()]
             tot_len = sum(int(r.get("length_bp", r.get("length", 0))) for r in abl_exons)
             if tot_len > 0:
-                mean_target_dp = sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exons) / tot_len
+                mean_target_dp = (
+                    sum(float(r.get("mean_depth", 0.0)) * int(r.get("length_bp", r.get("length", 0))) for r in abl_exons)
+                    / tot_len
+                )
                 kd_depth_str = f"{mean_target_dp:.1f}x"
         elif not is_bcr_abl and target_cov_path and os.path.exists(target_cov_path):
             # mosdepth --by writes both "total" (whole reference) and
@@ -426,13 +431,27 @@ def build_summary_report(
         else:
             kd_depth_str = wgs_depth_str
 
-        prim_iso = next((r["fusion_isoform"] for r in fusion_rows if r.get("status") == "PRIMARY"), ("None detected" if is_bcr_abl else "-"))
+        prim_iso = next(
+            (r["fusion_isoform"] for r in fusion_rows if r.get("status") == "PRIMARY"), ("None detected" if is_bcr_abl else "-")
+        )
         active_muts = active_resistance_mutations(mutation_rows)
         det_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "DETECTED"]
         subcl_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "SUBCLONAL"]
-        unclassified = [r for r in mutation_rows if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)]
+        unclassified = [
+            r
+            for r in mutation_rows
+            if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)
+        ]
         assessment = panel_assessment(all_sites_rows)
-        mut_str = ", ".join(det_muts + [f"{m} (SUBCLONAL)" for m in subcl_muts]) if det_muts or subcl_muts else ("Resistance panel not assessed" if assessment["state"] == "NOT_ASSESSED" else "No resistance-associated variants detected")
+        mut_str = (
+            ", ".join(det_muts + [f"{m} (SUBCLONAL)" for m in subcl_muts])
+            if det_muts or subcl_muts
+            else (
+                "Resistance panel not assessed"
+                if assessment["state"] == "NOT_ASSESSED"
+                else "No resistance-associated variants detected"
+            )
+        )
         if unclassified:
             mut_str += f"; unclassified for review: {', '.join(r.get('mutation', '?') for r in unclassified)}"
         review = review_mutations(mutation_rows)
@@ -440,9 +459,21 @@ def build_summary_report(
             mut_str += f"; for review, rare neighbour on the same reads: {describe_review(review)}"
 
         phase_str = summarize_phasing(phasing_rows) if phasing_rows else "NOT_ASSESSED"
-        cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)"]
-        coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)"]
-        trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)"]
+        cis_pairs = [
+            f"{r['mutation_1']}+{r['mutation_2']}"
+            for r in phasing_rows
+            if str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)"
+        ]
+        coexist_pairs = [
+            f"{r['mutation_1']}+{r['mutation_2']}"
+            for r in phasing_rows
+            if str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)"
+        ]
+        trans_pairs = [
+            f"{r['mutation_1']}+{r['mutation_2']}"
+            for r in phasing_rows
+            if str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)"
+        ]
 
         # Target depth alone says nothing about whether the enrichment worked;
         # the ratio to background does.
@@ -571,23 +602,32 @@ def build_summary_report(
                             v_dp = 0.0
                         if is_bcr_abl and min_depth_cutoff > 0 and v_dp < min_depth_cutoff:
                             continue
-                        all_pass_variants.append({
-                            "sample": sample_name,
-                            "dna_number": dna_number,
-                            "type": sample_type,
-                            "gene": v.get("Gene", "") or ("ABL1" if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("9", "abl1") else ("BCR" if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("22", "bcr") else "")),
-                            "chrom": v.get("Chromosome", ""),
-                            "pos": v.get("Position", ""),
-                            "ref": v.get("Reference", ""),
-                            "alt": v.get("Alternate", ""),
-                            "vaf": format_vaf(v.get("VAF", ""), scale="fraction"),
-                            "depth": v.get("Depth", ""),
-                            "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
-                            "consequence": v.get("Consequence", ""),
-                            "clinical_note": v.get("ClinVar_Significance", "") or f"{default_caller_name} call",
-                            "status": "PASS",
-                            "caller": v.get("Caller") or c_name or default_caller_name,
-                        })
+                        all_pass_variants.append(
+                            {
+                                "sample": sample_name,
+                                "dna_number": dna_number,
+                                "type": sample_type,
+                                "gene": v.get("Gene", "")
+                                or (
+                                    "ABL1"
+                                    if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("9", "abl1")
+                                    else (
+                                        "BCR" if str(v.get("Chromosome", "")).removeprefix("chr").lower() in ("22", "bcr") else ""
+                                    )
+                                ),
+                                "chrom": v.get("Chromosome", ""),
+                                "pos": v.get("Position", ""),
+                                "ref": v.get("Reference", ""),
+                                "alt": v.get("Alternate", ""),
+                                "vaf": format_vaf(v.get("VAF", ""), scale="fraction"),
+                                "depth": v.get("Depth", ""),
+                                "alt_reads": v.get("Allele depth", v.get("Alt_Reads", "")),
+                                "consequence": v.get("Consequence", ""),
+                                "clinical_note": v.get("ClinVar_Significance", "") or f"{default_caller_name} call",
+                                "status": "PASS",
+                                "caller": v.get("Caller") or c_name or default_caller_name,
+                            }
+                        )
 
     sheets.append(("Overview", overview_rows, LAYOUT))
 
@@ -671,9 +711,9 @@ def build_summary_report(
     # -----------------------------------------------------------------------
     if has_any_bcr_abl:
         bcr_summary_rows = [
-            [("MULTI-SAMPLE BCR-ABL1 ASSAY COMPARISON", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
+            [("MULTI-SAMPLE BCR-ABL1 ASSAY COMPARISON", 2)] + [("", 2)] * 9,
             [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
-            [("1. FUSION ISOFORM COMPARISON ACROSS SAMPLES", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
+            [("1. FUSION ISOFORM COMPARISON ACROSS SAMPLES", 3)] + [("", 3)] * 9,
             [
                 ("Sample ID", 1),
                 ("Barcode", 1),
@@ -712,7 +752,9 @@ def build_summary_report(
             ])
 
             bcr_summary_rows.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-        bcr_summary_rows.append([("2. RESISTANCE MUTATIONS & COMPOUND PHASING SUMMARY", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+        bcr_summary_rows.append(
+            [("2. RESISTANCE MUTATIONS & COMPOUND PHASING SUMMARY", 3)] + [("", 3)] * 9
+        )
         bcr_summary_rows.append([
             ("Sample ID", 1),
             ("Detected Mutations", 1),
@@ -730,7 +772,11 @@ def build_summary_report(
             active = active_resistance_mutations(m_rows)
             det_m = [r for r in active if str(r.get("status", "")).upper() == "DETECTED"]
             subcl_m = [r for r in active if str(r.get("status", "")).upper() == "SUBCLONAL"]
-            unclassified = [r for r in m_rows if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)]
+            unclassified = [
+                r
+                for r in m_rows
+                if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)
+            ]
             assessment = panel_assessment(bd.get("all_sites_rows", []))
             if det_m:
                 mut_names = ", ".join(r["mutation"] for r in det_m)
@@ -753,13 +799,49 @@ def build_summary_report(
                 mut_names += f"; for review, rare neighbour on the same reads: {describe_review(review)}"
 
             all_active = det_m + subcl_m
-            vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in all_active) if all_active else "-"
+            vaf_details = (
+                ", ".join(
+                    f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% "
+                    f"({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})"
+                    for r in all_active
+                )
+                if all_active
+                else "-"
+            )
             phase_state = summarize_phasing(p_rows)
             phase_classes = {str(r.get("phase_state", "")).strip().upper() for r in p_rows}
-            cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)"]
-            coexist_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)"]
-            trans_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in p_rows if str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)"]
-            clinical_note = "Resistance-associated variant detected" if det_m else ("Subclonal resistance-associated variant detected" if subcl_m else ("Resistance panel incomplete" if assessment["state"] == "INCOMPLETE" else ("Resistance panel not assessed" if assessment["state"] == "NOT_ASSESSED" else "No resistance-associated variant detected; sensitivity not inferred")))
+            cis_pairs = [
+                f"{r['mutation_1']}+{r['mutation_2']}"
+                for r in p_rows
+                if str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)"
+            ]
+            coexist_pairs = [
+                f"{r['mutation_1']}+{r['mutation_2']}"
+                for r in p_rows
+                if str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)"
+            ]
+            trans_pairs = [
+                f"{r['mutation_1']}+{r['mutation_2']}"
+                for r in p_rows
+                if str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)"
+            ]
+            clinical_note = (
+                "Resistance-associated variant detected"
+                if det_m
+                else (
+                    "Subclonal resistance-associated variant detected"
+                    if subcl_m
+                    else (
+                        "Resistance panel incomplete"
+                        if assessment["state"] == "INCOMPLETE"
+                        else (
+                            "Resistance panel not assessed"
+                            if assessment["state"] == "NOT_ASSESSED"
+                            else "No resistance-associated variant detected; sensitivity not inferred"
+                        )
+                    )
+                )
+            )
             if unclassified:
                 clinical_note += "; unclassified variants require review"
             if review:
@@ -775,16 +857,23 @@ def build_summary_report(
                     p_name = f"{r.get('mutation_1')}+{r.get('mutation_2')}"
                     coexist_tag = " (coexist)" if "COEXISTING" in ps else ""
                     all_cis_display.append(f"{p_name}{coexist_tag}: {c_af:.1f}% ({c_rds:,} rds)")
-            bcr_summary_rows.append([
-                (bd["sample"], 10),
-                (mut_names, 4 if det_m else (6 if subcl_m else 0)),
-                (vaf_details, 0),
-                (phase_state, 4 if (cis_pairs or coexist_pairs) else (6 if p_rows else 0)),
-                (", ".join(all_cis_display) if all_cis_display else "-", 4 if all_cis_display else 0),
-                (", ".join(trans_pairs) if trans_pairs else "-", 6 if trans_pairs else 0),
-                (clinical_note, 4 if det_m else (6 if subcl_m or unclassified or review or assessment["state"] != "ASSESSED" else 0)),
-                ("", 0), ("", 0), ("", 0),
-            ])
+            bcr_summary_rows.append(
+                [
+                    (bd["sample"], 10),
+                    (mut_names, 4 if det_m else (6 if subcl_m else 0)),
+                    (vaf_details, 0),
+                    (phase_state, 4 if (cis_pairs or coexist_pairs) else (6 if p_rows else 0)),
+                    (", ".join(all_cis_display) if all_cis_display else "-", 4 if all_cis_display else 0),
+                    (", ".join(trans_pairs) if trans_pairs else "-", 6 if trans_pairs else 0),
+                    (
+                        clinical_note,
+                        4 if det_m else (6 if subcl_m or unclassified or review or assessment["state"] != "ASSESSED" else 0),
+                    ),
+                    ("", 0),
+                    ("", 0),
+                    ("", 0),
+                ]
+            )
 
         sheets.append(("BCR-ABL1 Overview", bcr_summary_rows, LAYOUT))
 
@@ -806,9 +895,12 @@ def build_summary_report(
 
     write_xlsx(output_path, sheets)
 
-
     # Also create unique, analysis-folder named copy so multiple summaries can be opened in Excel simultaneously
-    clean_id = clean_analysis_name if (clean_analysis_name and clean_analysis_name.lower() not in {"run", "default", "reports"}) else re.sub(r"[^\w\.-]", "_", display_id)
+    clean_id = (
+        clean_analysis_name
+        if (clean_analysis_name and clean_analysis_name.lower() not in {"run", "default", "reports"})
+        else re.sub(r"[^\w\.-]", "_", display_id)
+    )
 
     try:
         named_file = os.path.join(out_dir, f"{clean_id}_summary_report.xlsx")
@@ -817,7 +909,6 @@ def build_summary_report(
             sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
     except Exception as exc:
         sys.stderr.write(f"Warning: could not create analysis-named summary copy in {out_dir}: {exc}\n")
-
 
 
 def run_from_snakemake(snakemake):
@@ -894,7 +985,6 @@ def run_from_snakemake(snakemake):
             "bcr_abl_rindels_vcf": bcr_rindels_vcfs[i] if i < len(bcr_rindels_vcfs) else "",
             "bcr_abl_bcftools_vcf": bcr_bcftools_vcfs[i] if i < len(bcr_bcftools_vcfs) else "",
         })
-
 
     bcr_abl_min_relative_depth = float(
         getattr(snakemake.params, "bcr_abl_min_relative_depth", 0.10) or 0.10

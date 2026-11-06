@@ -153,7 +153,8 @@ def parse_cytobands(filename, cytoband_colors, cytoband_centromere="acen", skip=
             cytobands[k][centromere_index[1]]["direction"] = "left"
         elif len(centromere_index) > 0:
             print(
-                f"warning: chromosome {k} does not have exactly 2 centromere bands ({len(centromere_index)} found); skipping centromere styling",
+                f"warning: chromosome {k} does not have exactly 2 centromere bands ({len(centromere_index)} "
+                f"found); skipping centromere styling",
                 file=sys.stderr,
             )
 

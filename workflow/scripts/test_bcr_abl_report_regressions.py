@@ -10,8 +10,8 @@ try:
 except ImportError:
     openpyxl = None
 
-import nagini_report as report
-import nagini_summary_report as summary
+import nagini_report as report  # noqa: E402
+import nagini_summary_report as summary  # noqa: E402
 
 
 @unittest.skipIf(openpyxl is None, "openpyxl is required to inspect generated workbooks")
@@ -25,16 +25,33 @@ class BcrAblReportRegressionTests(unittest.TestCase):
     def _sheet_text(path, sheet):
         book = openpyxl.load_workbook(path, read_only=True, data_only=True)
         try:
-            return "\n".join("\t".join("" if v is None else str(v) for v in row) for row in book[sheet].iter_rows(values_only=True))
+            return "\n".join(
+                "\t".join("" if v is None else str(v) for v in row) for row in book[sheet].iter_rows(values_only=True)
+            )
         finally:
             book.close()
 
     def test_sample_report_preserves_uncertainty_and_audit_findings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            muts = self._write(root, "mut.tsv", "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\tref\talt\tdepth\tad_alt\tvaf_percent\nL387L\tp.Leu387Leu\tSYNONYMOUS\tSYNONYMOUS\tDETECTED\tchr9\t100\tA\tG\t100\t20\t20\nT315I\tp.Thr315Ile\tMISSENSE\tCURATED_RESISTANCE\tSUBCLONAL\tchr9\t200\tC\tT\t1000\t5\t0.5\n")
-            phase = self._write(root, "phase.tsv", "mutation_1\tmutation_2\tphase_state\ntestA\ttestB\tLOW_SPANNING_DEPTH\ntestC\ttestD\tCIS (Compound)\n")
-            sites = self._write(root, "all.tsv", "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t100\tLOW_DEPTH\t0\tLOW_DEPTH\t1\n")
+            muts = self._write(
+                root,
+                "mut.tsv",
+                "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\t"
+                "pos\tref\talt\tdepth\tad_alt\tvaf_percent\nL387L\tp.Leu387Leu\tSYNONYMOUS\t"
+                "SYNONYMOUS\tDETECTED\tchr9\t100\tA\tG\t100\t20\t20\nT315I\tp.Thr315Ile\t"
+                "MISSENSE\tCURATED_RESISTANCE\tSUBCLONAL\tchr9\t200\tC\tT\t1000\t5\t0.5\n",
+            )
+            phase = self._write(
+                root,
+                "phase.tsv",
+                "mutation_1\tmutation_2\tphase_state\ntestA\ttestB\tLOW_SPANNING_DEPTH\ntestC\ttestD\tCIS (Compound)\n",
+            )
+            sites = self._write(
+                root,
+                "all.tsv",
+                "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t100\tLOW_DEPTH\t0\tLOW_DEPTH\t1\n",
+            )
             out = root / "sample.xlsx"
             report.generate_report(
                 str(out), "S1", "T", "hg38", "", "", "", "", "", "", "",
@@ -53,11 +70,15 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertIn("SYNONYMOUS", detail)
 
     REVIEW_ROWS = (
-        "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\tref\talt\tdepth\tad_alt\tvaf_percent\tfilter_reason\n"
+        "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\t"
+        "ref\talt\tdepth\tad_alt\tvaf_percent\tfilter_reason\n"
         "K357E\tp.Lys357Glu\tMISSENSE\tUNCLASSIFIED\tREVIEW\tchr9\t133748408\tA\tG\t76352\t296\t0.388\t"
         "LINKED_NEIGHBOUR_REVIEW(BASEQ(site=25.0,neighbour=24.1<0.8x38.7))\n"
     )
-    REVIEW_SITES = "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t133748408\tREVIEW\t76352\tLINKED_NEIGHBOUR_REVIEW\t1\n"
+    REVIEW_SITES = (
+        "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\n"
+        "chr9\t133748408\tREVIEW\t76352\tLINKED_NEIGHBOUR_REVIEW\t1\n"
+    )
 
     def test_a_review_site_is_flagged_not_reported_clean(self):
         """D25: a REVIEW row is neither a call nor a clean panel."""
@@ -88,7 +109,11 @@ class BcrAblReportRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             muts = self._write(root, "mut.tsv", "mutation\tstatus\tdepth\tvaf_percent\n")
-            sites = self._write(root, "sites.tsv", "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t100\tLOW_DEPTH\t0\tLOW_DEPTH\t1\n")
+            sites = self._write(
+                root,
+                "sites.tsv",
+                "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t100\tLOW_DEPTH\t0\tLOW_DEPTH\t1\n",
+            )
             phase = self._write(root, "phase.tsv", "mutation_1\tmutation_2\tphase_state\n")
             out = root / "run.xlsx"
             summary.build_summary_report(str(out), "RUN", "hg38", [{
@@ -257,7 +282,6 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertNotIn("133755936", pass_var_txt)
             self.assertIn("95.00%", pass_var_txt)
 
-
     # Rows exactly as a real run reported them. The BCR-ABL1 sheet showed these
     # correctly; the SNVs and indels sheet of the same workbook showed T315A as
     # 65.20% and E499E as 41.40%, because format_vaf guessed that any value up
@@ -311,7 +335,9 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertNotIn("Chronic Myeloid Leukemia", text)
 
             summ = root / "summary.xlsx"
-            summary.build_summary_report(str(summ), "RUN", "hg19", [{"sample": "S1", "type": "T", "assay": "bcr_abl", "bcr_abl_mutations": muts}])
+            summary.build_summary_report(
+                str(summ), "RUN", "hg19", [{"sample": "S1", "type": "T", "assay": "bcr_abl", "bcr_abl_mutations": muts}]
+            )
             self.assertNotIn("Resistance mutation", self._sheet_text(summ, "PASS Variants"))
 
     def test_detected_call_at_exactly_one_percent(self):
@@ -323,7 +349,9 @@ class BcrAblReportRegressionTests(unittest.TestCase):
                 "T315I\tp.Thr315Ile\tMISSENSE\tCURATED_RESISTANCE\tDETECTED\tchr9\t133748282\tACT\tATT\t2000\t20\t1.0\n",
             )
             summ = root / "summary.xlsx"
-            summary.build_summary_report(str(summ), "RUN", "hg19", [{"sample": "S1", "type": "T", "assay": "bcr_abl", "bcr_abl_mutations": muts}])
+            summary.build_summary_report(
+                str(summ), "RUN", "hg19", [{"sample": "S1", "type": "T", "assay": "bcr_abl", "bcr_abl_mutations": muts}]
+            )
             text = self._sheet_text(summ, "PASS Variants")
             self.assertIn("1.00%", text)
             self.assertNotIn("100.00%", text)

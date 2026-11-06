@@ -163,14 +163,14 @@ AA3_TO_AA1 = {
 }
 
 CODON_TABLE = {
-    "TTT":"F", "TTC":"F", "TTA":"L", "TTG":"L", "TCT":"S", "TCC":"S", "TCA":"S", "TCG":"S",
-    "TAT":"Y", "TAC":"Y", "TAA":"*", "TAG":"*", "TGT":"C", "TGC":"C", "TGA":"*", "TGG":"W",
-    "CTT":"L", "CTC":"L", "CTA":"L", "CTG":"L", "CCT":"P", "CCC":"P", "CCA":"P", "CCG":"P",
-    "CAT":"H", "CAC":"H", "CAA":"Q", "CAG":"Q", "CGT":"R", "CGC":"R", "CGA":"R", "CGG":"R",
-    "ATT":"I", "ATC":"I", "ATA":"I", "ATG":"M", "ACT":"T", "ACC":"T", "ACA":"T", "ACG":"T",
-    "AAT":"N", "AAC":"N", "AAA":"K", "AAG":"K", "AGT":"S", "AGC":"S", "AGA":"R", "AGG":"R",
-    "GTT":"V", "GTC":"V", "GTA":"V", "GTG":"V", "GCT":"A", "GCC":"A", "GCA":"A", "GCG":"A",
-    "GAT":"D", "GAC":"D", "GAA":"E", "GAG":"E", "GGT":"G", "GGC":"G", "GGA":"G", "GGG":"G",
+    "TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L", "TCT": "S", "TCC": "S", "TCA": "S", "TCG": "S",
+    "TAT": "Y", "TAC": "Y", "TAA": "*", "TAG": "*", "TGT": "C", "TGC": "C", "TGA": "*", "TGG": "W",
+    "CTT": "L", "CTC": "L", "CTA": "L", "CTG": "L", "CCT": "P", "CCC": "P", "CCA": "P", "CCG": "P",
+    "CAT": "H", "CAC": "H", "CAA": "Q", "CAG": "Q", "CGT": "R", "CGC": "R", "CGA": "R", "CGG": "R",
+    "ATT": "I", "ATC": "I", "ATA": "I", "ATG": "M", "ACT": "T", "ACC": "T", "ACA": "T", "ACG": "T",
+    "AAT": "N", "AAC": "N", "AAA": "K", "AAG": "K", "AGT": "S", "AGC": "S", "AGA": "R", "AGG": "R",
+    "GTT": "V", "GTC": "V", "GTA": "V", "GTG": "V", "GCT": "A", "GCC": "A", "GCA": "A", "GCG": "A",
+    "GAT": "D", "GAC": "D", "GAA": "E", "GAG": "E", "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G",
 }
 
 CDNA_RE = re.compile(r"c\.\((\d+)([ACGT])>([ACGT])\)")
@@ -196,25 +196,94 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--output-vcf", type=Path, default=None, help="Optional output VCF file")
     parser.add_argument("--features-json", type=Path, default=None, help="Optional BCR-ABL features JSON database")
     parser.add_argument("--reference-fasta", type=Path, default=None, help="Optional reference FASTA for k-mer validation")
-    parser.add_argument("--min-af", type=float, default=0.01, help="Minimum AF threshold for mutation calling (default 0.01 / 1 percent)")
+    parser.add_argument(
+        "--min-af", type=float, default=0.01, help="Minimum AF threshold for mutation calling (default 0.01 / 1 percent)"
+    )
     parser.add_argument("--subclonal-af", type=float, default=0.002, help="Subclonal AF threshold (default 0.002 / 0.2 percent)")
     parser.add_argument("--min-depth", type=int, default=50, help="Minimum total coverage depth (default 50)")
     parser.add_argument("--min-alt-reads", type=int, default=5, help="Minimum alternate supporting reads (default 5)")
-    parser.add_argument("--max-depth", type=int, default=1_000_000, help="No longer used: reads are scanned once rather than piled up, so there is no depth cap. Accepted so existing invocations keep working.")
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=1_000_000,
+        help="No longer used: reads are scanned once rather than piled up, so there "
+             "is no depth cap. Accepted so existing invocations keep working.",
+    )
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality (default 12)")
     parser.add_argument("--min-mapping-quality", type=int, default=1, help="Minimum mapping quality (default 1)")
-    parser.add_argument("--min-read-qs", type=float, default=0.0, help="Minimum mean read quality (the qs value), applied to the aligned reads; 0 is off (default 0). Reads below the pre-alignment filter are already gone, so this can only be stricter.")
-    parser.add_argument("--min-snr", type=float, default=3.0, help="Minimum signal-to-noise ratio; supported panel competitors are exempt only if they exceed the weakest non-reference base by this ratio (default 3.0)")
-    parser.add_argument("--min-minor-strand-ratio", type=float, default=0.05, help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)")
-    parser.add_argument("--max-sor", type=float, default=3.0, help="Maximum Strand Odds Ratio; alt strand balance is only called biased when it also departs from the reference's own balance (default 3.0)")
-    parser.add_argument("--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)")
-    parser.add_argument("--min-kmer-rate", type=float, default=0.60, help="No longer used: reads with a dirty flanking context are now excluded from the counts instead of a call being rejected below this clean rate. Accepted so existing invocations keep working.")
+    parser.add_argument(
+        "--min-read-qs",
+        type=float,
+        default=0.0,
+        help="Minimum mean read quality (the qs value), applied to the aligned reads;"
+             " 0 is off (default 0). Reads below the pre-alignment filter are already gone, so this can only be stricter.",
+    )
+    parser.add_argument(
+        "--min-snr",
+        type=float,
+        default=3.0,
+        help="Minimum signal-to-noise ratio; supported panel competitors are exempt "
+             "only if they exceed the weakest non-reference base by this ratio (default 3.0)",
+    )
+    parser.add_argument(
+        "--min-minor-strand-ratio",
+        type=float,
+        default=0.05,
+        help="Minimum fraction on minor strand when ad_alt >= 20 (default 0.05)",
+    )
+    parser.add_argument(
+        "--max-sor",
+        type=float,
+        default=3.0,
+        help="Maximum Strand Odds Ratio; alt strand balance is only called biased "
+             "when it also departs from the reference's own balance (default 3.0)",
+    )
+    parser.add_argument(
+        "--min-mean-baseq", type=float, default=14.0, help="Minimum mean base quality for Alt reads (default 14.0)"
+    )
+    parser.add_argument(
+        "--min-kmer-rate",
+        type=float,
+        default=0.60,
+        help="No longer used: reads with a dirty flanking context are now excluded "
+             "from the counts instead of a call being rejected below this clean rate. "
+             "Accepted so existing invocations keep working.",
+    )
     parser.add_argument("--kmer-window", type=int, default=3, help="Flanking kmer window size in bp (default 3)")
-    parser.add_argument("--known-variants", type=Path, default=None, help="Optional BED/VCF of known polymorphisms; any base at these positions is forgiven in the flanking-context check.")
-    parser.add_argument("--flank-variant-min-af", type=float, default=0.01, help="A substitution beside a panel position at this fraction or more, on both strands and with ordinary base quality, is treated as a real allele in the flanking-context check rather than an error (default 0.01)")
-    parser.add_argument("--linked-min-share", type=float, default=0.5, help="A flank allele below --flank-variant-min-af is judged together with the site's ALT only when at least this share of the site's ALT reads carry it (default 0.5)")
-    parser.add_argument("--linked-min-relative-baseq", type=float, default=0.8, help="Mean base quality a site ALT and its linked neighbour must both reach, as a fraction of the reference's at the site (default 0.8)")
-    parser.add_argument("--fusion-region", default=None, help="Fusion-partner region, e.g. chr22:23522552-23660224 (BCR, hg19). A read that also aligns here (SA tag) is a fusion read. Without it every read is counted as non-fusion.")
+    parser.add_argument(
+        "--known-variants",
+        type=Path,
+        default=None,
+        help="Optional BED/VCF of known polymorphisms; any base at these positions is forgiven in the flanking-context check.",
+    )
+    parser.add_argument(
+        "--flank-variant-min-af",
+        type=float,
+        default=0.01,
+        help="A substitution beside a panel position at this fraction or more, on "
+             "both strands and with ordinary base quality, is treated as a real allele "
+             "in the flanking-context check rather than an error (default 0.01)",
+    )
+    parser.add_argument(
+        "--linked-min-share",
+        type=float,
+        default=0.5,
+        help="A flank allele below --flank-variant-min-af is judged together with "
+             "the site's ALT only when at least this share of the site's ALT reads carry it (default 0.5)",
+    )
+    parser.add_argument(
+        "--linked-min-relative-baseq",
+        type=float,
+        default=0.8,
+        help="Mean base quality a site ALT and its linked neighbour must both reach, "
+             "as a fraction of the reference's at the site (default 0.8)",
+    )
+    parser.add_argument(
+        "--fusion-region",
+        default=None,
+        help="Fusion-partner region, e.g. chr22:23522552-23660224 (BCR, hg19). A read "
+             "that also aligns here (SA tag) is a fusion read. Without it every read is counted as non-fusion.",
+    )
     parser.add_argument("--fusion-reads-only", action="store_true", help="Count only fusion reads (requires --fusion-region)")
     parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
@@ -1562,7 +1631,11 @@ def main(argv=None) -> None:
                 detected_mutations.extend(unresolved_codon_records(
                     all_results, group_pos, "CODON_CONTEXT_UNRESOLVED"
                 ))
-                detected_mutations = [r for r in detected_mutations if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)]
+                detected_mutations = [
+                    r
+                    for r in detected_mutations
+                    if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)
+                ]
                 continue
 
             reference_context = None
@@ -1665,7 +1738,12 @@ def main(argv=None) -> None:
                     continue
                 alt_aa = CODON_TABLE.get(alternate_codon)
                 aa_mut = f"{ref_aa}{codon_number + 1}{alt_aa}" if ref_aa and alt_aa else ""
-                aa_change = f"p.{next((k for k,v in AA3_TO_AA1.items() if v == ref_aa), ref_aa)}{codon_number + 1}{next((k for k,v in AA3_TO_AA1.items() if v == alt_aa), alt_aa)}" if aa_mut else ""
+                aa_change = (
+                    f"p.{next((k for k, v in AA3_TO_AA1.items() if v == ref_aa), ref_aa)}{codon_number + 1}"
+                    f"{next((k for k, v in AA3_TO_AA1.items() if v == alt_aa), alt_aa)}"
+                    if aa_mut
+                    else ""
+                )
                 profile = tki_profiles.get(aa_mut, {})
                 consequence, resistance_class = variant_classification(aa_mut, profile)
                 quality, quality_failures = codon_quality[alternate_codon]
@@ -1690,34 +1768,68 @@ def main(argv=None) -> None:
                 else:
                     hap_status, hap_reason = "WILDTYPE", "LOW_AF"
                 record = {
-                    "record_type": "CODON_HAPLOTYPE", "panel_sites_expected": panel_sites_expected,
-                    "sample": args.sample, "chrom": codon_chrom, "pos": codon_start,
-                    "ref": reference_codon, "alt": alternate_codon, "mutation": aa_mut,
-                    "aa_change": aa_change, "name": f"NM_005157.6:c.({codon_number * 3 + 1}_{codon_number * 3 + 3}{reference_codon}>{alternate_codon})",
-                    "depth": codon_depth, "ad_ref": state_counts.get(reference_codon, {}).get("fwd", 0) + state_counts.get(reference_codon, {}).get("rev", 0),
-                    "ad_alt": alt_count, "vaf_percent": round(af * 100, 3), "depth_unfiltered": codon_depth,
-                    "ad_alt_unfiltered": alt_count, "vaf_unfiltered_percent": round(af * 100, 3),
-                    "status": hap_status, "filter_reason": hap_reason, "snr": snr, "ad_other": other_codon_alt,
+                    "record_type": "CODON_HAPLOTYPE",
+                    "panel_sites_expected": panel_sites_expected,
+                    "sample": args.sample,
+                    "chrom": codon_chrom,
+                    "pos": codon_start,
+                    "ref": reference_codon,
+                    "alt": alternate_codon,
+                    "mutation": aa_mut,
+                    "aa_change": aa_change,
+                    "name": f"NM_005157.6:c.({codon_number * 3 + 1}_{codon_number * 3 + 3}{reference_codon}>{alternate_codon})",
+                    "depth": codon_depth,
+                    "ad_ref": state_counts.get(reference_codon, {}).get("fwd", 0)
+                    + state_counts.get(reference_codon, {}).get("rev", 0),
+                    "ad_alt": alt_count,
+                    "vaf_percent": round(af * 100, 3),
+                    "depth_unfiltered": codon_depth,
+                    "ad_alt_unfiltered": alt_count,
+                    "vaf_unfiltered_percent": round(af * 100, 3),
+                    "status": hap_status,
+                    "filter_reason": hap_reason,
+                    "snr": snr,
+                    "ad_other": other_codon_alt,
                     "vaf_other_percent": round(other_codon_alt / codon_depth * 100, 3) if codon_depth else 0,
-                    "other_bases": "", "credible_panel_alt_competitors": "", **quality,
+                    "other_bases": "",
+                    "credible_panel_alt_competitors": "",
+                    **quality,
                     "mean_baseq_ref": round(ref_values["bq_sum"] / ref_count, 1) if ref_count else "NA",
-                    "consequence": consequence, "resistance_class": resistance_class,
-                    "codon_context_status": "RESOLVED", "imatinib": profile.get("Imatinib", "Unknown"),
-                    "dasatinib": profile.get("Dasatinib", "Unknown"), "nilotinib": profile.get("Nilotinib", "Unknown"),
-                    "bosutinib": profile.get("Bosutinib", "Unknown"), "ponatinib": profile.get("Ponatinib", "Unknown"),
-                    "asciminib": profile.get("Asciminib", "Unknown"), "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
-                    "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0), "ad_alt_fwd": values["fwd"],
-                    "ad_alt_rev": values["rev"], "n_refskip": "NA", "n_deletion": "NA", "n_insertion": "NA",
-                    "depth_context_excluded": codon_excluded, "ad_alt_context_excluded": values["excluded"],
+                    "consequence": consequence,
+                    "resistance_class": resistance_class,
+                    "codon_context_status": "RESOLVED",
+                    "imatinib": profile.get("Imatinib", "Unknown"),
+                    "dasatinib": profile.get("Dasatinib", "Unknown"),
+                    "nilotinib": profile.get("Nilotinib", "Unknown"),
+                    "bosutinib": profile.get("Bosutinib", "Unknown"),
+                    "ponatinib": profile.get("Ponatinib", "Unknown"),
+                    "asciminib": profile.get("Asciminib", "Unknown"),
+                    "ad_ref_fwd": state_counts.get(reference_codon, {}).get("fwd", 0),
+                    "ad_ref_rev": state_counts.get(reference_codon, {}).get("rev", 0),
+                    "ad_alt_fwd": values["fwd"],
+                    "ad_alt_rev": values["rev"],
+                    "n_refskip": "NA",
+                    "n_deletion": "NA",
+                    "n_insertion": "NA",
+                    "depth_context_excluded": codon_excluded,
+                    "ad_alt_context_excluded": values["excluded"],
                     "flank_alleles_forgiven": "",
-                    "depth_fusion": "NA", "ad_alt_fusion": "NA", "vaf_fusion_percent": "NA",
-                    "depth_nonfusion": "NA", "ad_alt_nonfusion": "NA", "vaf_nonfusion_percent": "NA",
+                    "depth_fusion": "NA",
+                    "ad_alt_fusion": "NA",
+                    "vaf_fusion_percent": "NA",
+                    "depth_nonfusion": "NA",
+                    "ad_alt_nonfusion": "NA",
+                    "vaf_nonfusion_percent": "NA",
                 }
                 if hap_status in ("DETECTED", "SUBCLONAL"):
                     passing_haplotypes += 1
                 if hap_status in ("DETECTED", "SUBCLONAL") or (args.include_artifacts and hap_status == "ARTIFACT"):
                     detected_mutations.append(record)
-            detected_mutations = [r for r in detected_mutations if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)]
+            detected_mutations = [
+                r
+                for r in detected_mutations
+                if not (r.get("record_type") in {"SITE_AUDIT", "SITE_VARIANT"} and (r["chrom"], r["pos"]) in group_pos)
+            ]
             for raw in all_results:
                 if (raw["chrom"], raw["pos"]) in group_pos:
                     raw["codon_context_status"] = "RESOLVED" if passing_haplotypes else "CODON_QC_FAILED"
@@ -1826,8 +1938,13 @@ def main(argv=None) -> None:
             handle.write('##INFO=<ID=BQ_ALT,Number=1,Type=Float,Description="Mean base quality of ALT reads">\n')
             handle.write('##FILTER=<ID=PASS,Description="All quality filters passed">\n')
             handle.write('##FILTER=<ID=ARTIFACT,Description="Failed error baseline, strand bias, or base quality filters">\n')
-            handle.write('##FILTER=<ID=CODON_CONTEXT_UNRESOLVED,Description="Insufficient evidence to resolve the complete codon">\n')
-            handle.write('##FILTER=<ID=REVIEW,Description="Called only with a flank allele that rides on its ALT reads, and one of the stricter haplotype checks failed; for manual review">\n')
+            handle.write(
+                '##FILTER=<ID=CODON_CONTEXT_UNRESOLVED,Description="Insufficient evidence to resolve the complete codon">\n'
+            )
+            handle.write(
+                '##FILTER=<ID=REVIEW,Description="Called only with a flank allele that '
+                'rides on its ALT reads, and one of the stricter haplotype checks failed; for manual review">\n'
+            )
             handle.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
             handle.write('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total depth">\n')
             handle.write('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths (REF, ALT)">\n')
@@ -1835,7 +1952,10 @@ def main(argv=None) -> None:
             handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + args.sample + "\n")
             for rec in sorted(detected_mutations, key=lambda r: (r["chrom"], r["pos"], r["ref"], r["alt"])):
                 af_dec = rec["vaf_percent"] / 100.0
-                info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
+                info_field = (
+                    f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};"
+                    f"SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
+                )
                 gt = "0/1" if rec["status"] in ("DETECTED", "SUBCLONAL") else "./."
                 vcf_filter = "PASS" if rec["status"] in ("DETECTED", "SUBCLONAL") else (
                     "REVIEW" if rec["status"] == "REVIEW" else "ARTIFACT"
@@ -1843,13 +1963,17 @@ def main(argv=None) -> None:
                 if rec.get("record_type") == "CODON_CONTEXT_UNRESOLVED":
                     gt, vcf_filter = "./.", "CODON_CONTEXT_UNRESOLVED"
                 format_val = f"{gt}:{rec['depth']}:{rec['ad_ref']},{rec['ad_alt']}:{af_dec:.4f}"
-                handle.write(f"{rec['chrom']}\t{rec['pos']}\t{rec['mutation']}\t{rec['ref']}\t{rec['alt']}\t.\t{vcf_filter}\t{info_field}\tGT:DP:AD:AF\t{format_val}\n")
+                handle.write(
+                    f"{rec['chrom']}\t{rec['pos']}\t{rec['mutation']}\t{rec['ref']}\t"
+                    f"{rec['alt']}\t.\t{vcf_filter}\t{info_field}\tGT:DP:AD:AF\t{format_val}\n"
+                )
 
     print(
         f"BCR-ABL1 Branford Caller [{args.sample}]: evaluated {len(sites)} resistance sites; "
         f"found {len(detected_mutations)} candidate mutations.",
         file=sys.stderr,
     )
+
 
 def snakemake_argv(smk) -> list:
     """The command-line arguments the bcr_abl_branford_calling rule stands for."""

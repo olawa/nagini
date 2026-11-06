@@ -18,10 +18,7 @@ __license__ = "GPL-3"
 
 import os
 
-_REPORTS_TEMPLATES = os.path.join(
-    workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
-    "workflow", "templates"
-)
+_REPORTS_TEMPLATES = os.path.join(workflow.basedir, "..", "vendor", "hydra-genetics", "reports", "workflow", "templates")
 
 
 rule decompress_cytoband:
@@ -47,7 +44,9 @@ rule decompress_cytoband:
         threads=1,
         time=config.get("decompress_cytoband", {}).get("time", "00:15:00"),
     container:
-        config.get("decompress_cytoband", {}).get("container", config.get("merge_cnv_json", {}).get("container", config["default_container"]))
+        config.get("decompress_cytoband", {}).get(
+            "container", config.get("merge_cnv_json", {}).get("container", config["default_container"])
+        )
     message:
         "{rule}: Decompressing cytoband reference for {wildcards.build}"
     shell:

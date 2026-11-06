@@ -47,6 +47,7 @@ def run_caller(tmp, bam, bed_text, extra=()):
             "--min-snr", "3", *extra]
     with patch.object(caller.sys, "argv", argv):
         caller.main()
+
     def read(path):
         lines = [line for line in path.read_text().splitlines() if line and not line.startswith("#")]
         return list(csv.DictReader(lines, delimiter="\t"))
@@ -68,7 +69,10 @@ class FlankingContextCounting(unittest.TestCase):
     def setUp(self):
         import random
         rng = random.Random(3)
-        filler = lambda n: "".join(rng.choice("ACGT") for _ in range(n))  # noqa: E731
+
+        def filler(n):
+            return "".join(rng.choice("ACGT") for _ in range(n))
+
         self.ref = filler(self.SITE - len(self.LEFT)) + self.LEFT + "A" + self.RIGHT
         self.ref += filler(200 - len(self.ref))
         self.directory = tempfile.TemporaryDirectory()
@@ -160,9 +164,11 @@ class CallerRegressions(unittest.TestCase):
             tmp = Path(d)
             rows = []
             for i, base in enumerate("A" * 20 + "G" * 80):
-                seq = list("N" * 150); seq[49] = base
+                seq = list("N" * 150)
+                seq[49] = base
                 rows.append({"seq": "".join(seq), "name": f"r{i}"})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             all_rows, variants, _ = run_caller(
                 tmp, bam, "chr9\t49\t50\tNM:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
             )
@@ -176,9 +182,11 @@ class CallerRegressions(unittest.TestCase):
             tmp = Path(d)
             rows = []
             for i, base in enumerate("T" * 60 + "A" * 20 + "C" * 20):
-                seq = list("N" * 150); seq[49] = base
+                seq = list("N" * 150)
+                seq[49] = base
                 rows.append({"seq": "".join(seq), "name": f"r{i}"})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             all_rows, variants, _ = run_caller(
                 tmp, bam,
                 "chr9\t49\t50\tNM:c.(949T>A)\tT\tA\tp.Phe317Ile\n"
@@ -191,14 +199,22 @@ class CallerRegressions(unittest.TestCase):
     def test_same_codon_cis_reads_emit_aggregate_protein_haplotype(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            ref = list("N" * 200); ref[99:102] = list("ACT")
-            fasta = tmp / "ref.fa"; fasta.write_text(">chr9\n" + "".join(ref) + "\n"); pysam.faidx(str(fasta))
+            ref = list("N" * 200)
+            ref[99:102] = list("ACT")
+            fasta = tmp / "ref.fa"
+            fasta.write_text(">chr9\n" + "".join(ref) + "\n")
+            pysam.faidx(str(fasta))
             rows = []
             for i in range(20):
-                seq = list("N" * 150); seq[99:102] = list("GTT"); rows.append({"seq": "".join(seq)})
+                seq = list("N" * 150)
+                seq[99:102] = list("GTT")
+                rows.append({"seq": "".join(seq)})
             for i in range(80):
-                seq = list("N" * 150); seq[99:102] = list("ACT"); rows.append({"seq": "".join(seq)})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+                seq = list("N" * 150)
+                seq[99:102] = list("ACT")
+                rows.append({"seq": "".join(seq)})
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             bed = (
                 "chr9\t99\t100\tNM_005157.6:c.(943A>G)\tA\tG\tp.Thr315Ala\n"
                 "chr9\t100\t101\tNM_005157.6:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
@@ -216,13 +232,19 @@ class CallerRegressions(unittest.TestCase):
     def test_supported_independent_codon_haplotypes_do_not_mask_each_other(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            ref = list("N" * 200); ref[99:102] = list("ACT")
-            fasta = tmp / "ref.fa"; fasta.write_text(">chr9\n" + "".join(ref) + "\n"); pysam.faidx(str(fasta))
+            ref = list("N" * 200)
+            ref[99:102] = list("ACT")
+            fasta = tmp / "ref.fa"
+            fasta.write_text(">chr9\n" + "".join(ref) + "\n")
+            pysam.faidx(str(fasta))
             rows = []
             for codon, count in (("ACT", 60), ("GCT", 20), ("ATT", 20)):
                 for _ in range(count):
-                    seq = list("N" * 150); seq[99:102] = list(codon); rows.append({"seq": "".join(seq)})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+                    seq = list("N" * 150)
+                    seq[99:102] = list(codon)
+                    rows.append({"seq": "".join(seq)})
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             bed = (
                 "chr9\t99\t100\tNM_005157.6:c.(943A>G)\tA\tG\tp.Thr315Ala\n"
                 "chr9\t100\t101\tNM_005157.6:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
@@ -238,9 +260,11 @@ class CallerRegressions(unittest.TestCase):
             tmp = Path(d)
             rows = []
             for i, base in enumerate("T" * 970 + "A" * 10 + "C" * 10 + "G" * 10):
-                seq = list("N" * 150); seq[49] = base
+                seq = list("N" * 150)
+                seq[49] = base
                 rows.append({"seq": "".join(seq), "name": f"r{i}"})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             bed = "".join(
                 f"chr9\t49\t50\tNM:c.(949T>{alt})\tT\t{alt}\tp.Phe317{aa}\n"
                 for alt, aa in (("A", "I"), ("C", "L"), ("G", "V"))
@@ -255,15 +279,19 @@ class CallerRegressions(unittest.TestCase):
             tmp = Path(d)
             # An insertion between target bases makes the aligned bases G-T-T
             # look like GTT if the inserted query base is silently ignored.
-            insertion = list("N" * 151); insertion[99:103] = list("GATT")
+            insertion = list("N" * 151)
+            insertion[99:103] = list("GATT")
             # N at the middle target is likewise ambiguous even though both
             # flanking bases are present in the query.
-            skipped = list("N" * 149); skipped[99] = "G"; skipped[100:102] = list("TT")
+            skipped = list("N" * 149)
+            skipped[99] = "G"
+            skipped[100:102] = list("TT")
             rows = [
                 {"seq": "".join(insertion), "cigar": [(0, 100), (1, 1), (0, 50)]},
                 {"seq": "".join(skipped), "cigar": [(0, 100), (3, 1), (0, 49)]},
             ]
-            bam_path = tmp / "reads.bam"; write_bam(bam_path, rows, length=200)
+            bam_path = tmp / "reads.bam"
+            write_bam(bam_path, rows, length=200)
             with pysam.AlignmentFile(str(bam_path), "rb") as bam:
                 self.assertEqual(caller.collect_codon_haplotypes(bam, "chr9", [99, 100, 101], 12, 1), {})
 
@@ -272,8 +300,11 @@ class CallerRegressions(unittest.TestCase):
             tmp = Path(d)
             rows = []
             for i, base in enumerate("A" * 20 + "G" * 80):
-                seq = list("N" * 150); seq[49] = base; rows.append({"seq": "".join(seq), "name": f"r{i}"})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+                seq = list("N" * 150)
+                seq[49] = base
+                rows.append({"seq": "".join(seq), "name": f"r{i}"})
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             all_rows, variants, _ = run_caller(
                 tmp, bam, "chr9\t49\t50\tNM:c.(1161G>A)\tG\tA\tp.Leu387Leu\n"
             )
@@ -284,28 +315,54 @@ class CallerRegressions(unittest.TestCase):
 
     def test_alignment_dedup_excludes_secondary_but_keeps_supplementary_only_signal(self):
         with tempfile.TemporaryDirectory() as d:
-            tmp = Path(d); rows = []
+            tmp = Path(d)
+            rows = []
             rows.append({"name": "one", "seq": "N" * 49 + "A" + "N" * 100, "flag": 0})
             rows.extend({"name": "one", "seq": "N" * 49 + "A" + "N" * 100, "flag": 2048} for _ in range(5))
             rows.extend({"name": "secondary", "seq": "N" * 49 + "A" + "N" * 100, "flag": 256} for _ in range(4))
             rows.append({"name": "supp_only", "seq": "N" * 49 + "A" + "N" * 100, "flag": 2048})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
             with pysam.AlignmentFile(str(bam), "rb") as handle:
                 counts = caller.count_position(handle, "chr9", 50, 1000, 12, 1)
             self.assertEqual(counts["A_fwd"], 2)
 
     def test_explicit_reference_ref_mismatch_fails(self):
         with tempfile.TemporaryDirectory() as d:
-            tmp = Path(d); rows = []
+            tmp = Path(d)
+            rows = []
             for i in range(20):
-                seq = list("N" * 150); seq[49] = "A"; rows.append({"seq": "".join(seq)})
-            bam = tmp / "reads.bam"; write_bam(bam, rows)
-            fasta = tmp / "ref.fa"; fasta.write_text(">chr9\n" + "N" * 49 + "C" + "N" * 150 + "\n"); pysam.faidx(str(fasta))
-            bed = tmp / "panel.bed"; bed.write_text("chr9\t49\t50\tNM:c.(763G>A)\tG\tA\tp.Glu255Lys\n")
-            with patch.object(caller.sys, "argv", ["caller", "--bam", str(bam), "--bed", str(bed), "--sample", "S", "--output-all", str(tmp / "a.tsv"), "--output-mutations", str(tmp / "m.tsv"), "--reference-fasta", str(fasta)]):
+                seq = list("N" * 150)
+                seq[49] = "A"
+                rows.append({"seq": "".join(seq)})
+            bam = tmp / "reads.bam"
+            write_bam(bam, rows)
+            fasta = tmp / "ref.fa"
+            fasta.write_text(">chr9\n" + "N" * 49 + "C" + "N" * 150 + "\n")
+            pysam.faidx(str(fasta))
+            bed = tmp / "panel.bed"
+            bed.write_text("chr9\t49\t50\tNM:c.(763G>A)\tG\tA\tp.Glu255Lys\n")
+            with patch.object(
+                caller.sys,
+                "argv",
+                [
+                    "caller",
+                    "--bam",
+                    str(bam),
+                    "--bed",
+                    str(bed),
+                    "--sample",
+                    "S",
+                    "--output-all",
+                    str(tmp / "a.tsv"),
+                    "--output-mutations",
+                    str(tmp / "m.tsv"),
+                    "--reference-fasta",
+                    str(fasta),
+                ],
+            ):
                 with self.assertRaisesRegex(ValueError, "BED REF mismatch"):
                     caller.main()
-
 
     def test_indel_handling_and_reporting(self):
         with tempfile.TemporaryDirectory() as d:
@@ -426,12 +483,15 @@ class ReadScanMatchesPileup(unittest.TestCase):
                 roll = rng.random()
                 if roll < 0.03:
                     gap = rng.randrange(1, 4)
-                    cigar.append((2, gap)); pos += gap
+                    cigar.append((2, gap))
+                    pos += gap
                 elif roll < 0.05:
                     ins = "".join(rng.choice("ACGT") for _ in range(rng.randrange(1, 3)))
-                    seq.extend(ins); cigar.append((1, len(ins)))
+                    seq.extend(ins)
+                    cigar.append((1, len(ins)))
                 elif roll < 0.06 and pos < 330:
-                    cigar.append((3, 40)); pos += 40
+                    cigar.append((3, 40))
+                    pos += 40
                 else:
                     run = min(rng.randrange(3, 25), 399 - pos)
                     for offset in range(run):
@@ -439,7 +499,8 @@ class ReadScanMatchesPileup(unittest.TestCase):
                         if rng.random() < 0.06:
                             base = rng.choice("ACGT")
                         seq.append(base)
-                    cigar.append((0, run)); pos += run
+                    cigar.append((0, run))
+                    pos += run
             if not seq or cigar[0][0] not in (0,) or cigar[-1][0] not in (0,):
                 continue
             if rng.random() < 0.1:   # = and X instead of M

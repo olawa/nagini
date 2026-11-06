@@ -128,7 +128,8 @@ def write_test_inputs(root):
     cytoband.write_text("chr1\t0\t100\tp36.33\tgneg\nchr2\t0\t100\tp25.3\tgneg\n")
     cnv = root / "cnv.tsv"
     cnv.write_text(
-        "chrom\tstart\tend\tlength_kb\tcopy_number\tstate\tevent_type\tlogR\tpurity\tploidy\tcytoband\tis_target_region\ttarget_genes\n"
+        "chrom\tstart\tend\tlength_kb\tcopy_number\tstate\tevent_type\tlogR\tpurity\t"
+        "ploidy\tcytoband\tis_target_region\ttarget_genes\n"
         "chr1\t1000\t5000\t4.0\t3\tGAIN\tGAIN\t0.58\t0.80\t2.0\tp36.33\tTrue\tGENE1\n"
     )
     return vcf, sv, translocations, coverage, cramino, cytoband, cnv
@@ -394,7 +395,6 @@ class FullReportTest(unittest.TestCase):
         self.assertIn("DEL", self._column(sheets["SVs"], "svtype"))
         trans = sheets["Translocations"]
         self.assertEqual(set(self._column(trans, "caller")), {"Sniffles2", "SAVANA"})
-
 
     def test_structural_variants_are_annotated_with_cytobands(self):
         with tempfile.TemporaryDirectory() as tmpdir:

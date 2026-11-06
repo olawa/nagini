@@ -12,21 +12,13 @@ if _dorado_img in ("", None, "none", "None", False, "local"):
 _dorado_exe = config.get("dorado", {}).get("binary", "")
 _dorado_exe = os.path.expanduser(str(_dorado_exe)) if _dorado_exe else "dorado"
 
-_dorado_output_format = str(
-    config.get("dorado", {}).get("demux_output_format", "fastq")
-).lower()
+_dorado_output_format = str(config.get("dorado", {}).get("demux_output_format", "fastq")).lower()
 _dorado_keep_bam = _dorado_output_format in ("bam", "both")
 _dorado_keep_fastq = _dorado_output_format in ("fastq", "both")
 _dorado_barcode_bam = "basecalling/dorado_demux/{dorado_barcode}.bam"
-_dorado_barcode_bam_output = (
-    _dorado_barcode_bam if _dorado_keep_bam else temp(_dorado_barcode_bam)
-)
+_dorado_barcode_bam_output = _dorado_barcode_bam if _dorado_keep_bam else temp(_dorado_barcode_bam)
 _dorado_barcode_fastq = "basecalling/dorado_fastq/{dorado_barcode}.fastq.gz"
-_dorado_barcode_fastq_output = (
-    _dorado_barcode_fastq
-    if _dorado_keep_fastq
-    else temp(_dorado_barcode_fastq)
-)
+_dorado_barcode_fastq_output = _dorado_barcode_fastq if _dorado_keep_fastq else temp(_dorado_barcode_fastq)
 
 
 rule dorado_basecaller:
@@ -39,11 +31,7 @@ rule dorado_basecaller:
         dorado_bin=_dorado_exe,
         model=config.get("dorado", {}).get("model", "hac"),
         kit=config.get("dorado", {}).get("kit", ""),
-        device_arg=(
-            f"--device {config['dorado']['device']}"
-            if config.get("dorado", {}).get("device")
-            else ""
-        ),
+        device_arg=(f"--device {config['dorado']['device']}" if config.get("dorado", {}).get("device") else ""),
         models_directory_arg=(
             f"--models-directory {config['dorado']['models_directory']}"
             if config.get("dorado", {}).get("models_directory")
@@ -62,9 +50,7 @@ rule dorado_basecaller:
         # A GPU partition alone does not allocate a device.  Sites that submit
         # through a scheduler must also request the device itself; the resource
         # value carries the complete flag so that it can be empty elsewhere.
-        gres=config.get("dorado", {}).get(
-            "basecaller_gres", config["default_resources"].get("gres", "")
-        ),
+        gres=config.get("dorado", {}).get("basecaller_gres", config["default_resources"].get("gres", "")),
         mem_mb=config.get("dorado", {}).get("basecaller_mem_mb", config["default_resources"]["mem_mb"]),
         mem_per_cpu=config.get("dorado", {}).get("basecaller_mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
         partition=config.get("dorado", {}).get("basecaller_partition", config["default_resources"]["partition"]),
@@ -93,11 +79,17 @@ rule dorado_demux:
         dorado_bin=_dorado_exe,
         kit=config.get("dorado", {}).get("kit", ""),
         extra=lambda wildcards: (
-            ("--barcode-both-ends " if (config.get("dorado", {}).get("demux_both_ends", False) or config.get("dorado", {}).get("both_ends", False) or config.get("dorado", {}).get("barcode_both_ends", False)) else "")
+            (
+                "--barcode-both-ends "
+                if (
+                    config.get("dorado", {}).get("demux_both_ends", False)
+                    or config.get("dorado", {}).get("both_ends", False)
+                    or config.get("dorado", {}).get("barcode_both_ends", False)
+                )
+                else ""
+            )
             + config.get("dorado", {}).get("demux_extra", "")
         ).strip(),
-
-
     log:
         "logs/dorado/demux.log",
     benchmark:
@@ -135,6 +127,8 @@ rule dorado_demux_summary:
         raw_dir="basecalling/dorado_demux_raw",
     output:
         summary="basecalling/dorado_demux/demux_summary.tsv",
+    params:
+        script=os.path.join(workflow.basedir, "scripts", "dorado_demux_collect.py"),
     log:
         "logs/dorado/demux_summary.log",
     benchmark:
@@ -155,7 +149,7 @@ rule dorado_demux_summary:
         "{rule}: take the demultiplexing summary from {input.raw_dir}"
     shell:
         """
-        python3 {workflow.basedir}/scripts/dorado_demux_collect.py summary \
+        python3 {params.script} summary \
             --raw-dir {input.raw_dir:q} \
             --output {output.summary:q} > {log} 2>&1
         """
@@ -169,6 +163,7 @@ rule dorado_demux_barcode_bam:
     output:
         bam=_dorado_barcode_bam_output,
     params:
+        script=os.path.join(workflow.basedir, "scripts", "dorado_demux_collect.py"),
         barcode=lambda wildcards: wildcards.dorado_barcode,
         allow_empty_flag="--allow-empty" if config.get("dorado", {}).get("allow_empty_barcodes", False) else "",
     log:
@@ -180,32 +175,20 @@ rule dorado_demux_barcode_bam:
         )
     threads: config.get("dorado_demux_bam", {}).get("threads", config["default_resources"]["threads"])
     resources:
-        mem_mb=config.get("dorado_demux_bam", {}).get(
-            "mem_mb", config["default_resources"]["mem_mb"]
-        ),
-        mem_per_cpu=config.get("dorado_demux_bam", {}).get(
-            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
-        ),
-        partition=config.get("dorado_demux_bam", {}).get(
-            "partition", config["default_resources"]["partition"]
-        ),
-        threads=config.get("dorado_demux_bam", {}).get(
-            "threads", config["default_resources"]["threads"]
-        ),
-        time=config.get("dorado_demux_bam", {}).get(
-            "time", config["default_resources"]["time"]
-        ),
+        mem_mb=config.get("dorado_demux_bam", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("dorado_demux_bam", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("dorado_demux_bam", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("dorado_demux_bam", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("dorado_demux_bam", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("dorado_demux_bam", {}).get(
-            "container", config["default_container"]
-        )
+        config.get("dorado_demux_bam", {}).get("container", config["default_container"])
     wildcard_constraints:
         dorado_barcode="barcode[0-9]+",
     message:
         "{rule}: retain unaligned reads assigned to {wildcards.dorado_barcode}"
     shell:
         r"""
-        python3 {workflow.basedir}/scripts/dorado_demux_collect.py barcode \
+        python3 {params.script} barcode \
             --raw-dir {input.raw_dir:q} \
             --barcode {params.barcode:q} \
             --basecalled {input.basecalled:q} \
@@ -231,25 +214,13 @@ rule dorado_demux_fastq:
         )
     threads: config.get("dorado_fastq", {}).get("threads", config["default_resources"]["threads"])
     resources:
-        mem_mb=config.get("dorado_fastq", {}).get(
-            "mem_mb", config["default_resources"]["mem_mb"]
-        ),
-        mem_per_cpu=config.get("dorado_fastq", {}).get(
-            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
-        ),
-        partition=config.get("dorado_fastq", {}).get(
-            "partition", config["default_resources"]["partition"]
-        ),
-        threads=config.get("dorado_fastq", {}).get(
-            "threads", config["default_resources"]["threads"]
-        ),
-        time=config.get("dorado_fastq", {}).get(
-            "time", config["default_resources"]["time"]
-        ),
+        mem_mb=config.get("dorado_fastq", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("dorado_fastq", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("dorado_fastq", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("dorado_fastq", {}).get("threads", config["default_resources"]["threads"]),
+        time=config.get("dorado_fastq", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("dorado_fastq", {}).get(
-            "container", config["default_container"]
-        )
+        config.get("dorado_fastq", {}).get("container", config["default_container"])
     wildcard_constraints:
         dorado_barcode="barcode[0-9]+",
     message:
@@ -285,12 +256,8 @@ rule dorado_demux_qc:
     threads: 1
     resources:
         mem_mb=config.get("dorado_demux_qc", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
-        mem_per_cpu=config.get("dorado_demux_qc", {}).get(
-            "mem_per_cpu", config["default_resources"]["mem_per_cpu"]
-        ),
-        partition=config.get("dorado_demux_qc", {}).get(
-            "partition", config["default_resources"]["partition"]
-        ),
+        mem_per_cpu=config.get("dorado_demux_qc", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("dorado_demux_qc", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
         time=config.get("dorado_demux_qc", {}).get("time", config["default_resources"]["time"]),
     container:

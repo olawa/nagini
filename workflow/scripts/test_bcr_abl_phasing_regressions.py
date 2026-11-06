@@ -135,6 +135,7 @@ class TestBcrAblPhasingRegressions(unittest.TestCase):
             tmp = Path(directory)
             codon = {"chrom": "chr9", "pos": 50, "ref": "ACT", "alt": "GTT", "mutation": "T315V"}
             other = {"chrom": "chr9", "pos": 100, "ref": "C", "alt": "T", "mutation": "T315I"}
+
             def seq(codon_value, second):
                 chars = list("A" * 150)
                 chars[49:52] = codon_value
@@ -163,7 +164,8 @@ class TestBcrAblPhasingRegressions(unittest.TestCase):
             path.write_text(
                 "chrom\tpos\tref\talt\tstatus\tmutation\trecord_type\tconsequence\tresistance_class\n"
                 "chr9\t10\tA\tG\tDETECTED\tL387L\tSITE_AUDIT\tMISSENSE\tUNCLASSIFIED\n"
-                "chr9\t20\tA\tG\tDETECTED\tCODON_CONTEXT_UNRESOLVED\tCODON_CONTEXT_UNRESOLVED\tCODON_CONTEXT_UNRESOLVED\tUNCLASSIFIED\n"
+                "chr9\t20\tA\tG\tDETECTED\tCODON_CONTEXT_UNRESOLVED\tCODON_CONTEXT_UNRESOLVED\t"
+                "CODON_CONTEXT_UNRESOLVED\tUNCLASSIFIED\n"
                 "chr9\t30\tA\tG\tDETECTED\tE255K\tVARIANT\tMISSENSE\tCURATED_RESISTANCE\n"
             )
             result = PHASER.load_detected_mutations(path)

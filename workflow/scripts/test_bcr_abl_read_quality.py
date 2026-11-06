@@ -125,7 +125,7 @@ def run_caller(tmp, bam, extra=()):
     with patch.object(caller.sys, "argv", argv):
         caller.main()
     text = paths["all"].read_text()
-    rows = list(csv.DictReader([l for l in text.splitlines() if l and not l.startswith("#")], delimiter="\t"))
+    rows = list(csv.DictReader([line for line in text.splitlines() if line and not line.startswith("#")], delimiter="\t"))
     return rows[0], text
 
 
@@ -138,14 +138,16 @@ class CallerTest(unittest.TestCase):
 
     def test_by_default_every_read_counts(self):
         with tempfile.TemporaryDirectory() as d:
-            tmp = Path(d); write_bam(tmp / "r.bam", self.records())
+            tmp = Path(d)
+            write_bam(tmp / "r.bam", self.records())
             row, text = run_caller(tmp, tmp / "r.bam")
             self.assertEqual(row["ad_alt"], "20")
             self.assertIn("# min_read_qs=0 reads_dropped=0", text)
 
     def test_a_read_quality_cut_off_removes_the_low_quality_reads_from_the_counts(self):
         with tempfile.TemporaryDirectory() as d:
-            tmp = Path(d); write_bam(tmp / "r.bam", self.records())
+            tmp = Path(d)
+            write_bam(tmp / "r.bam", self.records())
             row, text = run_caller(tmp, tmp / "r.bam", ["--min-read-qs", "10"])
             self.assertEqual(row["ad_alt"], "0")
             self.assertEqual(row["depth"], "60")
@@ -167,7 +169,8 @@ class PhaserTest(unittest.TestCase):
     MUT2 = {"chrom": "chr9", "pos": 100, "ref": "A", "alt": "T", "mutation": "T315I"}
 
     def phase(self, tmp, records, read_filter=None):
-        path = tmp / "r.bam"; write_bam(path, records)
+        path = tmp / "r.bam"
+        write_bam(path, records)
         with pysam.AlignmentFile(str(path), "rb") as bam:
             return phaser.phase_mutation_pair(bam, self.MUT1, self.MUT2, "S", 10, 1, 12, read_filter=read_filter)
 
