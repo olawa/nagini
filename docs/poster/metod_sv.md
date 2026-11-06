@@ -29,8 +29,17 @@ direkt räkning och inte en modellskattning.
 kodon (244–499) i ABL1:s kinasdomän interrogeras. 38 av dem har en kurerad
 TKI-resistensprofil; övriga rapporteras som oklassade eller synonyma, inte som
 resistens. Varianter rapporteras från 1 % allelfraktion, och subklonalt ned
-till 0,2 %. Läsningar vars baser närmast positionen (±3 bp) avviker från
-referensen räknas inte — varken som referens eller som variant. bcftools körs
+till 0,2 %. Bara BCR::ABL1-läsningar räknas — läsningar som också alignar i
+BCR — eftersom resistens bara har betydelse i fusionen. I spädningsserien
+saknade 4–7 % av läsningarna över kinasdomänen BCR-del; äkta varianter hade
+ungefär samma allelfraktion i dem, men E499E låg på 2,9 % mot 0,15 % i
+fusionsläsningarna: de innehåller ABL1-molekyler som inte är BCR::ABL1.
+Läsningar vars baser inom ±3 bp från positionen avviker från
+referensen räknas inte — varken som referens eller som variant — om inte
+avvikelsen själv är en verklig allel: en substitution som provet bär på ≥ 1 %,
+en anropad variant på en grannposition i panelen, eller en ovanligare ändring
+som sitter på variantens egna läsningar och tillsammans med den klarar skärpta
+sträng- och baskvalitetskrav som en molekyl. bcftools körs
 alltid som ortogonal caller över alla ABL1-exoner, så att även varianter utanför
 den kurerade listan syns — men bara på klonal nivå eller som stora subkloner:
 som diploid caller anropade den inget under ~20 % i jämförelsen mot MiSeq.
@@ -60,6 +69,7 @@ CGU-pipelines, med VCF, TSV och JSON bredvid för vidare bearbetning.
 | **Fusionstranskript** | 8 — e13a2, e14a2, e1a2, e19a2; atypiska e13a3, e14a3, e1a3, e6a2 |
 | **Resistenspanel** | 73 varianter / 52 positioner / 38 kodon (244–499) |
 | **Kurerad TKI-profil** | 38 av de 73 varianterna |
+| **Räknade läsningar** | bara BCR::ABL1-läsningar (alignar även i BCR) |
 | **Detektionsgräns** | AF ≥ 1 %; subklonalt ≥ 0,2 % |
 | **Täckningskrav** | djup ≥ 50, ≥ 5 alt-läsningar |
 | **Fasning** | läsbaserad cis/trans, ≥ 10 spännande läsningar |
@@ -73,11 +83,20 @@ Varje kandidat måste passera samtliga. Kontextfiltret verkar på läsningsnivå
 | Signal/brus | alt / näst största icke-referensbas ≥ 3,0 | positionsbrus |
 | Strängbias | minorsträngandel ≥ 0,05 **och** SOR ≤ 3,0 | ensidiga artefakter |
 | Medelbaskvalitet, alt | ≥ 14,0 | lågkvalitativa anrop |
-| Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt | kontextfel, t.ex. K357E (0,2–0,3 % → < 0,05 %) |
+| Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt; verkliga alleler undantas (se nedan) | kontextfel, t.ex. K357E-paret c.1068G>A + c.1069A>G (på 0,2–0,4 % av läsningarna → 0,06–0,11 %, inte anropat) |
 | Mappningskvalitet | ≥ 1 | multimappning |
 
 Strängbias kräver **båda** signalerna: SOR ensamt flaggar äkta varianter på
 strängsneda amplikon.
+
+Kontextfiltret undantar verkliga alleler: en substitution som provet bär på
+≥ 1 %, och en grannposition i panelen vars variant själv är anropad. En
+ovanligare granne som de flesta av variantens läsningar bär bedöms ihop med
+varianten som en molekyl, och där är kraven skärpta: en av strängsignalerna
+räcker för att underkänna paret, och båda baserna behöver 0,8 av referensens
+baskvalitet. Ett basanropsfel är ensidigt och anropat med låg säkerhet; en
+verklig molekyl är ingetdera. Faller exakt ett av de två kraven rapporteras
+positionen som REVIEW i stället för att anropas.
 
 ---
 

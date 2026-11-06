@@ -31,8 +31,17 @@ direct count rather than a model estimate.
 codons (244–499) of the ABL1 kinase domain are interrogated. 38 of them have
 a curated TKI-resistance profile; the rest are reported as unclassified or
 synonymous, not as resistance. Variants are reported from 1 % allele
-fraction, and subclonally down to 0.2 %. Reads whose bases next to the site
-(±3 bp) differ from the reference are not counted, as reference or as variant.
+fraction, and subclonally down to 0.2 %. Only BCR::ABL1 reads are counted —
+reads that also align in BCR — since resistance matters only in the fusion. In
+the dilution series 4–7 % of kinase-domain reads lacked a BCR part; true
+variants had about the same allele fraction in them, but E499E stood at 2.9 %
+against 0.15 % in fusion reads: they include ABL1 molecules that are not
+BCR::ABL1. Reads whose bases within ±3 bp of
+the site differ from the reference are not counted, as reference or as variant —
+unless the difference is itself a real allele: a substitution the sample
+carries at ≥ 1 %, a called variant at a neighbouring panel position, or a rarer
+change that rides on the variant's own reads and passes, together with it,
+stricter strand and base-quality checks as one molecule.
 bcftools runs alongside as an orthogonal caller over every ABL1 exon, so variants
 outside the curated list are seen as well -- at clonal and major-subclone levels
 only: as a diploid caller it called nothing below ~20 % in the MiSeq comparison.
@@ -63,6 +72,7 @@ downstream use.
 | **Fusion transcripts** | 8 — e13a2, e14a2, e1a2, e19a2; atypical e13a3, e14a3, e1a3, e6a2 |
 | **Resistance panel** | 73 variants / 52 positions / 38 codons (244–499) |
 | **Curated TKI profile** | 38 of the 73 variants |
+| **Reads counted** | BCR::ABL1 reads only (also aligned in BCR) |
 | **Limit of detection** | AF ≥ 1 %; subclonal ≥ 0.2 % |
 | **Coverage required** | depth ≥ 50, ≥ 5 alternate reads |
 | **Phasing** | read-backed cis/trans, ≥ 10 spanning reads |
@@ -76,11 +86,20 @@ Every candidate must clear all of them. The context filter acts on reads, before
 | Signal-to-noise | alt / next-largest non-reference base ≥ 3.0 | positional noise |
 | Strand bias | minor-strand fraction ≥ 0.05 **and** SOR ≤ 3.0 | one-sided artefacts |
 | Mean base quality, alt | ≥ 14.0 | low-quality calls |
-| Flanking context | reads that differ from the reference within ±3 bp are not counted, as reference or alternate | context errors, e.g. K357E (0.2–0.3 % → < 0.05 %) |
+| Flanking context | reads that differ from the reference within ±3 bp are not counted, as reference or alternate; real alleles are exempt (below) | context errors, e.g. the K357E pair c.1068G>A + c.1069A>G (on 0.2–0.4 % of reads → 0.06–0.11 %, not called) |
 | Mapping quality | ≥ 1 | multi-mapping |
 
 Strand bias requires **both** signals: SOR alone flags true variants on
 strand-skewed amplicons.
+
+The context filter exempts real alleles: a substitution the sample carries at
+≥ 1 %, and a neighbouring panel position whose variant is itself called. A
+rarer neighbour that most of the variant's reads carry is judged with the
+variant as one molecule, and there the checks are stricter: either strand
+signal alone fails the pair, and both bases need 0.8 of the reference's base
+quality. A basecalling error is one-sided and called with low confidence; a
+real molecule is neither. If exactly one of the two checks fails, the site is
+reported as REVIEW rather than called.
 
 ---
 
