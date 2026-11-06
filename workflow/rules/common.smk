@@ -1795,6 +1795,14 @@ def _bcr_abl_build():
     return aliases[build]
 
 
+def _bcr_region():
+    """The BCR gene, where the other half of a BCR::ABL1 read aligns (Ensembl BCR).
+
+    hg38 is hg19 shifted by the BCR-locus offset the fusion counter uses.
+    """
+    return {"hg19": "chr22:23522552-23660224", "hg38": "chr22:23180365-23318037"}[_bcr_abl_build()]
+
+
 def _branford_bed():
     """Pick the branford positions BED that matches the configured reference build."""
     override = config.get("bcr_abl", {}).get("branford_bed", "")

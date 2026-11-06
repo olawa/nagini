@@ -453,6 +453,15 @@ bcr_abl:
   # value than read_filter.min_qv can be tried by rerunning only the caller and
   # what follows it; reads read_filter already removed cannot be brought back.
   min_read_qs: 0
+  # Count only BCR::ABL1 reads (reads that also align in BCR) in the Branford
+  # caller and its codon haplotypes. Fusion and non-fusion counts are reported
+  # separately either way. The BCR region follows reference_build; override
+  # with fusion_region: "chr22:start-end". See D25.
+  fusion_reads_only: true
+  # A substitution beside a panel position at this fraction or more, on both
+  # strands and with ordinary base quality, is a real allele (germline SNV,
+  # change in cis), not a context error that excludes the read. See D25.
+  flank_variant_min_af: 0.01
   enable_all_callers: false
   enable_vardictrust: false
   # Always on: bcftools calls across every ABL1 (and BCR) exon of the target BED,

@@ -173,12 +173,24 @@ properties:
       gtf:
         type: string
         description: 'gtf (default: '''')'
+      flank_variant_min_af:
+        type: number
+        description: 'a substitution beside a panel position at this fraction or more, on both strands
+          and with ordinary base quality, is a real allele in the flanking-context check (default: 0.01)'
+      fusion_reads_only:
+        type: boolean
+        description: 'count only BCR::ABL1 reads (reads that also align in BCR) in the Branford caller
+          (default: true)'
+      fusion_region:
+        type: string
+        description: 'fusion-partner region, chrom:start-end; default the BCR gene for reference_build'
       kmer_window:
         type: integer
         description: 'kmer window (default: 3)'
       known_variants:
         type: string
-        description: optional VCF of known variants to force-call, in addition to the panel
+        description: optional BED/VCF of known polymorphisms; any base at these positions is forgiven
+          in the Branford caller's flanking-context check
       max_depth:
         type: integer
         description: 'max depth (default: 1000000)'

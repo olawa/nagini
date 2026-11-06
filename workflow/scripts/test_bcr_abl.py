@@ -298,10 +298,9 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
             self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
             self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
 
-    def test_a_genuinely_dirty_context_contributes_no_evidence(self):
-        """A mismatch that is not a known position still counts as dirty, and a
-        dirty read is evidence for no allele -- it used to be counted and then
-        reject the whole call as DIRTY_CONTEXT."""
+    def _dirty_neighbour_rows(self, wild_type, dirty):
+        """``dirty`` reads carry the panel ALT and a non-panel substitution 2 bp
+        downstream, on both strands; ``wild_type`` reads carry neither."""
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -314,29 +313,44 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
             )
 
             reads = []
-            for i in range(300):
+            for i in range(wild_type):
                 reads.append({"name": f"wt{i}", "chrom": "chr9", "start": 0,
                               "seq": self.REF[:150], "is_reverse": i % 2 == 0})
-            for i in range(200):
+            for i in range(dirty):
                 seq = list(self.REF[:150])
                 seq[99] = alt_base
-                # 2 bp downstream, not a panel position: genuine context error.
                 seq[101] = "A" if self.REF[101] != "A" else "G"
                 reads.append({"name": f"dirty{i}", "chrom": "chr9", "start": 0,
                               "seq": "".join(seq), "is_reverse": i % 2 == 0})
 
             bam = tmp / "dirty.bam"
             create_synthetic_bam(bam, reads, [("chr9", 200)])
-            rows = self._run_caller(tmp, bam, bed, fasta)
+            return self._run_caller(tmp, bam, bed, fasta)
 
-        row = rows[0]
+    def test_a_genuinely_dirty_context_contributes_no_evidence(self):
+        """A rare mismatch beside the site (below --flank-variant-min-af) is a
+        context error, and a dirty read is evidence for no allele -- it used to
+        be counted and then reject the whole call as DIRTY_CONTEXT."""
+
+        row = self._dirty_neighbour_rows(wild_type=3000, dirty=20)[0]   # 0.66 %
         self.assertEqual(row["kmer_clean_percent"], "0.0")      # the audit still shows it
         self.assertEqual(row["ad_alt"], "0")
-        self.assertEqual(row["ad_alt_context_excluded"], "200")
-        self.assertEqual(row["depth_context_excluded"], "200")
-        self.assertEqual(row["depth"], "300")
+        self.assertEqual(row["ad_alt_context_excluded"], "20")
+        self.assertEqual(row["depth_context_excluded"], "20")
+        self.assertEqual(row["depth"], "3000")
         self.assertEqual(row["status"], "WILDTYPE")
+        self.assertEqual(row["flank_alleles_forgiven"], "")
         self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
+
+    def test_a_substitution_the_sample_carries_beside_the_site_is_not_dirty(self):
+        """D25 fix 1: the same reads at 40 % on both strands are a real allele in
+        cis -- before, they made all 200 ALT reads dirty and the mutation vanished."""
+
+        row = self._dirty_neighbour_rows(wild_type=300, dirty=200)[0]
+        self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
+        self.assertEqual(row["ad_alt"], "200")
+        self.assertEqual(row["depth_context_excluded"], "0")
+        self.assertIn("(sample,40.00%)", row["flank_alleles_forgiven"])
 
     def test_strand_bias_spares_a_variant_on_a_strand_skewed_amplicon(self):
         """When the whole amplicon is one-sided the reference is one-sided too.

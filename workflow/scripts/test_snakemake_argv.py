@@ -29,6 +29,7 @@ class BranfordTest(unittest.TestCase):
             min_af=0.01, subclonal_af=0.002, min_depth=50, min_alt_reads=5, max_depth=1000000,
             min_base_quality=12, min_mapping_quality=1, min_snr=3.0, min_minor_strand_ratio=0.05,
             min_mean_baseq=14.0, min_kmer_rate=0.6, max_sor=3.0, kmer_window=3, extra="", min_read_qs=0,
+            flank_variant_min_af=0.01, fusion_region="chr22:23522552-23660224", fusion_reads_only=True,
         )
 
     def job(self, ref="ref.fa", known=(), extra=""):
@@ -50,6 +51,15 @@ class BranfordTest(unittest.TestCase):
         self.assertEqual(args.threads, 4)
         self.assertEqual(str(args.known_variants), "kv.vcf")
         self.assertEqual(str(args.reference_fasta), "ref.fa")
+        self.assertEqual(args.flank_variant_min_af, 0.01)
+        self.assertEqual(args.fusion_region, "chr22:23522552-23660224")
+        self.assertTrue(args.fusion_reads_only)
+
+    def test_fusion_reads_only_can_be_switched_off(self):
+        self.params.update(fusion_reads_only=False)
+        args = self.mod.parse_args(self.mod.snakemake_argv(self.job()))
+        self.assertFalse(args.fusion_reads_only)
+        self.assertEqual(args.fusion_region, "chr22:23522552-23660224")
 
     def test_optional_inputs_are_left_out_when_absent(self):
         argv = self.mod.snakemake_argv(self.job(ref="", known=[]))

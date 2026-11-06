@@ -79,6 +79,9 @@ rule bcr_abl_branford_calling:
         min_kmer_rate=lambda wildcards: config.get("bcr_abl", {}).get("min_kmer_rate", 0.60),
         max_sor=lambda wildcards: config.get("bcr_abl", {}).get("max_sor", 3.0),
         kmer_window=lambda wildcards: config.get("bcr_abl", {}).get("kmer_window", 3),
+        flank_variant_min_af=lambda wildcards: config.get("bcr_abl", {}).get("flank_variant_min_af", 0.01),
+        fusion_region=lambda wildcards: config.get("bcr_abl", {}).get("fusion_region", "") or _bcr_region(),
+        fusion_reads_only=lambda wildcards: config.get("bcr_abl", {}).get("fusion_reads_only", True),
         extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),
     log:
         "logs/bcr_abl_branford_calling/{sample}_{type}.log",
