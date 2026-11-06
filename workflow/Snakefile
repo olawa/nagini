@@ -10,7 +10,6 @@ include: "rules/stage_aligned_bam.smk"
 include: "rules/dorado.smk"
 include: "rules/align_dorado_bam.smk"
 include: "rules/read_filter.smk"
-
 include: "rules/merged_fastq.smk"
 include: "rules/target_bam.smk"
 include: "rules/sv_summary.smk"
@@ -32,6 +31,7 @@ rule all:
 # ===========================================================================
 # HYDRA-GENETICS MODULE: alignment
 # ===========================================================================
+
 
 module alignment:
     snakefile:
@@ -92,7 +92,9 @@ use rule minimap2_align from alignment as alignment_minimap2_fastq_align with:
         threads=config.get("minimap2_fastq_align", {}).get("threads", config["default_resources"]["threads"]),
         time=config.get("minimap2_fastq_align", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("minimap2_fastq_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
+        config.get("minimap2_fastq_align", {}).get(
+            "container", config.get("minimap2_align", {}).get("container", config["default_container"])
+        )
 
 
 # Unmapped-BAM units.  The wrapper's `samtools fastq -T "*"` carries every tag of
@@ -131,7 +133,9 @@ use rule minimap2_align from alignment as alignment_minimap2_ubam_align with:
         threads=config.get("minimap2_unmapped_bam_align", {}).get("threads", config["default_resources"]["threads"]),
         time=config.get("minimap2_unmapped_bam_align", {}).get("time", config["default_resources"]["time"]),
     container:
-        config.get("minimap2_unmapped_bam_align", {}).get("container", config.get("minimap2_align", {}).get("container", config["default_container"]))
+        config.get("minimap2_unmapped_bam_align", {}).get(
+            "container", config.get("minimap2_align", {}).get("container", config["default_container"])
+        )
 
 
 # One merged BAM per sample/type from the per-unit alignments, whatever route
@@ -181,6 +185,7 @@ use rule samtools_index from alignment as alignment_samtools_index_merged with:
 # ===========================================================================
 # HYDRA-GENETICS MODULE: cnv_sv
 # ===========================================================================
+
 
 module cnv_sv:
     snakefile:
@@ -321,6 +326,7 @@ use rule tabix from cnv_sv as cnv_sv_savana_tabix with:
 # HYDRA-GENETICS MODULE: snv_indels / Mutect2
 # ===========================================================================
 
+
 module snv_indels:
     snakefile:
         get_module_snakefile(
@@ -334,6 +340,7 @@ module snv_indels:
 
 
 use rule bed_split from snv_indels as snv_indels_bed_split
+
 
 use rule gatk_mutect2 from snv_indels as snv_indels_gatk_mutect2 with:
     input:
@@ -546,6 +553,7 @@ use rule tabix from snv_indels as snv_indels_vep_tabix with:
 # HYDRA-GENETICS MODULE: snv_indels / ClairS-TO
 # ===========================================================================
 
+
 use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
     input:
         bam="alignment/merged/{sample}_{type}.bam",
@@ -558,9 +566,7 @@ use rule clairs_to_call from snv_indels as snv_indels_clairs_to_call with:
         snv_tbi=temp("snv_indels/clairs_to/{sample}_{type}_snv.vcf.gz.tbi"),
         indel_tbi=temp("snv_indels/clairs_to/{sample}_{type}_indel.vcf.gz.tbi"),
     params:
-        extra=lambda wildcards: (
-            f"--remove_intermediate_dir {config.get('clairs_to_call', {}).get('extra', '')}".strip()
-        ),
+        extra=lambda wildcards: (f"--remove_intermediate_dir {config.get('clairs_to_call', {}).get('extra', '')}".strip()),
         # The error model follows the sample's basecalling model, and the
         # allele-fraction floors follow its assay: a 20 000x amplicon and a 30x
         # genome cannot share them.
@@ -682,6 +688,7 @@ use rule tabix from snv_indels as snv_indels_clairs_to_vep_tabix with:
 # HYDRA-GENETICS MODULE: snv_indels / DeepVariant (Germline WGS)
 # ===========================================================================
 
+
 # The Hydra rule hands DeepVariant the bare chromosome as --regions, so a
 # target-restricted sample was called genome-wide while ClairS-TO ran only
 # inside the design.  Pass the design slice instead, and shard only over the
@@ -713,15 +720,9 @@ use rule deepvariant from snv_indels as snv_indels_deepvariant with:
 
 use rule bcftools_concat from snv_indels as snv_indels_deepvariant_concat with:
     input:
-        calls=lambda wildcards: get_deepvariant_shards(
-            wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz"
-        ),
-        index=lambda wildcards: get_deepvariant_shards(
-            wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz.tbi"
-        ),
-        int_res=lambda wildcards: get_deepvariant_shards(
-            wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}"
-        ),
+        calls=lambda wildcards: get_deepvariant_shards(wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz"),
+        index=lambda wildcards: get_deepvariant_shards(wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}.vcf.gz.tbi"),
+        int_res=lambda wildcards: get_deepvariant_shards(wildcards, "snv_indels/deepvariant/{sample}_{type}_{chr}"),
     output:
         vcf="snv_indels/deepvariant/{sample}_{type}.vcf.gz",
     params:
@@ -823,6 +824,7 @@ use rule tabix from snv_indels as snv_indels_deepvariant_vep_tabix with:
 # HYDRA-GENETICS MODULE: qc
 # ===========================================================================
 
+
 module qc:
     snakefile:
         get_module_snakefile(
@@ -919,6 +921,7 @@ use rule multiqc_longread from qc as qc_multiqc_longread with:
 # ===========================================================================
 # HYDRA-GENETICS MODULE: annotation
 # ===========================================================================
+
 
 module annotation:
     snakefile:

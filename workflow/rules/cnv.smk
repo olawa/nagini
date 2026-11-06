@@ -35,6 +35,7 @@ rule cnv_rindels:
         pdf="cnv/rindels/{sample}_{type}_report.pdf",
         vcf=temp("cnv/rindels/{sample}_{type}.vcf"),
     params:
+        script=os.path.join(workflow.basedir, "scripts", "run_rindels.py"),
         binary=lambda wildcards: _find_rindels_binary(),
         bin_size=config.get("rindels", {}).get("cnv_bin_size", 50000),
         # Keep this in step with config.yaml's rindels.extra_cnv: --only-cnv
@@ -59,16 +60,22 @@ rule cnv_rindels:
         )
     threads: config.get("cnv_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4))
     resources:
-        mem_mb=config.get("cnv_rindels", {}).get("mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])),
-        mem_per_cpu=config.get("cnv_rindels", {}).get("mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])),
-        partition=config.get("cnv_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
+        mem_mb=config.get("cnv_rindels", {}).get(
+            "mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])
+        ),
+        mem_per_cpu=config.get("cnv_rindels", {}).get(
+            "mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])
+        ),
+        partition=config.get("cnv_rindels", {}).get(
+            "partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])
+        ),
         threads=config.get("cnv_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
         time=config.get("cnv_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
     message:
         "{rule}: call whole-genome copy number variations with Rindels for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        python3 {workflow.basedir}/scripts/run_rindels.py cnv \
+        python3 {params.script} cnv \
             --binary={params.binary:q} \
             --bam {input.bam} \
             --ref {input.ref} \
@@ -172,13 +179,12 @@ rule cnv_rindels_ideogram:
     """
     input:
         bins="cnv/rindels/{sample}_{type}.cnv_bins.bed",
-        centromeres=lambda wildcards: "references/centromeres_{}.bed".format(
-            config.get("reference_build", "hg38")
-        ),
+        centromeres=lambda wildcards: "references/centromeres_{}.bed".format(config.get("reference_build", "hg38")),
         gaps=lambda wildcards: get_gaps_bed() or [],
     output:
         png="reports/cnv_ideogram/{sample}_{type}.ideogram.png",
     params:
+        script=os.path.join(workflow.basedir, "scripts", "run_rindels.py"),
         binary=lambda wildcards: _find_rindels_binary(),
         baf=lambda wildcards: f"cnv/rindels/{wildcards.sample}_{wildcards.type}.baf.bed",
         # `-o X.vcf` makes Rindels write its CNV bin table to X.vcf.parquet.
@@ -205,7 +211,7 @@ rule cnv_rindels_ideogram:
         "{rule}: draw the whole-genome ideogram for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        python3 {workflow.basedir}/scripts/run_rindels.py ideogram \
+        python3 {params.script} ideogram \
             --binary={params.binary:q} \
             --bins {input.bins} \
             --parquet={params.parquet:q} \

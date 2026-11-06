@@ -95,5 +95,3 @@ rule read_filter_unmapped_bam:
             {params.thresholds} {params.selection} --unaligned \
             -t {threads} {params.extra} > {log} 2>&1
         """
-
-

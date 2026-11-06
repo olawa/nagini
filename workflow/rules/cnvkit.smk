@@ -76,9 +76,7 @@ rule cnvkit_batch:
         bam="alignment/merged/{sample}_{type}.bam",
         bai="alignment/merged/{sample}_{type}.bam.bai",
         fasta=lambda wildcards: _get_ref("fasta", config),
-        targets=lambda wildcards: "references/cnvkit_targets_{}.bed".format(
-            config.get("reference_build", "hg38")
-        ),
+        targets=lambda wildcards: "references/cnvkit_targets_{}.bed".format(config.get("reference_build", "hg38")),
     output:
         cnr="cnv/cnvkit/{sample}_{type}.cnr",
         cns="cnv/cnvkit/{sample}_{type}.cns",

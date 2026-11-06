@@ -66,15 +66,11 @@ min_version("7.8.0")
 import snakemake as _snakemake
 
 if int(_snakemake.__version__.split(".")[0]) != 7:
-    raise WorkflowError(
-        "nagini runs on Snakemake 7 until hydra-genetics moves; this is Snakemake %s."
-        % _snakemake.__version__
-    )
+    raise WorkflowError("nagini runs on Snakemake 7 until hydra-genetics moves; this is Snakemake %s." % _snakemake.__version__)
 if sys.version_info >= (3, 12):
     raise WorkflowError(
-        "Snakemake 7 cannot parse nagini's rule files on Python %s: it mangles every "
-        "f-string in a .smk file. Run it on Python 3.11 (envs/nagini.yaml pins it)."
-        % sys.version.split()[0]
+        "Snakemake 7 cannot parse nagini's .smk files on Python %s: it mangles every "
+        "f-string in a .smk file. Run it on Python 3.11 (envs/nagini.yaml pins it)." % sys.version.split()[0]
     )
 
 
@@ -101,20 +97,14 @@ def _expand_config_templates(value, context):
         return value
     expanded = value
     for _ in range(12):
-        updated = _config_template.sub(
-            lambda match: context.get(match.group(1), match.group(0)), expanded
-        )
+        updated = _config_template.sub(lambda match: context.get(match.group(1), match.group(0)), expanded)
         if updated == expanded:
             break
         expanded = updated
     return expanded
 
 
-_config_context = {
-    str(key): str(value)
-    for key, value in config.items()
-    if isinstance(value, (str, int, float, bool))
-}
+_config_context = {str(key): str(value) for key, value in config.items() if isinstance(value, (str, int, float, bool))}
 for _ in range(12):
     _changed = False
     for _key, _value in list(_config_context.items()):
@@ -125,17 +115,9 @@ for _ in range(12):
     if not _changed:
         break
 config = _expand_config_templates(config, _config_context)
-_unresolved_config_variables = sorted(
-    {
-        name
-        for match in _config_template.finditer(str(config))
-        for name in [match.group(1)]
-    }
-)
+_unresolved_config_variables = sorted({name for match in _config_template.finditer(str(config)) for name in [match.group(1)]})
 if _unresolved_config_variables:
-    raise WorkflowError(
-        "Unresolved config variable(s): " + ", ".join(_unresolved_config_variables)
-    )
+    raise WorkflowError("Unresolved config variable(s): " + ", ".join(_unresolved_config_variables))
 
 try:
     validate(config, schema="../schemas/config.schema.yaml")
@@ -167,9 +149,7 @@ config["reference"]["build"] = reference_build
 # input file for whichever rule happens to be scheduled first.
 if not str(config["reference"].get("fasta", "") or "").strip():
     _installed = sorted(
-        name
-        for name, entry in references.items()
-        if isinstance(entry, dict) and str(entry.get("fasta", "") or "").strip()
+        name for name, entry in references.items() if isinstance(entry, dict) and str(entry.get("fasta", "") or "").strip()
     )
     raise WorkflowError(
         f"reference_build={reference_build} has no fasta configured, which means it "
@@ -178,13 +158,11 @@ if not str(config["reference"].get("fasta", "") or "").strip():
         "config/reference_files/reference_files_<site>.yaml, or pick another build."
     )
 
+
 def vep_enabled():
     """Whether the report should depend on the VEP-annotated VCF."""
 
-    return bool(
-        config.get("annotate_small_variants_with_vep", False)
-        and not config.get("vep", {}).get("skip", False)
-    )
+    return bool(config.get("annotate_small_variants_with_vep", False) and not config.get("vep", {}).get("skip", False))
 
 
 if vep_enabled() and not config.get("vep", {}).get("vep_cache"):
@@ -313,24 +291,14 @@ validate(samples, schema="../schemas/samples.schema.yaml")
 
 # Keep this dataframe flat.  Hydra's ONT modules index the same table in
 # their own namespace, while the custom input rules need input_type as well.
-units = (
-    pd.read_table(config["units"], dtype=str)
-    .fillna("")
-    .apply(lambda col: col.str.strip() if hasattr(col, "str") else col)
-)
+units = pd.read_table(config["units"], dtype=str).fillna("").apply(lambda col: col.str.strip() if hasattr(col, "str") else col)
 validate(units, schema="../schemas/units.schema.yaml")
 
 dorado_units = units[units["input_type"].str.lower() == "dorado_bam"]
 dorado_barcodes = sorted(
-    {
-        str(value).strip()
-        for value in dorado_units.get("barcode_name", pd.Series(dtype=str)).tolist()
-        if str(value).strip()
-    }
+    {str(value).strip() for value in dorado_units.get("barcode_name", pd.Series(dtype=str)).tolist() if str(value).strip()}
 )
-dorado_demux_output_format = str(
-    config.get("dorado", {}).get("demux_output_format", "fastq")
-).strip().lower()
+dorado_demux_output_format = str(config.get("dorado", {}).get("demux_output_format", "fastq")).strip().lower()
 
 with open(config["output"]) as output_file:
     if config["output"].endswith("json"):
@@ -407,9 +375,7 @@ def get_unit_alignment_path(row):
         # Filtered back into an unaligned BAM, then aligned like any uBAM.
         suffix = "from_ubam"
     if suffix is None:
-        raise WorkflowError(
-            f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam, aligned_bam or dorado_bam."
-        )
+        raise WorkflowError(f"Unsupported input_type={row['input_type']}; use fastq, unmapped_bam, aligned_bam or dorado_bam.")
     return "alignment/units/{}_{}_{}_{}.{}.bam".format(
         row["sample"],
         row["type"],
@@ -434,15 +400,10 @@ UNALIGNED_BAM_INPUT_TYPES = ("unmapped_bam", "dorado_bam")
 def sample_source_bams_are_unaligned(sample, unit_type=None):
     """Whether every unit of this sample came in as an unaligned BAM."""
 
-    rows = _unit_rows(sample, unit_type) if unit_type else units[
-        units["sample"].astype(str).str.strip() == str(sample).strip()
-    ]
+    rows = _unit_rows(sample, unit_type) if unit_type else units[units["sample"].astype(str).str.strip() == str(sample).strip()]
     if rows.empty:
         return False
-    return all(
-        str(row["input_type"]).strip().lower() in UNALIGNED_BAM_INPUT_TYPES
-        for _, row in rows.iterrows()
-    )
+    return all(str(row["input_type"]).strip().lower() in UNALIGNED_BAM_INPUT_TYPES for _, row in rows.iterrows())
 
 
 def sample_has_merged_fastq(sample):
@@ -455,9 +416,7 @@ def sample_has_merged_fastq(sample):
     entirely, and costs one pass over files the run already reads.
     """
 
-    return bool(config.get("merged_fastq", False)) and sample_source_bams_are_unaligned(
-        sample
-    )
+    return bool(config.get("merged_fastq", False)) and sample_source_bams_are_unaligned(sample)
 
 
 def get_sample_source_bams(wildcards):
@@ -477,8 +436,7 @@ def get_sample_source_bams(wildcards):
         bam = str(row.get("bam", "") or "").strip()
         if not bam:
             raise WorkflowError(
-                f"units.tsv column bam is empty for {wildcards.sample}/{wildcards.type}/"
-                f"{row['processing_unit']}."
+                f"units.tsv column bam is empty for {wildcards.sample}/{wildcards.type}/" f"{row['processing_unit']}."
             )
         bams.append(bam)
     return bams
@@ -493,10 +451,7 @@ def get_barcode_unit_alignment(wildcards):
     rows = _unit_rows(wildcards.sample, wildcards.type)
     rows = rows[rows["barcode_name"].astype(str).str.strip() == barcode]
     if len(rows) != 1:
-        raise WorkflowError(
-            "Expected exactly one unit for "
-            f"{wildcards.sample}/{wildcards.type}/{barcode}; found {len(rows)}."
-        )
+        raise WorkflowError("Expected exactly one unit for " f"{wildcards.sample}/{wildcards.type}/{barcode}; found {len(rows)}.")
     return get_unit_alignment_path(rows.iloc[0])
 
 
@@ -520,7 +475,9 @@ def get_unit_dorado_fastq(wildcards):
     if not barcode:
         raise WorkflowError("Dorado units require barcode_name in units.tsv.")
     if read_filter_step_enabled(wildcards.sample):
-        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
+        return (
+            f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
+        )
     return f"basecalling/dorado_fastq/{barcode}.fastq.gz"
 
 
@@ -551,9 +508,7 @@ def get_index_preset():
     """The preset the available minimap2 index was built with."""
 
     return str(
-        config.get("minimap2_align", {}).get(
-            "index_preset", config.get("minimap2_align", {}).get("preset", "map-ont")
-        )
+        config.get("minimap2_align", {}).get("index_preset", config.get("minimap2_align", {}).get("preset", "map-ont"))
     ).strip()
 
 
@@ -636,10 +591,7 @@ def get_minimap2_read_group(wildcards):
             processing_unit=wildcards.processing_unit,
             barcode=wildcards.barcode,
         )
-    return (
-        r"@RG\tID:{sample}_{type}_{processing_unit}_{barcode}"
-        r"\tSM:{sample}_{type}\tPL:ONT"
-    ).format(
+    return (r"@RG\tID:{sample}_{type}_{processing_unit}_{barcode}" r"\tSM:{sample}_{type}\tPL:ONT").format(
         sample=wildcards.sample,
         type=wildcards.type,
         processing_unit=wildcards.processing_unit,
@@ -653,10 +605,7 @@ def get_reference_chromosomes():
         return list(chromosomes)
     fai = config["reference"].get("fai", f"{config['reference']['fasta']}.fai")
     if not os.path.exists(fai):
-        raise WorkflowError(
-            "No reference.chromosomes configured and the reference .fai is not available: "
-            f"{fai}"
-        )
+        raise WorkflowError("No reference.chromosomes configured and the reference .fai is not available: " f"{fai}")
     with open(fai) as fai_file:
         return [line.split("\t", 1)[0] for line in fai_file if line.strip()]
 
@@ -891,11 +840,7 @@ def sample_has_assay_module(sample, module):
 def samples_with_assay_module(module):
     """Every sample whose assay declares this module."""
 
-    return [
-        str(sample).strip()
-        for sample in get_samples(samples)
-        if sample_has_assay_module(str(sample).strip(), module)
-    ]
+    return [str(sample).strip() for sample in get_samples(samples) if sample_has_assay_module(str(sample).strip(), module)]
 
 
 def get_resolved_design_bed():
@@ -952,9 +897,7 @@ def get_minimap2_preset_for_unit(wildcards):
 def get_assay_setting(sample, section, key, default=None):
     """A tool setting for a sample, with its assay's override applied."""
 
-    return _routing_call(
-        nagini_routing.assay_setting, units, sample, assays, section, key, default
-    )
+    return _routing_call(nagini_routing.assay_setting, units, sample, assays, section, key, default)
 
 
 def get_clairs_to_platform(wildcards):
@@ -993,20 +936,15 @@ def get_clairs_to_indel_min_af(wildcards):
 
 # Fail early on an unroutable sample sheet rather than midway through the DAG,
 # and surface a library_type that disagrees with its assay as a warning.
-_routing_summary = _routing_call(
-    nagini_routing.routing_summary, units, list(get_samples(samples)), assays
-)
-for _warning in _routing_call(
-    nagini_routing.routing_warnings, units, list(get_samples(samples)), assays
-):
+_routing_summary = _routing_call(nagini_routing.routing_summary, units, list(get_samples(samples)), assays)
+for _warning in _routing_call(nagini_routing.routing_warnings, units, list(get_samples(samples)), assays):
     sys.stderr.write(f"WARNING: {_warning}\n")
 
 for _warning in _routing_call(
     nagini_routing.read_filter_warnings,
     units,
     list(get_samples(samples)),
-    bool(config.get("read_filter", {}).get("enabled", False))
-    or bool(config.get("read_filter", {}).get("both_ends", False)),
+    bool(config.get("read_filter", {}).get("enabled", False)) or bool(config.get("read_filter", {}).get("both_ends", False)),
 ):
     sys.stderr.write(f"WARNING: {_warning}\n")
 
@@ -1069,9 +1007,7 @@ def get_clairs_to_bed(wildcards):
 for _sample in get_samples(samples):
     _s_str = str(_sample).strip()
     if sample_is_target_restricted(_s_str) and sample_needs_dna_variant_calling(_s_str) and not has_design_bed():
-        sys.stderr.write(
-            f"WARNING: Sample {_s_str} is target_restricted but no reference.design_bed is configured.\n"
-        )
+        sys.stderr.write(f"WARNING: Sample {_s_str} is target_restricted but no reference.design_bed is configured.\n")
 
 
 def validate_design_bed():
@@ -1097,9 +1033,7 @@ def validate_design_bed():
                 continue
             fields = stripped.split("\t")
             if len(fields) < 3:
-                problems.append(
-                    f"line {number}: {len(fields)} tab-separated field(s), need at least 3"
-                )
+                problems.append(f"line {number}: {len(fields)} tab-separated field(s), need at least 3")
                 continue
             try:
                 start, end = int(fields[1]), int(fields[2])
@@ -1111,29 +1045,22 @@ def validate_design_bed():
     if problems:
         raise WorkflowError(
             "Malformed design BED {}:\n  {}\nTools that take this file verbatim "
-            "(ClairS-TO, mosdepth, samtools view -L) fail on it.".format(
-                bed, "\n  ".join(problems)
-            )
+            "(ClairS-TO, mosdepth, samtools view -L) fail on it.".format(bed, "\n  ".join(problems))
         )
 
 
 validate_design_bed()
 
 
+# Spaces before a slash, underscore or dot, and after a slash or underscore.
+_report_path_gap = re.compile(r" +(?=[/_.])|(?<=[/_]) +")
+
+
 def clean_report_path(path):
     """Normalize and sanitize report path strings, removing accidental whitespace."""
     if not path:
         return ""
-    res = str(path).strip()
-    while any(pattern in res for pattern in (" /", "/ ", " _", "_ ", " .")):
-        res = (
-            res.replace(" /", "/")
-            .replace("/ ", "/")
-            .replace(" _", "_")
-            .replace("_ ", "_")
-            .replace(" .", ".")
-        )
-    return res.strip()
+    return _report_path_gap.sub("", str(path).strip()).strip()
 
 
 def get_sample_type_path(wildcards, directory, suffix):
@@ -1150,11 +1077,8 @@ def get_sample_type_path(wildcards, directory, suffix):
     d = clean_report_path(directory)
     sfx = clean_report_path(suffix)
     if not sample or not unit_type:
-        raise WorkflowError(
-            f"Cannot build a report path with empty sample/type: {sample}/{unit_type}."
-        )
+        raise WorkflowError(f"Cannot build a report path with empty sample/type: {sample}/{unit_type}.")
     return clean_report_path(f"{d}/{sample}_{unit_type}{sfx}")
-
 
 
 def get_small_variant_report_vcf(wildcards):
@@ -1168,7 +1092,6 @@ def get_small_variant_report_vcf(wildcards):
     else:
         caller_dir = "snv_indels/clairs_to_postprocess"
     return get_sample_type_path(wildcards, caller_dir, suffix)
-
 
 
 def get_small_variant_report_vcf_index(wildcards):
@@ -1231,9 +1154,7 @@ def get_report_rindels_sv_tsv(wildcards):
 
 def get_report_rindels_translocations_tsv(wildcards):
     if sample_has_rindels_sv(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "reports/sv_summary_rindels", ".translocations.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/sv_summary_rindels", ".translocations.tsv")
     return []
 
 
@@ -1245,41 +1166,31 @@ def get_report_savana_sv_tsv(wildcards):
 
 def get_report_savana_translocations_tsv(wildcards):
     if savana_enabled(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "reports/sv_summary_savana", ".translocations.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/sv_summary_savana", ".translocations.tsv")
     return []
 
 
 def get_report_translocations_tsv(wildcards):
     if sniffles2_enabled(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "reports/sv_summary", ".translocations.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/sv_summary", ".translocations.tsv")
     return []
 
 
 def get_report_cnv_tsv(wildcards):
     if sample_needs_cnv_calling(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "reports/cnv_summary", ".cnv.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/cnv_summary", ".cnv.tsv")
     return []
 
 
 def get_report_target_coverage(wildcards):
     if sample_has_target_metrics(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "qc/mosdepth_bed", ".mosdepth.summary.txt"
-        )
+        return get_sample_type_path(wildcards, "qc/mosdepth_bed", ".mosdepth.summary.txt")
     return []
 
 
 def get_report_target_dist(wildcards):
     if sample_has_target_metrics(wildcards.sample):
-        return get_sample_type_path(
-            wildcards, "qc/mosdepth_bed", ".mosdepth.global.dist.txt"
-        )
+        return get_sample_type_path(wildcards, "qc/mosdepth_bed", ".mosdepth.global.dist.txt")
     return []
 
 
@@ -1315,45 +1226,30 @@ def get_sample_barcode_name(wildcards):
 def get_sample_barcode_name_str(sample, sample_type):
     rows = _unit_rows(sample, sample_type)
     if not rows.empty:
-        barcodes = [
-            str(b).strip()
-            for b in rows.get("barcode_name", pd.Series(dtype=str)).tolist()
-            if str(b).strip()
-        ]
+        barcodes = [str(b).strip() for b in rows.get("barcode_name", pd.Series(dtype=str)).tolist() if str(b).strip()]
         if barcodes:
             return barcodes[0]
-        bc = [
-            str(b).strip()
-            for b in rows.get("barcode", pd.Series(dtype=str)).tolist()
-            if str(b).strip()
-        ]
+        bc = [str(b).strip() for b in rows.get("barcode", pd.Series(dtype=str)).tolist() if str(b).strip()]
         if bc:
             return bc[0]
     return ""
 
 
-
 def get_report_bcr_abl_fusion(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return get_sample_type_path(
-            wildcards, "reports/bcr_abl", ".fusion_summary.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/bcr_abl", ".fusion_summary.tsv")
     return []
 
 
 def get_report_bcr_abl_mutations(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return get_sample_type_path(
-            wildcards, "reports/bcr_abl", ".branford_mutations.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/bcr_abl", ".branford_mutations.tsv")
     return []
 
 
 def get_report_bcr_abl_all_sites(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl"):
-        return get_sample_type_path(
-            wildcards, "reports/bcr_abl", ".branford_all_sites.tsv"
-        )
+        return get_sample_type_path(wildcards, "reports/bcr_abl", ".branford_all_sites.tsv")
     return []
 
 
@@ -1376,10 +1272,7 @@ def get_report_bcr_abl_plot_png(wildcards):
 
 
 def all_callers_enabled(sample=None):
-    return bool(
-        config.get("bcr_abl", {}).get("enable_all_callers", False)
-        or config.get("enable_all_callers", False)
-    )
+    return bool(config.get("bcr_abl", {}).get("enable_all_callers", False) or config.get("enable_all_callers", False))
 
 
 def bcr_abl_bcftools_enabled(sample=None):
@@ -1387,19 +1280,13 @@ def bcr_abl_bcftools_enabled(sample=None):
     a config can still turn it off with bcr_abl.enable_bcftools_pileup: false."""
     if all_callers_enabled(sample):
         return True
-    return bool(
-        config.get("bcr_abl", {}).get("enable_bcftools_pileup", True)
-        or config.get("enable_bcftools_pileup", False)
-    )
+    return bool(config.get("bcr_abl", {}).get("enable_bcftools_pileup", True) or config.get("enable_bcftools_pileup", False))
 
 
 def bcr_abl_rindels_enabled(sample=None):
     if all_callers_enabled(sample):
         return True
-    return bool(
-        config.get("bcr_abl", {}).get("enable_rindels", False)
-        or config.get("enable_rindels", False)
-    )
+    return bool(config.get("bcr_abl", {}).get("enable_rindels", False) or config.get("enable_rindels", False))
 
 
 def bcr_abl_vardictrust_enabled(sample=None):
@@ -1420,8 +1307,6 @@ def get_report_bcr_abl_bcftools_vcf(wildcards):
     if sample_has_assay_module(wildcards.sample, "bcr_abl") and bcr_abl_bcftools_enabled(wildcards.sample):
         return get_sample_type_path(wildcards, "snv_indels/bcftools_mpileup", ".bcr_abl.vcf.gz")
     return []
-
-
 
 
 def get_unit_types_for_sample(sample):
@@ -1445,15 +1330,9 @@ _PIPELINE_CONDITIONS = {
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
     "annotate_svs": lambda: bool(config.get("annotate_svs", False)),
     "has_design_bed": lambda: has_design_bed(),
-    "target_metrics": lambda: any(
-        sample_has_target_metrics(s) for s in get_samples(samples)
-    ),
-    "merged_fastq": lambda: any(
-        sample_has_merged_fastq(s) for s in get_samples(samples)
-    ),
-    "rindels_sv": lambda: any(
-        sample_has_rindels_sv(s) for s in get_samples(samples)
-    ),
+    "target_metrics": lambda: any(sample_has_target_metrics(s) for s in get_samples(samples)),
+    "merged_fastq": lambda: any(sample_has_merged_fastq(s) for s in get_samples(samples)),
+    "rindels_sv": lambda: any(sample_has_rindels_sv(s) for s in get_samples(samples)),
     "dorado_demux": lambda: bool(dorado_barcodes),
     "dorado_demux_bam": lambda: bool(dorado_barcodes) and dorado_demux_output_format in ("bam", "both"),
     "dorado_demux_fastq": lambda: bool(dorado_barcodes) and dorado_demux_output_format in ("fastq", "both"),
@@ -1499,7 +1378,6 @@ _SAMPLE_CONDITIONS = {
 }
 
 
-
 def _pipeline_condition_met(condition):
     """Whether a `when:` condition holds for the run as a whole."""
 
@@ -1537,12 +1415,7 @@ if _unknown_conditions:
         "one of {}, or assay:<name> / assay_module:<name>.".format(
             config["output"],
             ", ".join(_unknown_conditions),
-            ", ".join(
-                sorted(
-                    nagini_routing.PIPELINE_CONDITION_NAMES
-                    | nagini_routing.SAMPLE_CONDITION_NAMES
-                )
-            ),
+            ", ".join(sorted(nagini_routing.PIPELINE_CONDITION_NAMES | nagini_routing.SAMPLE_CONDITION_NAMES)),
         )
     )
 
@@ -1578,10 +1451,7 @@ def compile_output_file_list(wildcards):
                         )
                     )
         elif "{barcode}" in template:
-            output_files.extend(
-                outdir / clean_report_path(template.format(barcode=barcode))
-                for barcode in dorado_barcodes
-            )
+            output_files.extend(outdir / clean_report_path(template.format(barcode=barcode)) for barcode in dorado_barcodes)
         else:
             output_files.append(outdir / clean_report_path(template))
     return output_files
@@ -1609,9 +1479,7 @@ def get_nanostream_binary():
     binary = _resolve_nanostream_binary()
     if binary not in _nanostream_checked:
         try:
-            help_text = subprocess.run(
-                [binary, "filter", "--help"], capture_output=True, text=True, timeout=60
-            ).stdout
+            help_text = subprocess.run([binary, "filter", "--help"], capture_output=True, text=True, timeout=60).stdout
         except (OSError, subprocess.SubprocessError) as error:
             raise WorkflowError(f"Could not run {binary} filter --help: {error}")
         missing = [option for option in _NANOSTREAM_REQUIRED_OPTIONS if option not in help_text]
@@ -1645,9 +1513,7 @@ def _resolve_nanostream_binary():
         if os.path.isabs(expanded):
             if os.path.exists(expanded) and os.access(expanded, os.X_OK):
                 return expanded
-            raise WorkflowError(
-                f"read_filter.binary points at {expanded}, which is not an executable file."
-            )
+            raise WorkflowError(f"read_filter.binary points at {expanded}, which is not an executable file.")
         resolved = shutil.which(configured)
         if resolved:
             return resolved
@@ -1662,9 +1528,7 @@ def _resolve_nanostream_binary():
     # compute nodes can also execute; keep it in the repo on shared storage.
     system = platform.system().lower()
     machine = platform.machine().lower()
-    arch_alias = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x86_64", "amd64": "x86_64"}.get(
-        machine, machine
-    )
+    arch_alias = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x86_64", "amd64": "x86_64"}.get(machine, machine)
     bundled = os.path.join(workflow.basedir, "bin", f"{system}-{arch_alias}", "nanostream")
     if os.path.exists(bundled) and os.access(bundled, os.X_OK):
         return bundled
@@ -1705,9 +1569,7 @@ def get_read_filter_thresholds(wildcards):
     select reads with both barcode ends."""
     if not is_read_filtering_enabled(wildcards.sample):
         return "--qv 0"
-    min_qv = get_assay_setting(
-        wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20)
-    )
+    min_qv = get_assay_setting(wildcards.sample, "read_filter", "min_qv", config.get("read_filter", {}).get("min_qv", 20))
     length_range = get_assay_setting(
         wildcards.sample,
         "read_filter",
@@ -1754,15 +1616,15 @@ def unit_is_realigned(row):
     """An aligned_bam unit is filtered and aligned again when reads are to be
     filtered or selected: filtering has to happen before alignment, and the
     BAM's own alignment cannot be filtered read by read."""
-    return str(row["input_type"]).strip().lower() == "aligned_bam" and read_filter_step_enabled(
-        str(row["sample"]).strip()
-    )
+    return str(row["input_type"]).strip().lower() == "aligned_bam" and read_filter_step_enabled(str(row["sample"]).strip())
 
 
 def get_fastq_for_alignment(wildcards):
     """Return filtered FASTQ if filtering is enabled, else raw unit FASTQ."""
     if read_filter_step_enabled(wildcards.sample):
-        return f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
+        return (
+            f"reads/filtered/{wildcards.sample}_{wildcards.type}_{wildcards.processing_unit}_{wildcards.barcode}.fastq.gz".strip()
+        )
     return get_unit_input(wildcards, "fastq1")
 
 
@@ -1785,8 +1647,7 @@ def _bcr_abl_resource(filename):
 def _bcr_abl_build():
     """Only select bundled coordinates for a reference they describe."""
     build = str(config.get("reference_build", "hg38")).strip().lower()
-    aliases = {"hg19": "hg19", "grch37": "hg19", "b37": "hg19",
-               "hg38": "hg38", "grch38": "hg38"}
+    aliases = {"hg19": "hg19", "grch37": "hg19", "b37": "hg19", "hg38": "hg38", "grch38": "hg38"}
     if build not in aliases:
         raise WorkflowError(
             "No bundled BCR-ABL1 resources for reference_build={!r}; "
@@ -1868,10 +1729,7 @@ def get_vep_custom_annotations(wildcards):
     clinvar = get_clinvar_vcf(wildcards)
     if not clinvar or not os.path.isfile(f"{clinvar}.tbi"):
         return ""
-    return (
-        f"--custom {clinvar},short_name=ClinVar,format=vcf,type=exact,"
-        "fields=CLNSIG%CLNREVSTAT%CLNDN"
-    )
+    return f"--custom {clinvar},short_name=ClinVar,format=vcf,type=exact," "fields=CLNSIG%CLNREVSTAT%CLNDN"
 
 
 # --- summary Excel report (excel_report.smk) ---
@@ -1936,50 +1794,30 @@ def summary_report_files():
                     "craminos": clean_report_path(f"qc/cramino/{s}_{t}.txt"),
                     "wgs_coverages": clean_report_path(f"qc/mosdepth/{s}_{t}.mosdepth.summary.txt"),
                     "target_craminos": (
-                        clean_report_path(f"qc/cramino_target/{s}_{t}.txt")
-                        if sample_has_target_metrics(s)
-                        else ""
+                        clean_report_path(f"qc/cramino_target/{s}_{t}.txt") if sample_has_target_metrics(s) else ""
                     ),
                     "target_coverages": (
-                        clean_report_path(f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt")
-                        if sample_has_target_metrics(s)
-                        else ""
+                        clean_report_path(f"qc/mosdepth_bed/{s}_{t}.mosdepth.summary.txt") if sample_has_target_metrics(s) else ""
                     ),
                     "snv_vcfs": snv_vcf,
-                    "sv_tsvs": (
-                        clean_report_path(f"reports/sv_summary/{s}_{t}.tsv")
-                        if sniffles2_enabled(s)
-                        else ""
-                    ),
+                    "sv_tsvs": (clean_report_path(f"reports/sv_summary/{s}_{t}.tsv") if sniffles2_enabled(s) else ""),
                     "translocation_tsvs": (
-                        clean_report_path(f"reports/sv_summary/{s}_{t}.translocations.tsv")
-                        if sniffles2_enabled(s)
-                        else ""
+                        clean_report_path(f"reports/sv_summary/{s}_{t}.translocations.tsv") if sniffles2_enabled(s) else ""
                     ),
                     "rindels_sv_tsvs": (
-                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.tsv")
-                        if sample_has_rindels_sv(s)
-                        else ""
+                        clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.tsv") if sample_has_rindels_sv(s) else ""
                     ),
                     "rindels_translocation_tsvs": (
                         clean_report_path(f"reports/sv_summary_rindels/{s}_{t}.translocations.tsv")
                         if sample_has_rindels_sv(s)
                         else ""
                     ),
-                    "savana_sv_tsvs": (
-                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.tsv")
-                        if savana_enabled(s)
-                        else ""
-                    ),
+                    "savana_sv_tsvs": (clean_report_path(f"reports/sv_summary_savana/{s}_{t}.tsv") if savana_enabled(s) else ""),
                     "savana_translocation_tsvs": (
-                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.translocations.tsv")
-                        if savana_enabled(s)
-                        else ""
+                        clean_report_path(f"reports/sv_summary_savana/{s}_{t}.translocations.tsv") if savana_enabled(s) else ""
                     ),
                     "cnv_tsvs": (
-                        clean_report_path(f"reports/cnv_summary/{s}_{t}.cnv.tsv")
-                        if sample_needs_cnv_calling(s)
-                        else ""
+                        clean_report_path(f"reports/cnv_summary/{s}_{t}.cnv.tsv") if sample_needs_cnv_calling(s) else ""
                     ),
                     "bcr_abl_fusions": clean_report_path(f"reports/bcr_abl/{s}_{t}.fusion_summary.tsv") if bcr else "",
                     "bcr_abl_mutations": clean_report_path(f"reports/bcr_abl/{s}_{t}.branford_mutations.tsv") if bcr else "",
@@ -2011,10 +1849,7 @@ def get_summary_report_inputs(wildcards):
     """The files the summary depends on. Snakemake inputs cannot be empty."""
 
     rows = summary_report_files()
-    return {
-        key: [clean_report_path(row[key]) for row in rows if clean_report_path(row[key])]
-        for key in rows[0]
-    } if rows else {}
+    return {key: [clean_report_path(row[key]) for row in rows if clean_report_path(row[key])] for key in rows[0]} if rows else {}
 
 
 def get_summary_report_paths(key):
@@ -2058,6 +1893,4 @@ def get_multiqc_input_files(wildcards):
                     )
                 )
     return sorted(set(resolved))
-
-
 # --- end of rule-file helpers ---

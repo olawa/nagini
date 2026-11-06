@@ -10,8 +10,7 @@ rule bcr_abl_fusion_counts:
         bam="alignment/merged/{sample}_{type}.bam",
         bai="alignment/merged/{sample}_{type}.bam.bai",
         features=lambda wildcards: (
-            config.get("bcr_abl", {}).get("features_json", "")
-            or _bcr_abl_resource("bcr_abl_features.json")
+            config.get("bcr_abl", {}).get("features_json", "") or _bcr_abl_resource("bcr_abl_features.json")
         ),
     output:
         tsv="reports/bcr_abl/{sample}_{type}.fusion_summary.tsv",
@@ -52,21 +51,23 @@ rule bcr_abl_branford_calling:
         bai="alignment/merged/{sample}_{type}.bam.bai",
         bed=lambda wildcards: _branford_bed(),
         features=lambda wildcards: (
-            config.get("bcr_abl", {}).get("features_json", "")
-            or _bcr_abl_resource("bcr_abl_features.json")
+            config.get("bcr_abl", {}).get("features_json", "") or _bcr_abl_resource("bcr_abl_features.json")
         ),
         ref_fasta=lambda wildcards: config.get("reference", {}).get("fasta", ""),
         known_variants=lambda wildcards: (
-            [config["bcr_abl"]["known_variants"]]
-            if config.get("bcr_abl", {}).get("known_variants") else []
+            [config["bcr_abl"]["known_variants"]] if config.get("bcr_abl", {}).get("known_variants") else []
         ),
     output:
         all_sites="reports/bcr_abl/{sample}_{type}.branford_all_sites.tsv",
         mutations="reports/bcr_abl/{sample}_{type}.branford_mutations.tsv",
         vcf="reports/bcr_abl/{sample}_{type}.branford_mutations.vcf",
     params:
-        min_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "min_af", config.get("bcr_abl", {}).get("min_af", 0.01)),
-        subclonal_af=lambda wildcards: get_assay_setting(wildcards.sample, "bcr_abl", "subclonal_af", config.get("bcr_abl", {}).get("subclonal_af", 0.002)),
+        min_af=lambda wildcards: get_assay_setting(
+            wildcards.sample, "bcr_abl", "min_af", config.get("bcr_abl", {}).get("min_af", 0.01)
+        ),
+        subclonal_af=lambda wildcards: get_assay_setting(
+            wildcards.sample, "bcr_abl", "subclonal_af", config.get("bcr_abl", {}).get("subclonal_af", 0.002)
+        ),
         min_depth=lambda wildcards: config.get("bcr_abl", {}).get("min_depth", 50),
         min_alt_reads=lambda wildcards: config.get("bcr_abl", {}).get("min_alt_reads", 5),
         max_depth=lambda wildcards: config.get("bcr_abl", {}).get("max_depth", 1000000),
@@ -107,7 +108,6 @@ rule bcr_abl_branford_calling:
         "{rule}: force-call BCR-ABL1 kinase domain mutations for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/bcr_abl_branford_caller.py"
-
 
 
 rule bcr_abl_phasing:
@@ -183,7 +183,6 @@ rule bcr_abl_exon_coverage:
         "../scripts/bcr_abl_exon_coverage.py"
 
 
-
 rule bcr_abl_draw_fusions:
     """Generate Arriba fusion diagrams using draw_fusions.R."""
     input:
@@ -198,8 +197,10 @@ rule bcr_abl_draw_fusions:
         pdf="reports/bcr_abl/{sample}_{type}.fusion_plot.pdf",
         png="reports/bcr_abl/{sample}_{type}.fusion_plot.png",
     params:
+        script=os.path.join(workflow.basedir, "scripts", "bcr_abl_draw_fusions.sh"),
         gtf=lambda wildcards: _bcr_abl_gtf(),
-        cytobands=lambda wildcards: config.get("reference", {}).get("cytoband", "") or config.get("reference", {}).get("cytobands", ""),
+        cytobands=lambda wildcards: config.get("reference", {}).get("cytoband", "")
+        or config.get("reference", {}).get("cytobands", ""),
         protein_domains=lambda wildcards: config.get("arriba", {}).get("protein_domains", ""),
         build=lambda wildcards: str(config.get("reference_build", "hg19")).strip().lower(),
         extra=config.get("arriba", {}).get("extra", ""),
@@ -225,7 +226,7 @@ rule bcr_abl_draw_fusions:
         "{rule}: draw the BCR-ABL1 fusion plots for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        bash {workflow.basedir}/scripts/bcr_abl_draw_fusions.sh \
+        bash {params.script} \
             --sample {wildcards.sample} \
             --fusions {input.fusions} \
             --fusion-summary {input.fusion_summary} \
@@ -302,6 +303,7 @@ rule bcr_abl_rindels:
         vcf="snv_indels/rindels/{sample}_{type}.rindels.vcf.gz",
         haplotypes="snv_indels/rindels/{sample}_{type}.haplotypes.tsv",
     params:
+        script=os.path.join(workflow.basedir, "scripts", "run_rindels.py"),
         binary=lambda wildcards: _find_rindels_binary(),
         genome=lambda wildcards: "hg19" if "19" in str(config.get("reference_build", "hg19")).lower() else "hg38",
         extra=lambda wildcards: config.get("bcr_abl", {}).get(
@@ -317,18 +319,26 @@ rule bcr_abl_rindels:
         )
     threads: config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4))
     resources:
-        mem_mb=config.get("bcr_abl_rindels", {}).get("mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])),
-        mem_per_cpu=config.get("bcr_abl_rindels", {}).get("mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])),
-        partition=config.get("bcr_abl_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
+        mem_mb=config.get("bcr_abl_rindels", {}).get(
+            "mem_mb", config.get("rindels", {}).get("mem_mb", config["default_resources"]["mem_mb"])
+        ),
+        mem_per_cpu=config.get("bcr_abl_rindels", {}).get(
+            "mem_per_cpu", config.get("rindels", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"])
+        ),
+        partition=config.get("bcr_abl_rindels", {}).get(
+            "partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])
+        ),
         threads=config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
-        time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
+        time=config.get("bcr_abl_rindels", {}).get(
+            "time", config.get("rindels", {}).get("time", config["default_resources"]["time"])
+        ),
     conda:
         "../../envs/nagini.yaml"
     message:
         "{rule}: run Rindels in BCR-ABL1 mode for {wildcards.sample}_{wildcards.type}"
     shell:
         """
-        python3 {workflow.basedir}/scripts/run_rindels.py bcr-abl \
+        python3 {params.script} bcr-abl \
             --binary={params.binary:q} \
             --bam {input.bam} \
             --ref {input.ref} \
@@ -339,13 +349,3 @@ rule bcr_abl_rindels:
             --extra={params.extra:q} \
             --threads {threads} > {log} 2>&1
         """
-
-
-
-
-
-
-
-
-
-

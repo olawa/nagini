@@ -12,15 +12,9 @@ rule sv_summary:
             if config.get("annotate_svs", False)
             else "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz"
         ),
-        tbi=lambda wildcards: (
-            []
-            if config.get("annotate_svs", False)
-            else "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"
-        ),
+        tbi=lambda wildcards: ([] if config.get("annotate_svs", False) else "cnv_sv/sniffles2_call/{sample}_{type}.vcf.gz.tbi"),
         annotation_bed=lambda wildcards: (
-            config.get("reference", {}).get("sv_annotation_bed", "")
-            or get_sample_design_bed(wildcards.sample)
-            or []
+            config.get("reference", {}).get("sv_annotation_bed", "") or get_sample_design_bed(wildcards.sample) or []
         ),
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
@@ -66,9 +60,7 @@ rule sv_summary_rindels:
         vcf="cnv/rindels/{sample}_{type}.vcf.gz",
         tbi="cnv/rindels/{sample}_{type}.vcf.gz.tbi",
         annotation_bed=lambda wildcards: (
-            config.get("reference", {}).get("sv_annotation_bed", "")
-            or get_sample_design_bed(wildcards.sample)
-            or []
+            config.get("reference", {}).get("sv_annotation_bed", "") or get_sample_design_bed(wildcards.sample) or []
         ),
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
@@ -108,9 +100,7 @@ rule sv_summary_savana:
         vcf="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz",
         tbi="cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz.tbi",
         annotation_bed=lambda wildcards: (
-            config.get("reference", {}).get("sv_annotation_bed", "")
-            or get_sample_design_bed(wildcards.sample)
-            or []
+            config.get("reference", {}).get("sv_annotation_bed", "") or get_sample_design_bed(wildcards.sample) or []
         ),
         cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
     output:
@@ -142,4 +132,3 @@ rule sv_summary_savana:
         "{rule}: summarise SAVANA somatic structural variants for {wildcards.sample}_{wildcards.type}"
     script:
         "../scripts/sv_summary.py"
-

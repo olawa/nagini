@@ -36,9 +36,7 @@ rule nagini_excel_report:
         xlsx="reports/{sample}_{type}.nagini_report.xlsx",
     params:
         reference_build=lambda wildcards: config.get("reference", {}).get("build", config.get("reference_build", "hg38")),
-        snv_annotation=(
-            "VEP" if vep_enabled() else "none"
-        ),
+        snv_annotation=("VEP" if vep_enabled() else "none"),
         cytoband=get_cytoband_file,
         small_variant_caller=get_small_variant_caller(),
         design_bed=lambda wildcards: get_sample_design_bed(wildcards.sample),
@@ -78,16 +76,8 @@ rule nagini_summary_excel_report:
     output:
         xlsx="reports/nagini_summary_report.xlsx",
     params:
-        sample_names=lambda wildcards: [
-            clean_report_path(s)
-            for s in get_samples(samples)
-            for _ in get_unit_types_for_sample(s)
-        ],
-        sample_types=lambda wildcards: [
-            clean_report_path(t)
-            for s in get_samples(samples)
-            for t in get_unit_types_for_sample(s)
-        ],
+        sample_names=lambda wildcards: [clean_report_path(s) for s in get_samples(samples) for _ in get_unit_types_for_sample(s)],
+        sample_types=lambda wildcards: [clean_report_path(t) for s in get_samples(samples) for t in get_unit_types_for_sample(s)],
         dna_numbers=lambda wildcards: [
             clean_report_path(get_sample_dna_number(clean_report_path(s)))
             for s in get_samples(samples)
@@ -111,13 +101,9 @@ rule nagini_summary_excel_report:
         sv_tsv_paths=lambda wildcards: get_summary_report_paths("sv_tsvs"),
         translocation_tsv_paths=lambda wildcards: get_summary_report_paths("translocation_tsvs"),
         rindels_sv_tsv_paths=lambda wildcards: get_summary_report_paths("rindels_sv_tsvs"),
-        rindels_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
-            "rindels_translocation_tsvs"
-        ),
+        rindels_translocation_tsv_paths=lambda wildcards: get_summary_report_paths("rindels_translocation_tsvs"),
         savana_sv_tsv_paths=lambda wildcards: get_summary_report_paths("savana_sv_tsvs"),
-        savana_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
-            "savana_translocation_tsvs"
-        ),
+        savana_translocation_tsv_paths=lambda wildcards: get_summary_report_paths("savana_translocation_tsvs"),
         cnv_tsv_paths=lambda wildcards: get_summary_report_paths("cnv_tsvs"),
         design_bed=lambda wildcards: get_resolved_design_bed(),
         snv_vcf_paths=lambda wildcards: get_summary_report_paths("snv_vcfs"),
@@ -154,5 +140,3 @@ rule nagini_summary_excel_report:
         "{rule}: compile multi-sample Excel summary report"
     script:
         "../scripts/nagini_summary_report.py"
-
-
