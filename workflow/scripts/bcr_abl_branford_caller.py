@@ -114,9 +114,10 @@ FUSION READS (--fusion-region, --fusion-reads-only)
     A read is a BCR::ABL1 read when it also aligns in the fusion-partner region
     (its SA tag, i.e. the BCR part). With --fusion-reads-only only those reads
     are counted; resistance mutations matter only in the fusion. Reads without
-    a BCR part are 3-9 % of kinase-domain reads in the dilution series and carry
-    the true variants at the same VAF, but E499E stood at 2.8 % in them against
-    0.14 % in fusion reads: they include ABL1 molecules that are not BCR::ABL1.
+    a BCR part are 4-7 % of kinase-domain reads per library in the dilution
+    series (3-11 % per position) and carry the true variants at about the same
+    VAF, but E499E stood at 2.9 % in them against 0.15 % in fusion reads: they
+    include ABL1 molecules that are not BCR::ABL1.
     Both read sets are reported separately (*_fusion, *_nonfusion columns)
     whatever the setting.
 
