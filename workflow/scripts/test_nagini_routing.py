@@ -164,7 +164,6 @@ class SampleRoutingTest(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertIn("library_type=wgs", warnings[0])
 
-
     def test_read_filter_says_an_aligned_input_is_aligned_again(self):
         units = units_frame([
             {"sample": "S", "assay": "bcr_abl", "input_type": "aligned_bam"},
@@ -361,7 +360,6 @@ class OutputConditionTest(unittest.TestCase):
             self.assertEqual(entry.get("when"), "savana_enabled", entry["output"])
 
 
-
 class SummaryTest(unittest.TestCase):
     def test_summary_reports_what_will_run(self):
         assays = routing.resolve_assays({})
@@ -399,7 +397,6 @@ class AssaySettingTest(unittest.TestCase):
             routing.assay_setting(units, "S_PANEL", assays, "clairs_to_call", "snv_min_af", 0.05),
             0.01,
         )
-
 
     def test_a_setting_without_an_override_falls_back_to_the_default(self):
         units = units_frame([{"sample": "S", "assay": "bcr_abl"}])
@@ -588,5 +585,3 @@ class CallerResolutionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

@@ -74,7 +74,6 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("snv_indels/rindels/{sample}_{type}.rindels.vcf.gz", output_files)
 
 
-
 class ReadFilterContractTest(unittest.TestCase):
     """The nanostream arguments each unit gets, from common.smk itself."""
 

@@ -40,7 +40,13 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--min-spanning-reads", type=int, default=10, help="Minimum spanning reads required for robust phasing")
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality")
     parser.add_argument("--min-base-quality", type=int, default=12, help="Minimum base quality at both mutation positions")
-    parser.add_argument("--min-read-qs", type=float, default=0.0, help="Minimum mean read quality (the qs value) of the aligned reads; 0 is off (default 0). Use the same value as the caller.")
+    parser.add_argument(
+        "--min-read-qs",
+        type=float,
+        default=0.0,
+        help="Minimum mean read quality (the qs value) of the aligned reads; 0 is "
+             "off (default 0). Use the same value as the caller.",
+    )
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
     return parser.parse_args(argv)
 
@@ -112,7 +118,7 @@ def _is_legacy_synonymous(value: str) -> bool:
 
 def get_base_at_pos(read: pysam.AlignedSegment, target_1based: int) -> Optional[str]:
     """Return the base in query sequence at a 1-based reference position, or None if skipped/del/out of bounds.
-    
+
     Uses direct CIGAR stepping for maximum performance without allocating pair tuples.
     """
     target_0based = target_1based - 1
@@ -220,7 +226,13 @@ def phase_mutation_pair(
         # Fetch reads overlapping the entire interval
         interval_end = max(pos1 + len(ref1) - 1, pos2 + len(ref2) - 1)
         for read in bam.fetch(chrom, pos1 - 1, interval_end):
-            if read.is_unmapped or read.is_secondary or read.is_duplicate or read.is_qcfail or (read.mapping_quality or 0) < min_mapq:
+            if (
+                read.is_unmapped
+                or read.is_secondary
+                or read.is_duplicate
+                or read.is_qcfail
+                or (read.mapping_quality or 0) < min_mapq
+            ):
                 continue
             # Dropped before anything is counted, like a low mapping quality.
             if read_filter is not None and not read_filter.passes(read):
@@ -427,7 +439,7 @@ def main(argv=None) -> None:
         sys.exit(f"BAM file not found: {args.bam}")
 
     detected_muts = load_detected_mutations(args.mutations_tsv)
-    
+
     phased_pairs: List[Dict[str, Any]] = []
 
     # Open the BAM even when fewer than two mutations were supplied, so a
@@ -484,6 +496,7 @@ def main(argv=None) -> None:
         f"{len(detected_muts)} detected resistance mutations.",
         file=sys.stderr,
     )
+
 
 def snakemake_argv(smk) -> list:
     """The command-line arguments the bcr_abl_phasing rule stands for."""

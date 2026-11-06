@@ -60,7 +60,7 @@ class CnvTest(unittest.TestCase):
     def test_command_order_is_the_historical_one(self):
         command = rr.cnv_command(self.args)
         self.assertEqual(command[:11], ["rindels", "-b", "a.bam", "-r", "r.fa", "--cnv-output", self.args.bins,
-                                         "--cnv-bin-size", "50000", "-o", self.args.vcf])
+                                        "--cnv-bin-size", "50000", "-o", self.args.vcf])
         self.assertEqual(command[11:14], ["--report", "--report-path", self.args.pdf])
         self.assertEqual(command[14:16], ["-t", "4"])
         self.assertEqual(command[16:], ["--gtf", "g.gtf", "--annotate", "--annot-coding-only", "--ont", "--sv-lite"])

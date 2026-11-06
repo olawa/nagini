@@ -36,7 +36,9 @@ def phase_class(value):
 
 def summarize_phasing(rows):
     """Summarize every pair by its exact status; never infer TRANS by default."""
-    groups = {key: [] for key in ("cis", "trans", "coexisting", "low_depth", "insufficient", "ambiguous", "unphaseable", "unknown")}
+    groups = {
+        key: [] for key in ("cis", "trans", "coexisting", "low_depth", "insufficient", "ambiguous", "unphaseable", "unknown")
+    }
     for row in rows or []:
         cls = phase_class(row.get("phase_state"))
         pair = f"{row.get('mutation_1', '?')}+{row.get('mutation_2', '?')}"
@@ -167,5 +169,3 @@ def calculate_bcr_abl_depth_cutoff(
     rel_cutoff = mean_target_dp * float(min_relative_depth)
     floor = min(float(min_depth_floor), mean_target_dp * 0.5)
     return max(floor, rel_cutoff)
-
-

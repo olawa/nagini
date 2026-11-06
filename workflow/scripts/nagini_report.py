@@ -48,6 +48,7 @@ try:
 except ImportError:
     xlsxwriter = None
 
+
 def open_text(path):
     return gzip.open(path, "rt") if str(path).endswith(".gz") else open(path, "r")
 
@@ -358,7 +359,6 @@ def parse_tsv(path):
         return list(reader.fieldnames or []), rows
 
 
-
 def _sv_position(value, default=0):
     try:
         return int(str(value).split(",", 1)[0])
@@ -530,7 +530,6 @@ def _find_metric(data_dict, *keywords):
     return ""
 
 
-
 def parse_bcr_abl_tsv(path):
     rows = []
     if not path or not os.path.exists(path):
@@ -564,7 +563,6 @@ def table(columns, records):
     return [columns] + [[record.get(column, "") for column in columns] for record in records]
 
 
-
 # ---------------------------------------------------------------------------
 # Workbook writing
 # ---------------------------------------------------------------------------
@@ -575,7 +573,6 @@ def table(columns, records):
 #   0 plain      1 table header   2 title banner   3 section header
 #   4 alert      5 good           6 warning        7 field label
 #   8 highlight  9 secondary alert               10 bold plain
-
 _BASE = {"font_name": "Calibri", "font_size": 11}
 _BORDER = {"border": 1, "border_color": "#D9D9D9"}
 
@@ -712,7 +709,12 @@ def write_xlsx(path, sheets):
                             cell_format,
                         )
 
-            if image_info and isinstance(image_info, dict) and os.path.isfile(image_info.get("path", "")) and os.path.getsize(image_info.get("path", "")) > 0:
+            if (
+                image_info
+                and isinstance(image_info, dict)
+                and os.path.isfile(image_info.get("path", ""))
+                and os.path.getsize(image_info.get("path", "")) > 0
+            ):
                 cell = image_info.get("cell", f"A{len(rows) + 3}")
                 x_scale = float(image_info.get("x_scale", 0.68))
                 y_scale = float(image_info.get("y_scale", 0.68))
@@ -803,15 +805,24 @@ def _match_caller_variant_to_branford(caller_variant: Dict[str, Any], branford_r
     return False
 
 
-def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None, other_caller_snvs=None):
+def build_bcr_abl_sheet(
+    sample, fusion_rows, mutation_rows, phasing_rows, exon_rows=None, plot_png=None, all_sites_rows=None, other_caller_snvs=None
+):
     layout = [
-
-        [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2), ("", 2)],
+        [("BCR-ABL1 FUSION & RESISTANCE MUTATION REPORT", 2)] + [("", 2)] * 8,
         [("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)],
-        [("1. BCR-ABL1 FUSION ISOFORM BREAKDOWN", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)],
+        [("1. BCR-ABL1 FUSION ISOFORM BREAKDOWN", 3)] + [("", 3)] * 9,
         [
-            ("Fusion Isoform", 1), ("Alt Name", 1), ("Protein Form", 1), ("Cluster", 1),
-            ("BCR Exon", 1), ("ABL1 Exon", 1), ("Read Count", 1), ("Percent (%)", 1), ("Status", 1), ("Description", 1)
+            ("Fusion Isoform", 1),
+            ("Alt Name", 1),
+            ("Protein Form", 1),
+            ("Cluster", 1),
+            ("BCR Exon", 1),
+            ("ABL1 Exon", 1),
+            ("Read Count", 1),
+            ("Percent (%)", 1),
+            ("Status", 1),
+            ("Description", 1),
         ],
     ]
     if not fusion_rows:
@@ -859,7 +870,9 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
 
             strand_ratio_val = r.get("alt_minor_strand_ratio", "")
             try:
-                strand_display = f"{float(strand_ratio_val):.2f}" if strand_ratio_val != "" and strand_ratio_val is not None else "N/A"
+                strand_display = (
+                    f"{float(strand_ratio_val):.2f}" if strand_ratio_val != "" and strand_ratio_val is not None else "N/A"
+                )
             except (ValueError, TypeError):
                 strand_display = str(strand_ratio_val)
 
@@ -955,7 +968,9 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 ])
 
     layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-    layout.append([("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+    layout.append(
+        [("3. COMPOUND MUTATION PHASING (SINGLE-MOLECULE LONG-READ)", 3)] + [("", 3)] * 10
+    )
     layout.append([
         ("Mutation 1", 1), ("Mutation 2", 1), ("Phase State", 1), ("Cis % (of mut)", 1),
         ("Cis AF (%)", 1), ("Cis Reads (11)", 1), ("Trans Reads (10)", 1), ("Trans Reads (01)", 1),
@@ -986,7 +1001,9 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
 
     if exon_rows:
         layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-        layout.append([("4. BCR & ABL1 EXON COVERAGE STATISTICS", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+        layout.append(
+            [("4. BCR & ABL1 EXON COVERAGE STATISTICS", 3)] + [("", 3)] * 12
+        )
         layout.append([
             ("Exon", 1), ("Chrom", 1), ("Start", 1), ("End", 1), ("Length (bp)", 1),
             ("Mean Depth", 1), ("Median Depth", 1), ("Min Depth", 1), ("Max Depth", 1),
@@ -1020,10 +1037,11 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
 
     if plot_png and os.path.isfile(plot_png) and os.path.getsize(plot_png) > 0:
         layout.append([("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0), ("", 0)])
-        layout.append([("5. BCR-ABL1 FUSION ARCHITECTURE & JUNCTION PLOT (ARRIBA)", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3), ("", 3)])
+        layout.append(
+            [("5. BCR-ABL1 FUSION ARCHITECTURE & JUNCTION PLOT (ARRIBA)", 3)] + [("", 3)] * 9
+        )
         img_cell = f"B{len(layout) + 2}"
         return ReportLayout(layout, image_info={"path": plot_png, "cell": img_cell, "x_scale": 0.68, "y_scale": 0.68})
-
 
     return layout
 
@@ -1071,7 +1089,6 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         if os.path.isfile(b_vcf):
             _, bcftools_snvs, _ = parse_small_variant_vcf(b_vcf, default_caller="bcftools")
             other_caller_snvs.extend(bcftools_snvs)
-
 
     sv_columns, svs = parse_tsv(sv_tsv)
     translocation_columns, translocations = parse_tsv(translocations_tsv)
@@ -1366,8 +1383,6 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         if "on_target_reads" in bcr_read_stats and bcr_read_stats["on_target_reads"] is not None:
             target_accuracy_reads = str(bcr_read_stats["on_target_reads"])
 
-
-
     wgs_cov = next(
         (str(row.get("mean", "")) for row in wgs_rows if str(row.get("chrom", "")).lower() == "total"),
         (str(wgs_rows[0].get("mean", "")) if wgs_rows else "")
@@ -1549,7 +1564,12 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         # is derived from the barcode and is not what a result is reported
         # under, so a workbook that shows only it cannot be filed.
         [("DNA Number", 7), (dna_number or "N/A", 0), ("Sample ID (pipeline)", 7), (sample, 0)],
-        [("Sample Type", 7), (f"Tumor ({sample_type})" if sample_type == "T" else f"Normal ({sample_type})", 0), ("Reference Genome", 7), (reference_build, 0)],
+        [
+            ("Sample Type", 7),
+            (f"Tumor ({sample_type})" if sample_type == "T" else f"Normal ({sample_type})", 0),
+            ("Reference Genome", 7),
+            (reference_build, 0),
+        ],
         [("Sequencing Platform", 7), ("Oxford Nanopore (ONT)", 0), ("Barcode / Demux ID", 7), (barcode_display, 0)],
         [("Demux Pool Fraction", 7), (demux_yield_display, 0), ("Pipeline Status", 7), ("COMPLETED", 5)],
         [("Small Variant Caller", 7), (caller_display, 0), ("Structural Variant Caller", 7), ("Sniffles2", 0)],
@@ -1559,56 +1579,190 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     ]
 
     if has_bcr_abl:
-        overview.extend([
-            [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
-            [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
-            [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
-            [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
-            [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
-            [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
-            [("BCR-ABL1 Fusion Reads", 7), ("Total fusion-spanning reads (deduplicated)", 0), (total_fusion_reads, 0), ("PASS" if total_fusion_reads > 0 else "INFO", 5 if total_fusion_reads > 0 else 0)],
-            [("BCR-ABL1 Target Enrichment", 7), ("Fusion reads / total sequenced reads", 0), (target_enrich_str, 0), (enrich_status, enrich_style)],
-            [("Kinase Domain Mean Depth", 7), (kd_depth_label, 0), (kd_depth_str, 0), (kd_status, kd_style)],
-        ])
+        overview.extend(
+            [
+                [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
+                [
+                    ("Total Yield [Gb]", 7),
+                    ("Total sequenced yield", 0),
+                    (yield_gb or "N/A", 0),
+                    ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0),
+                ],
+                [
+                    ("Total Reads", 7),
+                    ("Total sequenced reads", 0),
+                    (total_reads or "N/A", 0),
+                    ("PASS" if total_reads else "INFO", 5 if total_reads else 0),
+                ],
+                [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
+                [
+                    ("Read Length N50 [bp]", 7),
+                    ("N50 read length", 0),
+                    (n50_bp or "N/A", 0),
+                    ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0),
+                ],
+                [
+                    ("Median Read Length [bp]", 7),
+                    ("Median read length", 0),
+                    (median_len or "N/A", 0),
+                    ("PASS" if median_len else "INFO", 5 if median_len else 0),
+                ],
+                [
+                    ("BCR-ABL1 Fusion Reads", 7),
+                    ("Total fusion-spanning reads (deduplicated)", 0),
+                    (total_fusion_reads, 0),
+                    ("PASS" if total_fusion_reads > 0 else "INFO", 5 if total_fusion_reads > 0 else 0),
+                ],
+                [
+                    ("BCR-ABL1 Target Enrichment", 7),
+                    ("Fusion reads / total sequenced reads", 0),
+                    (target_enrich_str, 0),
+                    (enrich_status, enrich_style),
+                ],
+                [("Kinase Domain Mean Depth", 7), (kd_depth_label, 0), (kd_depth_str, 0), (kd_status, kd_style)],
+            ]
+        )
     else:
-        overview.extend([
-            [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
-            [("Total Yield [Gb]", 7), ("Total sequenced yield", 0), (yield_gb or "N/A", 0), ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0)],
-            [("Total Reads", 7), ("Total sequenced reads", 0), (total_reads or "N/A", 0), ("PASS" if total_reads else "INFO", 5 if total_reads else 0)],
-            [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
-            [("Read Length N50 [bp]", 7), ("N50 read length", 0), (n50_bp or "N/A", 0), ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0)],
-            [("Median Read Length [bp]", 7), ("Median read length", 0), (median_len or "N/A", 0), ("PASS" if median_len else "INFO", 5 if median_len else 0)],
-            [("Mean Target Coverage", 7), ("Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
-            [("Target Fold Enrichment", 7), ("Target / WGS coverage ratio", 0), (fold_enr_str, 0), (fold_enr_status, fold_enr_style)],
-            [("Target Breadth (>=20x)", 7), ("% target bases >= 20x depth", 0), (pct_20x_str, 0), (p20_status, p20_style)],
-            [("Target Breadth (>=30x)", 7), ("% target bases >= 30x depth", 0), (pct_30x_str, 0), ("PASS" if (pct_30x and pct_30x >= 0.85) else ("INFO" if pct_30x is not None else "N/A"), 5 if (pct_30x and pct_30x >= 0.85) else 0)],
-            [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
-        ])
+        overview.extend(
+            [
+                [("QUALITY CONTROL & SEQUENCING METRICS", 3), ("", 3), ("VALUE", 3), ("STATUS", 3)],
+                [
+                    ("Total Yield [Gb]", 7),
+                    ("Total sequenced yield", 0),
+                    (yield_gb or "N/A", 0),
+                    ("PASS" if yield_gb else "INFO", 5 if yield_gb else 0),
+                ],
+                [
+                    ("Total Reads", 7),
+                    ("Total sequenced reads", 0),
+                    (total_reads or "N/A", 0),
+                    ("PASS" if total_reads else "INFO", 5 if total_reads else 0),
+                ],
+                [(read_accuracy_label, 7), (read_accuracy_hint, 0), (mean_q or "N/A", 0), (q_status, q_style)],
+                [
+                    ("Read Length N50 [bp]", 7),
+                    ("N50 read length", 0),
+                    (n50_bp or "N/A", 0),
+                    ("PASS" if n50_bp else "INFO", 5 if n50_bp else 0),
+                ],
+                [
+                    ("Median Read Length [bp]", 7),
+                    ("Median read length", 0),
+                    (median_len or "N/A", 0),
+                    ("PASS" if median_len else "INFO", 5 if median_len else 0),
+                ],
+                [("Mean Target Coverage", 7), ("Mean depth in target BED", 0), (target_cov or "N/A", 0), (t_status, t_style)],
+                [
+                    ("Target Fold Enrichment", 7),
+                    ("Target / WGS coverage ratio", 0),
+                    (fold_enr_str, 0),
+                    (fold_enr_status, fold_enr_style),
+                ],
+                [("Target Breadth (>=20x)", 7), ("% target bases >= 20x depth", 0), (pct_20x_str, 0), (p20_status, p20_style)],
+                [
+                    ("Target Breadth (>=30x)", 7),
+                    ("% target bases >= 30x depth", 0),
+                    (pct_30x_str, 0),
+                    (
+                        "PASS" if (pct_30x and pct_30x >= 0.85) else ("INFO" if pct_30x is not None else "N/A"),
+                        5 if (pct_30x and pct_30x >= 0.85) else 0,
+                    ),
+                ],
+                [("Mean WGS Coverage", 7), ("Mean whole-genome depth", 0), (wgs_cov or "N/A", 0), ("INFO", 0)],
+            ]
+        )
         if target_cramino_rows:
-            overview.extend([
-                [("", 0), ("", 0), ("", 0), ("", 0)],
-                [("ON-TARGET READ STATISTICS", 3), ("Reads overlapping the design +/-25 kb", 3), ("VALUE", 3), ("STATUS", 3)],
-                [(f"On-Target {target_accuracy_key}" if target_accuracy_key else "On-Target Read Accuracy", 7), ("Identity of reads in the design", 0), (target_accuracy or "N/A", 0), ("INFO", 0)],
-                [("On-Target Reads", 7), ("Reads overlapping the design", 0), (target_accuracy_reads or "N/A", 0), ("INFO", 0)],
-                [("On-Target Read Length N50 [bp]", 7), ("N50 of reads in the design", 0), (target_accuracy_n50 or "N/A", 0), ("INFO", 0)],
-            ])
+            overview.extend(
+                [
+                    [("", 0), ("", 0), ("", 0), ("", 0)],
+                    [("ON-TARGET READ STATISTICS", 3), ("Reads overlapping the design +/-25 kb", 3), ("VALUE", 3), ("STATUS", 3)],
+                    [
+                        (f"On-Target {target_accuracy_key}" if target_accuracy_key else "On-Target Read Accuracy", 7),
+                        ("Identity of reads in the design", 0),
+                        (target_accuracy or "N/A", 0),
+                        ("INFO", 0),
+                    ],
+                    [
+                        ("On-Target Reads", 7),
+                        ("Reads overlapping the design", 0),
+                        (target_accuracy_reads or "N/A", 0),
+                        ("INFO", 0),
+                    ],
+                    [
+                        ("On-Target Read Length N50 [bp]", 7),
+                        ("N50 of reads in the design", 0),
+                        (target_accuracy_n50 or "N/A", 0),
+                        ("INFO", 0),
+                    ],
+                ]
+            )
 
     overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
     overview.append([("VARIANT CALLING SUMMARY", 3), ("", 3), ("COUNT", 3), ("FLAG / ACTION", 3)])
     overview.append([("Total Small Variants", 7), ("SNVs and short indels", 0), (len(snvs), 0), ("PASS", 5)])
     overview.append([("PASS Small Variants", 7), ("High-confidence calls", 0), (pass_count, 0), ("PASS", 5)])
-    overview.append([("ClinVar Pathogenic Variants", 7), ("Pathogenic / Likely Pathogenic", 0), (len(pathogenic_snvs), 0), ("ACTION REQUIRED" if pathogenic_snvs else "NONE", 4 if pathogenic_snvs else 5)])
-    overview.append([("High Impact Variants", 7), ("Stop gained / frameshift / splice", 0), (len(high_impact_snvs), 0), ("REVIEW" if high_impact_snvs else "NONE", 6 if high_impact_snvs else 5)])
+    overview.append(
+        [
+            ("ClinVar Pathogenic Variants", 7),
+            ("Pathogenic / Likely Pathogenic", 0),
+            (len(pathogenic_snvs), 0),
+            ("ACTION REQUIRED" if pathogenic_snvs else "NONE", 4 if pathogenic_snvs else 5),
+        ]
+    )
+    overview.append(
+        [
+            ("High Impact Variants", 7),
+            ("Stop gained / frameshift / splice", 0),
+            (len(high_impact_snvs), 0),
+            ("REVIEW" if high_impact_snvs else "NONE", 6 if high_impact_snvs else 5),
+        ]
+    )
     if cnvs:
-        overview.append([("Total Copy Number Alterations", 7), ("Genome-wide CNV segments (Rindels)", 0), (len(cnv_non_diploid), 0), ("CNV DETECTED" if cnv_non_diploid else "NONE", 6 if cnv_non_diploid else 5)])
+        overview.append(
+            [
+                ("Total Copy Number Alterations", 7),
+                ("Genome-wide CNV segments (Rindels)", 0),
+                (len(cnv_non_diploid), 0),
+                ("CNV DETECTED" if cnv_non_diploid else "NONE", 6 if cnv_non_diploid else 5),
+            ]
+        )
         if target_cnvs:
-            overview.append([("Target-Overlapping CNVs", 7), ("CNVs overlapping design BED", 0), (len(target_cnvs), 0), ("REVIEW" if target_cnvs else "NONE", 6 if target_cnvs else 5)])
-    overview.append([("Structural Variants (Intra-chrom)", 7), ("DEL / DUP / INS / INV, all callers", 0), (len(svs_intra), 0), ("INFO", 0)])
-    overview.append([("Target-Overlapping SVs", 7), ("SVs overlapping panel genes", 0), (len(target_svs), 0), ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5)])
-    overview.append([("Translocations / Breakends", 7), ("Inter-chromosomal rearrangements", 0), (len(translocations), 0), ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5)])
+            overview.append(
+                [
+                    ("Target-Overlapping CNVs", 7),
+                    ("CNVs overlapping design BED", 0),
+                    (len(target_cnvs), 0),
+                    ("REVIEW" if target_cnvs else "NONE", 6 if target_cnvs else 5),
+                ]
+            )
+    overview.append(
+        [("Structural Variants (Intra-chrom)", 7), ("DEL / DUP / INS / INV, all callers", 0), (len(svs_intra), 0), ("INFO", 0)]
+    )
+    overview.append(
+        [
+            ("Target-Overlapping SVs", 7),
+            ("SVs overlapping panel genes", 0),
+            (len(target_svs), 0),
+            ("REVIEW" if target_svs else "NONE", 6 if target_svs else 5),
+        ]
+    )
+    overview.append(
+        [
+            ("Translocations / Breakends", 7),
+            ("Inter-chromosomal rearrangements", 0),
+            (len(translocations), 0),
+            ("TRANSLOCATION DETECTED" if translocations else "NONE", 8 if translocations else 5),
+        ]
+    )
     if not has_bcr_abl:
-        overview.append([("Low-Coverage Regions (<20x)", 7), ("Target regions below 20x depth", 0), (low_20x_count, 0), (low_cov_status, low_cov_style)])
-
+        overview.append(
+            [
+                ("Low-Coverage Regions (<20x)", 7),
+                ("Target regions below 20x depth", 0),
+                (low_20x_count, 0),
+                (low_cov_status, low_cov_style),
+            ]
+        )
 
     # Add BCR-ABL summary block to overview if BCR-ABL data present
     if has_bcr_abl:
@@ -1616,7 +1770,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         active_muts = active_resistance_mutations(bcr_abl_mutation_rows)
         det_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "DETECTED"]
         subcl_muts = [r["mutation"] for r in active_muts if str(r.get("status", "")).upper() == "SUBCLONAL"]
-        unclassified = [r for r in bcr_abl_mutation_rows if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)]
+        unclassified = [
+            r
+            for r in bcr_abl_mutation_rows
+            if str(r.get("status", "")).upper() in {"DETECTED", "SUBCLONAL"} and not is_resistance_associated(r)
+        ]
         assessment = panel_assessment(bcr_abl_all_sites_rows)
 
         if det_muts:
@@ -1637,10 +1795,17 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         if not det_muts and not subcl_muts and assessment["state"] == "ASSESSED":
             mut_summary, mut_action, mut_action_style = "No resistance-associated variants detected", "PANEL ASSESSED", 5
         elif not det_muts and not subcl_muts and assessment["state"] == "INCOMPLETE":
-            mut_summary = f"No resistance-associated variants detected; panel incomplete ({assessment['callable_positions']}/{assessment['positions']} sites callable)"
+            mut_summary = (
+                "No resistance-associated variants detected; panel incomplete "
+                f"({assessment['callable_positions']}/{assessment['positions']} sites callable)"
+            )
             mut_action, mut_action_style = "INCOMPLETE", 6
         elif not det_muts and not subcl_muts and assessment["state"] == "COMPLETENESS_UNVERIFIED":
-            mut_summary, mut_action, mut_action_style = "No resistance-associated variants detected; panel completeness unverified", "REVIEW", 6
+            mut_summary, mut_action, mut_action_style = (
+                "No resistance-associated variants detected; panel completeness unverified",
+                "REVIEW",
+                6,
+            )
         elif assessment["state"] == "INCOMPLETE":
             mut_summary += f"; panel incomplete ({assessment['callable_positions']}/{assessment['positions']} sites callable)"
         if unclassified:
@@ -1658,7 +1823,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         if any(str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)" for r in bcr_abl_phasing_rows):
             phase_flag = "COMPOUND MUTATION (CIS)"
             phase_flag_style = 4
-        elif any(str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)" for r in bcr_abl_phasing_rows):
+        elif any(
+            str(r.get("phase_state", "")).strip().upper() == "COEXISTING (COMPOUND + POLYCLONAL)" for r in bcr_abl_phasing_rows
+        ):
             phase_flag = "COEXISTING PHASE EVIDENCE"
             phase_flag_style = 4
         elif any(str(r.get("phase_state", "")).strip().upper() == "TRANS (POLYCLONAL)" for r in bcr_abl_phasing_rows):
@@ -1667,15 +1834,43 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
 
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
-        overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
-        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts or unclassified or review or assessment["state"] != "ASSESSED" else 5)), (mut_action, mut_action_style)])
-        overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, phase_flag_style), (phase_flag, phase_flag_style)])
+        overview.append(
+            [
+                ("Primary Fusion Isoform", 7),
+                ("Major/Minor BCR breakpoint", 0),
+                (prim_iso, 8),
+                ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0),
+            ]
+        )
+        overview.append(
+            [
+                ("Resistance Mutations", 7),
+                ("Branford ABL1 panel", 0),
+                (
+                    mut_summary,
+                    4 if det_muts else (6 if subcl_muts or unclassified or review or assessment["state"] != "ASSESSED" else 5),
+                ),
+                (mut_action, mut_action_style),
+            ]
+        )
+        overview.append(
+            [
+                ("Compound Phasing Status", 7),
+                ("Single-molecule read phasing", 0),
+                (phase_summary, phase_flag_style),
+                (phase_flag, phase_flag_style),
+            ]
+        )
 
     # Add clinical findings preview tables directly on the Overview tab
     if pathogenic_snvs:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
-        overview.append([("PATHOGENIC & LIKELY PATHOGENIC VARIANTS (CLINVAR)", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4)])
-        overview.append([("Gene", 1), ("Chr", 1), ("Position", 1), ("Change", 1), ("VAF", 1), ("Consequence", 1), ("ClinVar Significance", 1)])
+        overview.append(
+            [("PATHOGENIC & LIKELY PATHOGENIC VARIANTS (CLINVAR)", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4), ("", 4)]
+        )
+        overview.append(
+            [("Gene", 1), ("Chr", 1), ("Position", 1), ("Change", 1), ("VAF", 1), ("Consequence", 1), ("ClinVar Significance", 1)]
+        )
         snv_preview, snv_omitted = preview_rows(pathogenic_snvs, 15)
         for v in snv_preview:
             overview.append([
@@ -1696,7 +1891,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     if cnv_non_diploid:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("COPY NUMBER ALTERATIONS (RINDELS)", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6), ("", 6)])
-        overview.append([("Chr", 1), ("Start", 1), ("End", 1), ("Length [kb]", 1), ("Copy Number", 1), ("Type", 1), ("Cytoband", 1)])
+        overview.append(
+            [("Chr", 1), ("Start", 1), ("End", 1), ("Length [kb]", 1), ("Copy Number", 1), ("Type", 1), ("Cytoband", 1)]
+        )
         cnv_preview, cnv_omitted = preview_rows(
             cnv_non_diploid,
             25,
@@ -1727,7 +1924,9 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     if translocations:
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("TRANSLOCATIONS & REARRANGEMENTS", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8), ("", 8)])
-        overview.append([("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Pos2", 1), ("Notation", 1), ("Genes", 1)])
+        overview.append(
+            [("Sample", 1), ("Type", 1), ("Chr1", 1), ("Pos1", 1), ("Chr2", 1), ("Pos2", 1), ("Notation", 1), ("Genes", 1)]
+        )
         trans_preview, trans_omitted = preview_rows(
             translocations,
             15,
@@ -1948,5 +2147,3 @@ if "snakemake" in globals():
     run_from_snakemake(snakemake)
 elif __name__ == "__main__":
     main()
-
-

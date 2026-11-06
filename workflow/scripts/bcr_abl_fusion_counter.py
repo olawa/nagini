@@ -26,6 +26,7 @@ except ImportError:
         from bcr_abl_read_quality import mean_read_quality, QS_TAG
     except ImportError:
         QS_TAG = "qs"
+
         def mean_read_quality(qualities):
             if not qualities:
                 return None
@@ -71,9 +72,9 @@ except ImportError:
 
 _CHR9_HG19_TO_HG38_OFFSET = 2875387   # ABL1 locus; see regenerate_branford_bed.py
 _CHR22_HG19_TO_HG38_OFFSET = 342187   # BCR locus; derived from rindels'
-                                       # independently curated breakpoint
-                                       # clusters (m-BCR/M-BCR/mu-BCR), all
-                                       # three agreeing on this exact offset.
+# independently curated breakpoint
+# clusters (m-BCR/M-BCR/mu-BCR), all
+# three agreeing on this exact offset.
 
 _BCR_EXONS_HG19 = {
     "e1": 23524426,
@@ -145,11 +146,15 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bam", required=True, type=Path, help="Input aligned BAM file")
     parser.add_argument("--sample", required=True, help="Sample identifier")
-    parser.add_argument("--genome-build", default="hg38", choices=["hg38", "hg19", "grch38", "grch37"], help="Reference genome build")
+    parser.add_argument(
+        "--genome-build", default="hg38", choices=["hg38", "hg19", "grch38", "grch37"], help="Reference genome build"
+    )
     parser.add_argument("--features-json", type=Path, default=None, help="Optional BCR-ABL features JSON database")
     parser.add_argument("--output", required=True, type=Path, help="Output summary TSV path")
     parser.add_argument("--json-output", type=Path, default=None, help="Optional output JSON summary path")
-    parser.add_argument("--arriba-output", type=Path, default=None, help="Optional Arriba-compatible fusions TSV path for draw_fusions.R")
+    parser.add_argument(
+        "--arriba-output", type=Path, default=None, help="Optional Arriba-compatible fusions TSV path for draw_fusions.R"
+    )
     parser.add_argument("--tolerance", type=int, default=150, help="Coordinate tolerance in bp to match exon junction")
     parser.add_argument("--min-mapq", type=int, default=1, help="Minimum mapping quality for read segments")
     parser.add_argument("--threads", type=int, default=1, help="Number of worker threads for BAM decompression")
@@ -268,10 +273,10 @@ def compute_n50(lengths: Sequence[int]) -> int:
     sorted_lens = sorted(lengths, reverse=True)
     half_total = sum(sorted_lens) / 2.0
     cum = 0
-    for l in sorted_lens:
-        cum += l
+    for length in sorted_lens:
+        cum += length
         if cum >= half_total:
-            return l
+            return length
     return sorted_lens[-1]
 
 
@@ -449,7 +454,6 @@ def extract_fusion_events(
     return isoform_counts, raw_events, total_reads_scanned, read_stats
 
 
-
 def write_outputs(
     sample: str,
     isoform_counts: Dict[str, int],
@@ -556,7 +560,6 @@ def write_outputs(
             json.dump(summary_payload, handle, indent=2)
 
 
-
 def write_arriba_tsv(
     sample: str,
     isoform_counts: Dict[str, int],
@@ -588,8 +591,16 @@ def write_arriba_tsv(
         abl_pos_list = [e["abl_pos"] for e in evs]
         iso_bcr = iso.split("a", 1)[0] if (iso.startswith("e") and "a" in iso[1:]) else "e14"
         iso_abl = "a" + iso.split("a", 1)[1] if (iso.startswith("e") and "a" in iso[1:]) else "a2"
-        bcr_pos = sorted(bcr_pos_list)[len(bcr_pos_list) // 2] if bcr_pos_list else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso_bcr, 23632600)
-        abl_pos = sorted(abl_pos_list)[len(abl_pos_list) // 2] if abl_pos_list else KNOWN_JUNCTIONS[build]["abl_exons"].get(iso_abl, 133729451)
+        bcr_pos = (
+            sorted(bcr_pos_list)[len(bcr_pos_list) // 2]
+            if bcr_pos_list
+            else KNOWN_JUNCTIONS[build]["bcr_exons"].get(iso_bcr, 23632600)
+        )
+        abl_pos = (
+            sorted(abl_pos_list)[len(abl_pos_list) // 2]
+            if abl_pos_list
+            else KNOWN_JUNCTIONS[build]["abl_exons"].get(iso_abl, 133729451)
+        )
         bcr_exon = evs[0]["bcr_exon"] if evs else iso_bcr
         abl_exon = evs[0]["abl_exon"] if evs else iso_abl
 
@@ -669,6 +680,7 @@ def main(argv=None) -> None:
         f"fusion-spanning reads across {len(isoform_counts)} isoforms.",
         file=sys.stderr,
     )
+
 
 def snakemake_argv(smk) -> list:
     """The command-line arguments the bcr_abl_fusion_counts rule stands for."""

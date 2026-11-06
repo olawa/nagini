@@ -325,9 +325,6 @@ def get_sample_caller(units, sample: str, assays: dict, global_caller: str = "au
     return "deepvariant"
 
 
-
-
-
 def sample_modules(units, sample: str, assays: dict) -> list:
     return list(get_assay_definition(units, sample, assays)["modules"])
 

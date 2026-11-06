@@ -102,8 +102,8 @@ class CodonQualityTests(unittest.TestCase):
         bam = self.tmp / "competitors.bam"
         write_bam(bam, rows)
         audit, variants, _ = run_caller(self.tmp, bam,
-            "chr9\t49\t50\tNM:c.(949T>A)\tT\tA\tp.Phe317Ile\n"
-            "chr9\t49\t50\tNM:c.(949T>C)\tT\tC\tp.Phe317Leu\n")
+                                        "chr9\t49\t50\tNM:c.(949T>A)\tT\tA\tp.Phe317Ile\n"
+                                        "chr9\t49\t50\tNM:c.(949T>C)\tT\tC\tp.Phe317Leu\n")
         self.assertEqual(audit[0]["status"], "ARTIFACT")
         self.assertEqual(float(audit[0]["snr"]), 2.5)
         self.assertNotIn("C", audit[0]["credible_panel_alt_competitors"])

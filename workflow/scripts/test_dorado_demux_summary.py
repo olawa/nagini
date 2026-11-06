@@ -57,7 +57,7 @@ class CountingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "s.tsv"
             write_summary(path, [f"r{i}\tbarcode01" for i in range(3)]
-                                + ["r9\tbarcode02", "r10\tunclassified"])
+                          + ["r9\tbarcode02", "r10\tunclassified"])
             counts = summary.count_barcodes(path)
         self.assertEqual(counts["barcode01"], 3)
         self.assertEqual(counts["barcode02"], 1)

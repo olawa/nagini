@@ -165,6 +165,7 @@ def main(argv=None) -> None:
         print(f"Unclassified reads: {unclassified['Percent of run']}% of the run.")
     print(f"Wrote {args.output}")
 
+
 def snakemake_argv(smk) -> list:
     """The command-line arguments the dorado_demux_qc rule stands for."""
     argv = [

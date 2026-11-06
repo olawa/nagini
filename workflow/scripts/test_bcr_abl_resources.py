@@ -147,7 +147,6 @@ class BranfordBedTest(unittest.TestCase):
             self.skipTest("sandbox permission prevented running external script")
 
 
-
 class FusionJunctionTableTest(unittest.TestCase):
     """Locks the coordinate table bcr_abl_fusion_counter.py actually reads at
     runtime -- bcr_abl_features.json is not consulted for these values, so a
@@ -306,7 +305,10 @@ class ExonBoundarySequenceTest(unittest.TestCase):
         first = {"ABL1_Exon1_NM_007313.2", "ABL1_Exon1_NM_005157.6", "BCR_Exon1_NM_004327.4"}
         last = {"ABL1_Exon11_NM_005157.6"}
         with pysam.FastaFile(str(fasta_path)) as fasta:
-            contig = lambda c: c if c in fasta.references else c.removeprefix("chr")  # noqa: E731
+
+            def contig(c):
+                return c if c in fasta.references else c.removeprefix("chr")
+
             for chrom, start, end, name in (r[:4] for r in read_bed(RESOURCES / "bcr_abl1_exons_hg19.bed")):
                 start, end, c = int(start), int(end), contig(chrom)
                 if name not in first:
@@ -402,4 +404,3 @@ class GtfAndJunctionConsistencyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
