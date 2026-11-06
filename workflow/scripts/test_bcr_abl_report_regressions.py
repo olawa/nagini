@@ -52,6 +52,38 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertIn("L387L", detail)
             self.assertIn("SYNONYMOUS", detail)
 
+    REVIEW_ROWS = (
+        "mutation\taa_change\tconsequence\tresistance_class\tstatus\tchrom\tpos\tref\talt\tdepth\tad_alt\tvaf_percent\tfilter_reason\n"
+        "K357E\tp.Lys357Glu\tMISSENSE\tUNCLASSIFIED\tREVIEW\tchr9\t133748408\tA\tG\t76352\t296\t0.388\t"
+        "LINKED_NEIGHBOUR_REVIEW(BASEQ(site=25.0,neighbour=24.1<0.8x38.7))\n"
+    )
+    REVIEW_SITES = "chrom\tpos\tstatus\tdepth\tfilter_reason\tpanel_sites_expected\nchr9\t133748408\tREVIEW\t76352\tLINKED_NEIGHBOUR_REVIEW\t1\n"
+
+    def test_a_review_site_is_flagged_not_reported_clean(self):
+        """D25: a REVIEW row is neither a call nor a clean panel."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            muts = self._write(root, "mut.tsv", self.REVIEW_ROWS)
+            sites = self._write(root, "all.tsv", self.REVIEW_SITES)
+            out = root / "sample.xlsx"
+            report.generate_report(str(out), "S1", "T", "hg19", "", "", "", "", "", "", "",
+                                   bcr_abl_mutations=muts, bcr_abl_all_sites=sites)
+            text = self._sheet_text(out, "Overview")
+            self.assertIn("For review, rare neighbour on the same reads: K357E (0.39%)", text)
+            self.assertIn("REVIEW", text)
+            self.assertNotIn("PANEL ASSESSED", text)
+            self.assertNotIn("ACTION REQUIRED", text)
+
+            summ = root / "summary.xlsx"
+            summary.build_summary_report(str(summ), "RUN", "hg19", [{
+                "sample": "S1", "type": "T", "assay": "bcr_abl",
+                "bcr_abl_mutations": muts, "bcr_abl_all_sites": sites,
+            }])
+            overview = self._sheet_text(summ, "BCR-ABL1 Overview")
+            self.assertIn("for review, rare neighbour on the same reads: K357E (0.39%)", overview)
+            self.assertIn("a site requires review", overview)
+            self.assertNotIn("Subclonal", overview)
+
     def test_run_summary_does_not_call_empty_panel_sensitive(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

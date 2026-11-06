@@ -78,16 +78,19 @@ class FlankingContextCounting(unittest.TestCase):
         self.fasta.write_text(">chr9\n" + self.ref + "\n")
         pysam.faidx(str(self.fasta))
 
-    def read(self, i, alt=False, artefact=False, flank_error=False):
+    def read(self, i, alt=False, artefact=False, flank_error=False, artefact_qual=18):
         seq = list(self.ref[25:175])
+        quals = [30] * 150
         site = self.SITE - 25
         if alt or artefact:
             seq[site] = "G"
         if artefact:
             seq[site - 1] = "A"                     # the G read one base late
+            quals[site - 1] = quals[site] = artefact_qual   # and called with less confidence
         if flank_error:
             seq[site + 2] = "C" if seq[site + 2] != "C" else "G"
-        return {"name": f"r{i}", "seq": "".join(seq), "start": 25, "flag": 16 if (artefact or i % 3 == 0) else 0}
+        return {"name": f"r{i}", "seq": "".join(seq), "start": 25, "quals": quals,
+                "flag": 16 if (artefact or i % 3 == 0) else 0}
 
     def call(self, rows, reference=True):
         bam = self.tmp / "reads.bam"
@@ -111,12 +114,27 @@ class FlankingContextCounting(unittest.TestCase):
         self.assertAlmostEqual(float(row["kmer_clean_percent"]), 54.5, places=1)   # audit of all 22
 
     def test_the_artefact_alone_is_not_called(self):
+        """The G>A rides on most ALT reads, so it is judged as a linked
+        neighbour -- and fails both haplotype checks, as in the dilution
+        series: one strand, and base quality 0.6 of the reference's."""
         rows = [self.read(i, alt=True) for i in range(4)]
         rows += [self.read(100 + i, artefact=True) for i in range(10)]
         rows += [self.read(1000 + i) for i in range(3986)]
         row = self.call(rows)
-        self.assertNotIn(row["status"], ("DETECTED", "SUBCLONAL"))
+        self.assertNotIn(row["status"], ("DETECTED", "SUBCLONAL", "REVIEW"))
         self.assertEqual(row["ad_alt"], "4")
+        self.assertIn("rejected(STRAND(", row["linked_neighbour"])
+        self.assertIn(";BASEQ(", row["linked_neighbour"])
+
+    def test_the_artefact_at_full_base_quality_is_for_review(self):
+        """One-stranded but called confidently: one check of two fails, and a
+        person looks at it rather than the caller deciding."""
+        rows = [self.read(i, alt=True) for i in range(4)]
+        rows += [self.read(100 + i, artefact=True, artefact_qual=30) for i in range(10)]
+        rows += [self.read(1000 + i) for i in range(3986)]
+        row = self.call(rows)
+        self.assertEqual(row["status"], "REVIEW")
+        self.assertTrue(row["filter_reason"].startswith("LINKED_NEIGHBOUR_REVIEW(STRAND("), row["filter_reason"])
 
     def test_excluding_on_both_sides_keeps_the_vaf_unbiased(self):
         """Every 12th read has a flank error, whatever its allele. Excluding
@@ -562,6 +580,65 @@ class NearbyVariants(unittest.TestCase):
         self.assertEqual(audit[0]["status"], "DETECTED")
         self.assertEqual([(row["record_type"], row["mutation"], row["alt"]) for row in variants],
                          [("CODON_HAPLOTYPE", "T315M", "ATG")])
+
+    def neighbour_base(self, position):
+        return "A" if self.ref[position] != "A" else "C"
+
+    def test_a_low_level_mutation_in_cis_with_a_rare_neighbour_is_called(self):
+        """D25, linked neighbours: 20 of 4000 reads (0.5 %) carry the panel ALT
+        and a non-panel change two bases upstream, outside the codon. Below the
+        1 % sample-variant threshold, every ALT read used to be excluded."""
+        other = self.neighbour_base(98)
+        rows = [self.read(i, [(100, "G"), (98, other)]) for i in range(20)]
+        rows += [self.read(1000 + i) for i in range(3980)]
+        audit, variants, _ = self.call(rows, self.SITE)
+        self.assertEqual(audit[0]["status"], "SUBCLONAL", audit[0]["filter_reason"])
+        self.assertEqual(audit[0]["ad_alt"], "20")
+        self.assertEqual(audit[0]["flank_alleles_forgiven"], f"99:{self.ref[98]}>{other}(linked,0.50%)")
+        self.assertTrue(audit[0]["linked_neighbour"].startswith(f"99:{self.ref[98]}>{other} reads=20 share=1.00"))
+        self.assertEqual([(row["record_type"], row["status"]) for row in variants], [("SITE_VARIANT", "SUBCLONAL")])
+
+    def test_a_low_level_codon_change_in_two_bases_is_one_haplotype(self):
+        """T315M (ACT>ATG) in one subclone at 0.5 %: c.945T>G is not a panel
+        ALT and is below 1 %, so both bases were lost; now it is T315M."""
+        self.ref = self.ref[:99] + "ACT" + self.ref[102:]
+        self.fasta.write_text(">chr9\n" + self.ref + "\n")
+        pysam.faidx(str(self.fasta))
+        bed = "chr9\t100\t101\tNM_005157.6:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+        rows = [self.read(i, [(100, "T"), (101, "G")]) for i in range(20)]
+        rows += [self.read(1000 + i) for i in range(3980)]
+        audit, variants, _ = self.call(rows, bed)
+        self.assertEqual(audit[0]["status"], "SUBCLONAL")
+        self.assertEqual([(row["record_type"], row["mutation"], row["status"]) for row in variants],
+                         [("CODON_HAPLOTYPE", "T315M", "SUBCLONAL")])
+
+    def test_review_rows_reach_the_mutation_table_and_vcf(self):
+        """Low base quality at both bases, both strands: REVIEW, not a call."""
+        other = self.neighbour_base(98)
+        rows = [self.read(i, [(100, "G"), (98, other)], quals=[(100, 15), (98, 15)]) for i in range(20)]
+        rows += [self.read(1000 + i) for i in range(3980)]
+        audit, variants, vcf = self.call(rows, self.SITE)
+        self.assertEqual(audit[0]["status"], "REVIEW")
+        self.assertEqual([(row["record_type"], row["status"]) for row in variants], [("SITE_VARIANT", "REVIEW")])
+        record = [line for line in vcf.read_text().splitlines() if not line.startswith("#")][0].split("\t")
+        self.assertEqual(record[6], "REVIEW")
+        self.assertTrue(record[9].startswith("./."))
+
+    def test_noise_beside_a_clonal_mutation_is_not_linked(self):
+        """A random error on 0.5 % of reads also sits on ALT reads when the
+        ALT is half the reads -- 10 of them here, past --min-alt-reads -- but
+        on only 0.5 % of the ALT reads: no linked neighbour, and no false
+        two-base haplotype in the codon."""
+        rows = []
+        for i in range(4000):
+            changes = [(100, "G")] if i % 2 == 0 else []
+            if i % 400 < 2:
+                changes.append((102, "T"))
+            rows.append(self.read(i, changes))
+        audit, variants, _ = self.call(rows, self.SITE)
+        self.assertEqual(audit[0]["status"], "DETECTED")
+        self.assertEqual(audit[0]["linked_neighbour"], "")
+        self.assertEqual([row["record_type"] for row in variants], ["SITE_VARIANT"])
 
     def test_fusion_reads_are_counted_separately_and_can_be_the_only_ones(self):
         sa = {"SA": "chr22,23632400,+,200M100S,60,0;"}

@@ -298,9 +298,11 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
             self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
             self.assertEqual(row["status"], "DETECTED", row["filter_reason"])
 
-    def _dirty_neighbour_rows(self, wild_type, dirty):
+    def _dirty_neighbour_rows(self, wild_type, dirty, strands="both", qual=30):
         """``dirty`` reads carry the panel ALT and a non-panel substitution 2 bp
-        downstream, on both strands; ``wild_type`` reads carry neither."""
+        downstream, with base quality ``qual`` at both and on ``strands``
+        ("both" or "reverse"); ``wild_type`` reads carry neither, at quality 30
+        on both strands."""
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -320,19 +322,23 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
                 seq = list(self.REF[:150])
                 seq[99] = alt_base
                 seq[101] = "A" if self.REF[101] != "A" else "G"
+                quals = [30] * 150
+                quals[99] = quals[101] = qual
                 reads.append({"name": f"dirty{i}", "chrom": "chr9", "start": 0,
-                              "seq": "".join(seq), "is_reverse": i % 2 == 0})
+                              "seq": "".join(seq), "quals": quals,
+                              "is_reverse": strands == "reverse" or i % 2 == 0})
 
             bam = tmp / "dirty.bam"
             create_synthetic_bam(bam, reads, [("chr9", 200)])
             return self._run_caller(tmp, bam, bed, fasta)
 
     def test_a_genuinely_dirty_context_contributes_no_evidence(self):
-        """A rare mismatch beside the site (below --flank-variant-min-af) is a
-        context error, and a dirty read is evidence for no allele -- it used to
-        be counted and then reject the whole call as DIRTY_CONTEXT."""
+        """A rare mismatch beside the site (below --flank-variant-min-af) that
+        looks like an error -- one strand, low base quality -- is a context
+        error, and a dirty read is evidence for no allele. It used to be
+        counted and then reject the whole call as DIRTY_CONTEXT."""
 
-        row = self._dirty_neighbour_rows(wild_type=3000, dirty=20)[0]   # 0.66 %
+        row = self._dirty_neighbour_rows(wild_type=3000, dirty=20, strands="reverse", qual=15)[0]   # 0.66 %
         self.assertEqual(row["kmer_clean_percent"], "0.0")      # the audit still shows it
         self.assertEqual(row["ad_alt"], "0")
         self.assertEqual(row["ad_alt_context_excluded"], "20")
@@ -341,6 +347,29 @@ class TestBranfordContextAndStrandFilters(unittest.TestCase):
         self.assertEqual(row["status"], "WILDTYPE")
         self.assertEqual(row["flank_alleles_forgiven"], "")
         self.assertNotIn("DIRTY_CONTEXT", row["filter_reason"])
+        self.assertIn("reads=20 share=1.00", row["linked_neighbour"])
+        self.assertIn("rejected(", row["linked_neighbour"])
+
+    def test_a_rare_neighbour_on_the_alt_reads_is_one_molecule(self):
+        """D25, linked neighbours: the same 0.66 %, on both strands and at full
+        base quality, is a subclone carrying both changes. Below the 1 %
+        sample-variant threshold it used to lose every ALT read."""
+
+        row = self._dirty_neighbour_rows(wild_type=3000, dirty=20)[0]
+        self.assertEqual(row["status"], "SUBCLONAL", row["filter_reason"])
+        self.assertEqual(row["ad_alt"], "20")
+        self.assertEqual(row["depth_context_excluded"], "0")
+        self.assertIn("(linked,0.66%)", row["flank_alleles_forgiven"])
+        self.assertTrue(row["linked_neighbour"].endswith(" accepted"), row["linked_neighbour"])
+
+    def test_a_linked_neighbour_failing_one_check_is_for_review(self):
+        """Both strands but low base quality: neither called nor dropped."""
+
+        row = self._dirty_neighbour_rows(wild_type=3000, dirty=20, qual=15)[0]
+        self.assertEqual(row["status"], "REVIEW")
+        self.assertTrue(row["filter_reason"].startswith("LINKED_NEIGHBOUR_REVIEW(BASEQ("), row["filter_reason"])
+        self.assertEqual(row["ad_alt"], "20")
+        self.assertIn("review(BASEQ(", row["linked_neighbour"])
 
     def test_a_substitution_the_sample_carries_beside_the_site_is_not_dirty(self):
         """D25 fix 1: the same reads at 40 % on both strands are a real allele in

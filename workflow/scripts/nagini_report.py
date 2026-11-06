@@ -25,8 +25,10 @@ try:
         active_resistance_mutations,
         calculate_bcr_abl_depth_cutoff,
         format_vaf,
+        describe_review,
         is_resistance_associated,
         panel_assessment,
+        review_mutations,
         summarize_phasing,
     )
 except ImportError:
@@ -34,8 +36,10 @@ except ImportError:
         active_resistance_mutations,
         calculate_bcr_abl_depth_cutoff,
         format_vaf,
+        describe_review,
         is_resistance_associated,
         panel_assessment,
+        review_mutations,
         summarize_phasing,
     )
 
@@ -845,7 +849,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
     else:
         for r in mutation_rows:
             mut_status = str(r.get("status", "")).upper()
-            mut_style = 4 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)
+            mut_style = 4 if mut_status == "DETECTED" else (6 if mut_status in ("SUBCLONAL", "REVIEW") else 0)
 
             snr_val = r.get("snr", "")
             try:
@@ -882,7 +886,7 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                 support_display = "Branford"
 
             layout.append([
-                (r.get("mutation", ""), 8 if mut_status == "DETECTED" else (6 if mut_status == "SUBCLONAL" else 0)),
+                (r.get("mutation", ""), 8 if mut_status == "DETECTED" else (6 if mut_status in ("SUBCLONAL", "REVIEW") else 0)),
                 (r.get("aa_change", ""), 0),
                 (int(r.get("pos", 0)), 0),
                 (r.get("ref", ""), 0),
@@ -1642,6 +1646,11 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         if unclassified:
             names = ", ".join(r.get("mutation", "?") for r in unclassified)
             mut_summary += f" (Unclassified for review: {names})"
+        review = review_mutations(bcr_abl_mutation_rows)
+        if review:
+            mut_summary += f" (For review, rare neighbour on the same reads: {describe_review(review)})"
+            if not det_muts and not subcl_muts:
+                mut_action, mut_action_style = "REVIEW", 6
 
         phase_summary = summarize_phasing(bcr_abl_phasing_rows)
         phase_flag = "REVIEW PHASING" if bcr_abl_phasing_rows else "NOT ASSESSED"
@@ -1659,7 +1668,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
         overview.append([("", 0), ("", 0), ("", 0), ("", 0)])
         overview.append([("BCR-ABL1 TARGETED ASSAY SUMMARY", 3), ("", 3), ("", 3), ("", 3)])
         overview.append([("Primary Fusion Isoform", 7), ("Major/Minor BCR breakpoint", 0), (prim_iso, 8), ("PASS" if prim_iso != "None detected" else "INFO", 5 if prim_iso != "None detected" else 0)])
-        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts or unclassified or assessment["state"] != "ASSESSED" else 5)), (mut_action, mut_action_style)])
+        overview.append([("Resistance Mutations", 7), ("Branford ABL1 panel", 0), (mut_summary, 4 if det_muts else (6 if subcl_muts or unclassified or review or assessment["state"] != "ASSESSED" else 5)), (mut_action, mut_action_style)])
         overview.append([("Compound Phasing Status", 7), ("Single-molecule read phasing", 0), (phase_summary, phase_flag_style), (phase_flag, phase_flag_style)])
 
     # Add clinical findings preview tables directly on the Overview tab

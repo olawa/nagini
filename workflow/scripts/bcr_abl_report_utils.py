@@ -75,6 +75,18 @@ def active_resistance_mutations(rows):
             and is_resistance_associated(r)]
 
 
+def review_mutations(rows):
+    """Sites the caller would not decide alone: a mutation that rides with a
+    rare neighbour and failed one of the two stricter checks (D25)."""
+    return [r for r in rows or [] if str(r.get("status", "")).upper() == "REVIEW"]
+
+
+def describe_review(rows) -> str:
+    return ", ".join(
+        f"{r.get('mutation', '?')} ({format_vaf(r.get('vaf_percent', ''), scale='percent')})" for r in rows
+    )
+
+
 def panel_assessment(all_sites_rows):
     """Assess only when nonempty all-sites output has every row at callable depth."""
     rows = all_sites_rows or []
@@ -99,7 +111,7 @@ def panel_assessment(all_sites_rows):
             except (TypeError, ValueError):
                 depth_ok = False
             if (codon_context in {"CODON_CONTEXT_REQUIRED", "CODON_CONTEXT_UNRESOLVED", "CODON_QC_FAILED"}
-                    or status not in {"PASS", "ASSESSED", "DETECTED", "SUBCLONAL", "REFERENCE", "WILDTYPE"}
+                    or status not in {"PASS", "ASSESSED", "DETECTED", "SUBCLONAL", "REFERENCE", "WILDTYPE", "REVIEW"}
                     or "LOW_DEPTH" in reason or not depth_ok):
                 passed = False
                 break

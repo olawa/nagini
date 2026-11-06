@@ -80,6 +80,8 @@ rule bcr_abl_branford_calling:
         max_sor=lambda wildcards: config.get("bcr_abl", {}).get("max_sor", 3.0),
         kmer_window=lambda wildcards: config.get("bcr_abl", {}).get("kmer_window", 3),
         flank_variant_min_af=lambda wildcards: config.get("bcr_abl", {}).get("flank_variant_min_af", 0.01),
+        linked_min_share=lambda wildcards: config.get("bcr_abl", {}).get("linked_min_share", 0.5),
+        linked_min_relative_baseq=lambda wildcards: config.get("bcr_abl", {}).get("linked_min_relative_baseq", 0.8),
         fusion_region=lambda wildcards: config.get("bcr_abl", {}).get("fusion_region", "") or _bcr_region(),
         fusion_reads_only=lambda wildcards: config.get("bcr_abl", {}).get("fusion_reads_only", True),
         extra=lambda wildcards: config.get("bcr_abl", {}).get("branford_caller_extra", ""),

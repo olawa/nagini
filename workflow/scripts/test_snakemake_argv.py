@@ -30,6 +30,7 @@ class BranfordTest(unittest.TestCase):
             min_base_quality=12, min_mapping_quality=1, min_snr=3.0, min_minor_strand_ratio=0.05,
             min_mean_baseq=14.0, min_kmer_rate=0.6, max_sor=3.0, kmer_window=3, extra="", min_read_qs=0,
             flank_variant_min_af=0.01, fusion_region="chr22:23522552-23660224", fusion_reads_only=True,
+            linked_min_share=0.5, linked_min_relative_baseq=0.8,
         )
 
     def job(self, ref="ref.fa", known=(), extra=""):
@@ -52,6 +53,8 @@ class BranfordTest(unittest.TestCase):
         self.assertEqual(str(args.known_variants), "kv.vcf")
         self.assertEqual(str(args.reference_fasta), "ref.fa")
         self.assertEqual(args.flank_variant_min_af, 0.01)
+        self.assertEqual(args.linked_min_share, 0.5)
+        self.assertEqual(args.linked_min_relative_baseq, 0.8)
         self.assertEqual(args.fusion_region, "chr22:23522552-23660224")
         self.assertTrue(args.fusion_reads_only)
 

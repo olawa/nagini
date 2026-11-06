@@ -177,6 +177,14 @@ properties:
         type: number
         description: 'a substitution beside a panel position at this fraction or more, on both strands
           and with ordinary base quality, is a real allele in the flanking-context check (default: 0.01)'
+      linked_min_share:
+        type: number
+        description: 'a flank allele below flank_variant_min_af is judged with the site ALT as one haplotype
+          only when at least this share of the site''s ALT reads carry it (default: 0.5)'
+      linked_min_relative_baseq:
+        type: number
+        description: 'mean base quality the site ALT and its linked neighbour must both reach, as a fraction
+          of the reference''s at the site (default: 0.8)'
       fusion_reads_only:
         type: boolean
         description: 'count only BCR::ABL1 reads (reads that also align in BCR) in the Branford caller

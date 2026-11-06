@@ -462,6 +462,13 @@ bcr_abl:
   # strands and with ordinary base quality, is a real allele (germline SNV,
   # change in cis), not a context error that excludes the read. See D25.
   flank_variant_min_af: 0.01
+  # Below that, a neighbour that at least linked_min_share of the site's ALT
+  # reads carry is judged together with the site ALT, as one molecule: it is
+  # forgiven when the pair is strand-balanced and both bases reach
+  # linked_min_relative_baseq of the reference's base quality, and the site is
+  # REVIEW when exactly one of the two fails. See D25.
+  linked_min_share: 0.5
+  linked_min_relative_baseq: 0.8
   enable_all_callers: false
   enable_vardictrust: false
   # Always on: bcftools calls across every ABL1 (and BCR) exon of the target BED,

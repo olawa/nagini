@@ -9,8 +9,9 @@ annotating TKI resistance profiles.
 Every interrogated position is written to the all-sites TSV with its status and
 filter_reason, so the output answers "was T315I excluded?" and not only "was
 T315I found?". The mutations TSV and VCF retain detected/subclonal evidence,
-including explicitly unresolved codons; unresolved VCF records have a named
-filter and a missing genotype. --include-artifacts also retains failed calls.
+REVIEW sites and explicitly unresolved codons; REVIEW and unresolved VCF
+records have a named filter and a missing genotype. --include-artifacts also
+retains failed calls.
 
 Artifact filters, and what each one can and cannot see
 -----------------------------------------------------
@@ -87,6 +88,28 @@ FLANKING CONTEXT (--kmer-window)
       homopolymer indel cannot pose as a substitution.
     * any base at a --known-variants position.
 
+    Below --flank-variant-min-af a neighbour can still be real: a subclone
+    carrying a panel mutation and a second change within 3 bp has both at the
+    subclone's VAF, so at 0.2-1 % every ALT read was excluded and the site
+    read WILDTYPE (T315M as ACT>ATG, for one). Lowering the threshold is not
+    the answer -- at 0.2 % in the dilution series the K357E error pair
+    (c.1068G>A + c.1069A>G, same reads) was called SUBCLONAL in two
+    libraries. Instead, a neighbour that at least --linked-min-share of the
+    site's ALT reads carry is judged together with the ALT, as one molecule,
+    by stricter checks than a single allele gets (linked_haplotype_failures):
+    the pair's strands must not depart from the reference's (SOR alone, or a
+    one-sided minor strand alone, is enough to fail), and both bases need
+    --linked-min-relative-baseq of the reference's base quality. A
+    basecalling error fails both; a real molecule passes both.
+    * both pass: the neighbour is forgiven for this site, as
+      "(linked,AF)" in flank_alleles_forgiven, and the codon check treats it
+      as an accepted allele.
+    * exactly one fails: status REVIEW (filter LINKED_NEIGHBOUR_REVIEW),
+      counted as if forgiven so the reviewer sees the would-be VAF, and kept
+      in the mutations TSV and the VCF (FILTER=REVIEW, no genotype).
+    * both fail, or the pair fails the ordinary checks: nothing changes.
+    The linked_neighbour column records each candidate and its outcome.
+
 FUSION READS (--fusion-region, --fusion-reads-only)
     A read is a BCR::ABL1 read when it also aligns in the fusion-partner region
     (its SA tag, i.e. the BCR part). With --fusion-reads-only only those reads
@@ -99,11 +122,13 @@ FUSION READS (--fusion-region, --fusion-reads-only)
 
 CODONS
     Two variant positions in one codon (two called panel positions, or a called
-    panel position and a sample variant from the flank check) make the single-
-    site annotations unreliable, and the codon is read as whole haplotypes.
+    panel position and a sample variant or accepted linked neighbour from the
+    flank check) make the single-site annotations unreliable, and the codon is
+    read as whole haplotypes.
     A haplotype is credible, and can be reported, only when every base that
     differs from the reference is an allele the site calls accepted (a called
-    panel ALT or a sample variant), and it is reported only when at least one
+    panel ALT, a sample variant or an accepted linked neighbour), and it is
+    reported only when at least one
     of them is a called panel ALT. Errors at the codon's other bases are noise,
     as at single sites; before D25 they formed reportable haplotypes of their
     own that were also exempt from the noise estimate.
@@ -186,6 +211,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--kmer-window", type=int, default=3, help="Flanking kmer window size in bp (default 3)")
     parser.add_argument("--known-variants", type=Path, default=None, help="Optional BED/VCF of known polymorphisms; any base at these positions is forgiven in the flanking-context check.")
     parser.add_argument("--flank-variant-min-af", type=float, default=0.01, help="A substitution beside a panel position at this fraction or more, on both strands and with ordinary base quality, is treated as a real allele in the flanking-context check rather than an error (default 0.01)")
+    parser.add_argument("--linked-min-share", type=float, default=0.5, help="A flank allele below --flank-variant-min-af is judged together with the site's ALT only when at least this share of the site's ALT reads carry it (default 0.5)")
+    parser.add_argument("--linked-min-relative-baseq", type=float, default=0.8, help="Mean base quality a site ALT and its linked neighbour must both reach, as a fraction of the reference's at the site (default 0.8)")
     parser.add_argument("--fusion-region", default=None, help="Fusion-partner region, e.g. chr22:23522552-23660224 (BCR, hg19). A read that also aligns here (SA tag) is a fusion read. Without it every read is counted as non-fusion.")
     parser.add_argument("--fusion-reads-only", action="store_true", help="Count only fusion reads (requires --fusion-region)")
     parser.add_argument("--include-artifacts", action="store_true", help="Include ARTIFACT calls in mutations TSV")
@@ -555,6 +582,8 @@ class SiteEvidence:
     which differences to forgive can be applied afterwards without reading the
     BAM again. A signature of None means the flank could not be checked (no
     reference, or the read ends inside the window); () means it is clean.
+    Each entry is [reads, base-quality sum at the site, base-quality sums at
+    the signature's flank differences, in signature order].
     """
 
     __slots__ = ("alleles", "refskip", "deletion", "insertion", "low_baseq", "unfiltered",
@@ -747,10 +776,13 @@ def scan_positions(
             return
         slot = site.alleles.get((base, strand, signature))
         if slot is None:
-            site.alleles[(base, strand, signature)] = [1, bq]
-        else:
-            slot[0] += 1
-            slot[1] += bq
+            slot = site.alleles[(base, strand, signature)] = [0, 0, [0] * len(signature or ())]
+        slot[0] += 1
+        slot[1] += bq
+        # Base quality at each flank difference, for judging a neighbour that
+        # rides on the site's ALT reads (D25, linked neighbours).
+        for index, (offset, _) in enumerate(signature or ()):
+            slot[2][index] += qualities[qpos + offset] if qualities is not None else 30
 
     best: Dict[Tuple, Tuple] = {}
     for aln in bam.fetch(chrom, first, last):
@@ -789,7 +821,7 @@ def materialise_counts(evidence: List[SiteEvidence], allowed: Dict[int, MaskEntr
         counts["low_baseq"] += site.low_baseq
         for base in BASES:
             counts["unfiltered"][base] += site.unfiltered[base]
-        for (base, strand, signature), (number, bq_sum) in site.alleles.items():
+        for (base, strand, signature), (number, bq_sum, _) in site.alleles.items():
             if signature is not None:
                 counts["kmer_total_count"][base] += number
                 if not all(forgives(allowed.get(offset, NO_BASE), flank_base) for offset, flank_base in signature):
@@ -948,6 +980,7 @@ def describe_forgiven(
     allowed: Dict[int, MaskEntry],
     reference_flanks: Dict[Tuple[str, int], Tuple[str, str]],
     sample_variants: Dict[Tuple[str, int], Dict[str, Dict[str, Any]]],
+    linked: Optional[Dict[str, Any]] = None,
 ) -> str:
     """The forgiven flank alleles as 1-based 'pos:REF>ALT(source)', for the audit table."""
 
@@ -968,9 +1001,131 @@ def describe_forgiven(
             continue
         for base in sorted(entry):
             variant = sample_variants.get((chrom, genomic), {}).get(base)
-            source = f"sample,{variant['af'] * 100:.2f}%" if variant else "panel"
+            if variant:
+                source = f"sample,{variant['af'] * 100:.2f}%"
+            elif linked and linked["offset"] == offset and linked["base"] == base:
+                source = f"linked,{linked['af'] * 100:.2f}%"
+            else:
+                source = "panel"
             described.append(f"{genomic + 1}:{ref_base}>{base}({source})")
     return ",".join(described)
+
+
+def merge_allowed(allowed: Dict[int, MaskEntry], offset: int, base: str) -> Dict[int, MaskEntry]:
+    """``allowed`` with one more base forgiven at ``offset``."""
+
+    merged = dict(allowed)
+    entry = merged.get(offset, NO_BASE)
+    if entry is not True:
+        merged[offset] = frozenset(entry or ()) | {base}
+    return merged
+
+
+def find_linked_neighbour(
+    evidence: List[SiteEvidence],
+    alt: str,
+    allowed: Dict[int, MaskEntry],
+    flanks: Optional[Tuple[str, str]],
+    panel_bases: Dict[int, set],
+) -> Optional[Dict[str, Any]]:
+    """The one unforgiven flank allele that the site's ALT reads carry most often.
+
+    Only reads whose single remaining flank difference is that allele count
+    for it: they are the site ALT and the neighbour on one molecule, the
+    haplotype the linked-neighbour check judges. ``share`` is their fraction of
+    all the site's checkable ALT reads -- near 1 when the neighbour sits on the
+    same molecules (in cis), near the neighbour's own frequency when the two
+    are independent. Panel ALTs are left to the two-round check (fix 2), and a
+    reference base that is not ACGT cannot be judged.
+    """
+
+    if not flanks:
+        return None
+    ref_left, ref_right = flanks
+    k = len(ref_left)
+    checkable = 0
+    candidates: Dict[Tuple[int, str], Dict[str, int]] = {}
+    for site in evidence:
+        for (base, strand, signature), (number, bq_sum, flank_bq) in site.alleles.items():
+            if base != alt or signature is None:
+                continue
+            checkable += number
+            residual = [
+                (index, offset, flank_base) for index, (offset, flank_base) in enumerate(signature)
+                if not forgives(allowed.get(offset, NO_BASE), flank_base)
+            ]
+            if len(residual) != 1:
+                continue
+            index, offset, flank_base = residual[0]
+            ref_base = ref_left[offset + k] if offset < 0 else ref_right[offset - 1]
+            if flank_base not in BASES or ref_base not in BASES or flank_base in panel_bases.get(offset, ()):
+                continue
+            item = candidates.setdefault((offset, flank_base), {"fwd": 0, "rev": 0, "bq_sum": 0, "flank_bq_sum": 0})
+            item[strand] += number
+            item["bq_sum"] += bq_sum
+            item["flank_bq_sum"] += flank_bq[index]
+    if not candidates:
+        return None
+    (offset, base), item = max(candidates.items(), key=lambda pair: (pair[1]["fwd"] + pair[1]["rev"], pair[0]))
+    reads = item["fwd"] + item["rev"]
+    return {
+        "offset": offset, "base": base,
+        "ref": ref_left[offset + k] if offset < 0 else ref_right[offset - 1],
+        "fwd": item["fwd"], "rev": item["rev"], "reads": reads,
+        "share": reads / checkable if checkable else 0.0,
+        "mean_baseq_site": item["bq_sum"] / reads,
+        "mean_baseq_neighbour": item["flank_bq_sum"] / reads,
+    }
+
+
+def linked_haplotype_failures(args, candidate: Dict[str, Any], ref_fwd: int, ref_rev: int, mean_baseq_ref: float) -> List[str]:
+    """The stricter checks a site ALT plus linked neighbour must pass together.
+
+    A Nanopore basecalling error has two signatures, and a real molecule
+    neither: it is strand-specific, and it is called with low confidence.
+    The ordinary checks need both a one-sided alt *and* an odds ratio past
+    --max-sor before they call strand bias; here either is enough. Base
+    quality must be at least --linked-min-relative-baseq of the reference's,
+    at the site and at the neighbour. In the dilution series true alleles
+    had 0.88-1.05 of the reference's base quality and artefacts a median of
+    0.47. The K357E error pair, in all ten libraries: 0.59-0.71, and at most
+    1 % of its reads on the forward strand, which carries ~75 % of the
+    reference's.
+    """
+
+    failures = []
+    fwd, rev = candidate["fwd"], candidate["rev"]
+    reads = fwd + rev
+    minor = min(fwd, rev) / reads if reads else 0.0
+    r1 = (fwd + 1) * (ref_rev + 1)
+    r2 = (rev + 1) * (ref_fwd + 1)
+    sor = math.log(max(r1 / r2, r2 / r1))
+    candidate["sor"] = round(sor, 2)
+    if sor > args.max_sor or (reads >= 20 and minor < args.min_minor_strand_ratio):
+        failures.append(f"STRAND(minor={minor:.2f},SOR={sor:.2f})")
+    floor = args.linked_min_relative_baseq * mean_baseq_ref
+    weakest = min(candidate["mean_baseq_site"], candidate["mean_baseq_neighbour"])
+    if weakest < floor:
+        failures.append(
+            f"BASEQ(site={candidate['mean_baseq_site']:.1f},neighbour={candidate['mean_baseq_neighbour']:.1f}"
+            f"<{args.linked_min_relative_baseq:g}x{mean_baseq_ref:.1f})"
+        )
+    return failures
+
+
+def describe_linked(position: int, candidate: Optional[Dict[str, Any]]) -> str:
+    """The linked-neighbour audit: allele, support, and what became of it."""
+
+    if not candidate:
+        return ""
+    text = (
+        f"{position + candidate['offset'] + 1}:{candidate['ref']}>{candidate['base']} "
+        f"reads={candidate['reads']} share={candidate['share']:.2f} "
+        f"bq_site={candidate['mean_baseq_site']:.1f} bq_neighbour={candidate['mean_baseq_neighbour']:.1f}"
+    )
+    if "sor" in candidate:
+        text += f" sor={candidate['sor']:.2f}"
+    return f"{text} {candidate['outcome']}"
 
 
 def evaluate_site(
@@ -1245,10 +1400,12 @@ def main(argv=None) -> None:
         for panel_site in sites:
             panel_alts_by_pos.setdefault((panel_site["chrom"], panel_site["pos"]), set()).add(panel_site["alt"])
 
-        def site_counts(site, called, groups):
+        def site_counts(site, called, groups, linked=None):
             key = (site["chrom"], site["pos"] - 1)
             allowed = flank_allowed(site["chrom"], site["pos"] - 1, kw, known_positions,
                                     panel_alleles, called, sample_variants)
+            if linked:
+                allowed = merge_allowed(allowed, linked["offset"], linked["base"])
             site_evidence = evidence.get(key)
             if site_evidence is None:
                 return empty_counts(), allowed
@@ -1267,17 +1424,68 @@ def main(argv=None) -> None:
         # this sample keeps the reads it appears in out of the count.
         all_results: List[Dict[str, Any]] = []
         detected_mutations: List[Dict[str, Any]] = []
+        # Accepted linked neighbours, as alleles the codon check may use.
+        linked_alleles: Dict[Tuple[str, int], Dict[str, Dict[str, Any]]] = {}
+        linked_header: List[str] = []
         for site in sites:
             counts, allowed = site_counts(site, provisional_called, read_sets)
             record = evaluate_site(args, site, counts, panel_alts_by_pos, tki_profiles, panel_sites_expected)
+
+            # A neighbour below --flank-variant-min-af that rides on this
+            # site's ALT reads: forgiven when the two pass the stricter
+            # haplotype checks together, REVIEW when exactly one check fails,
+            # left out when both do -- a basecalling error fails both (D25).
+            key = (site["chrom"], site["pos"] - 1)
+            linked = None
+            candidate = None
+            if key in evidence:
+                candidate = find_linked_neighbour(
+                    [evidence[key][name] for name in read_sets], site["alt"], allowed,
+                    reference_flanks.get(key),
+                    {offset: panel_alleles.get((site["chrom"], key[1] + offset), set()) for offset in flank_offsets(kw)},
+                )
+                if candidate and (candidate["reads"] < args.min_alt_reads or candidate["share"] < args.linked_min_share):
+                    candidate = None
+            if candidate:
+                trial_counts, trial_allowed = site_counts(site, provisional_called, read_sets, candidate)
+                trial = evaluate_site(args, site, trial_counts, panel_alts_by_pos, tki_profiles, panel_sites_expected)
+                candidate["af"] = candidate["reads"] / trial["depth"] if trial["depth"] else 0.0
+                already_called = record["status"] in ("DETECTED", "SUBCLONAL")
+                if trial["status"] not in ("DETECTED", "SUBCLONAL"):
+                    candidate["outcome"] = f"rejected({trial['filter_reason']})"
+                else:
+                    failures = linked_haplotype_failures(
+                        args, candidate, trial["ad_ref_fwd"], trial["ad_ref_rev"], trial["mean_baseq_ref"]
+                    )
+                    if not failures:
+                        candidate["outcome"] = "accepted"
+                        record, allowed, linked = trial, trial_allowed, candidate
+                    elif len(failures) == 1 and not already_called:
+                        candidate["outcome"] = f"review({failures[0]})"
+                        record, allowed, linked = trial, trial_allowed, candidate
+                        record["status"] = "REVIEW"
+                        record["filter_reason"] = f"LINKED_NEIGHBOUR_REVIEW({failures[0]})"
+                    else:
+                        candidate["outcome"] = f"rejected({';'.join(failures)})"
+                if linked:
+                    genomic = key[1] + linked["offset"]
+                    linked_header.append(
+                        f"{site['chrom']}:{genomic + 1}:{linked['ref']}>{linked['base']}:{linked['af'] * 100:.2f}%"
+                        f"({site['short_mutation']},{'accepted' if record['status'] != 'REVIEW' else 'review'})"
+                    )
+                    if record["status"] != "REVIEW":
+                        linked_alleles.setdefault((site["chrom"], genomic), {})[linked["base"]] = {
+                            "ref": linked["ref"], "af": linked["af"], "alt_reads": linked["reads"],
+                        }
+            record["linked_neighbour"] = describe_linked(key[1], candidate)
             record["flank_alleles_forgiven"] = describe_forgiven(
-                site["chrom"], site["pos"] - 1, allowed, reference_flanks, sample_variants
+                site["chrom"], site["pos"] - 1, allowed, reference_flanks, sample_variants, linked
             )
             for name in (FUSION, NONFUSION):
                 if fusion_region is None:
                     record.update({f"depth_{name}": "NA", f"ad_alt_{name}": "NA", f"vaf_{name}_percent": "NA"})
                     continue
-                part, _ = site_counts(site, provisional_called, (name,))
+                part, _ = site_counts(site, provisional_called, (name,), linked)
                 part_depth = sum(part[f"{b}_{s}"] for b in BASES for s in ("fwd", "rev"))
                 part_alt = part[f"{site['alt']}_fwd"] + part[f"{site['alt']}_rev"]
                 record.update({
@@ -1287,20 +1495,27 @@ def main(argv=None) -> None:
                 })
             all_results.append(record)
 
-            if record["status"] in ("DETECTED", "SUBCLONAL"):
+            if record["status"] in ("DETECTED", "SUBCLONAL", "REVIEW"):
                 # Keep SITE_AUDIT in all-sites.tsv for nucleotide-level
                 # traceability, but give downstream variant consumers a
-                # distinct record type.
+                # distinct record type. REVIEW rows go with them: they are
+                # what a person has to look at.
                 detected_mutations.append({**record, "record_type": "SITE_VARIANT"})
             elif args.include_artifacts and record["status"] == "ARTIFACT":
                 detected_mutations.append({**record, "record_type": "SITE_VARIANT"})
 
         # Two variant positions in one codon -- two called panel positions, or
-        # a called panel position and a sample variant beside it -- make the
-        # individual BED amino-acid annotations marginal statements that may
-        # not describe the observed haplotype. Replace those mutation rows with
-        # read-supported codon haplotypes when a trustworthy reference codon is
-        # available. The complete nucleotide-level table above remains intact.
+        # a called panel position and a sample variant or accepted linked
+        # neighbour beside it -- make the individual BED amino-acid
+        # annotations marginal statements that may not describe the observed
+        # haplotype. Replace those mutation rows with read-supported codon
+        # haplotypes when a trustworthy reference codon is available. The
+        # complete nucleotide-level table above remains intact.
+        codon_variants: Dict[Tuple[str, int], Dict[str, Dict[str, Any]]] = {
+            key: dict(bases) for key, bases in sample_variants.items()
+        }
+        for key, bases in linked_alleles.items():
+            codon_variants.setdefault(key, {}).update(bases)
         called_alleles = {
             (r["chrom"], r["pos"] - 1, r["alt"]) for r in all_results
             if r["status"] in ("DETECTED", "SUBCLONAL")
@@ -1316,7 +1531,7 @@ def main(argv=None) -> None:
             codon_chrom = group[0]["chrom"]
             variant_positions = {p - 1 for p in detected_group_positions}
             if genomic:
-                variant_positions |= {p for p in genomic[1] if sample_variants.get((codon_chrom, p))}
+                variant_positions |= {p for p in genomic[1] if codon_variants.get((codon_chrom, p))}
             if len(variant_positions) < 2:
                 continue
             group_pos = {(s["chrom"], s["pos"]) for s in group if s["pos"] in detected_group_positions}
@@ -1354,9 +1569,9 @@ def main(argv=None) -> None:
                 first, last = min(codon_positions), max(codon_positions)
                 if first >= kw and last + 1 + kw <= fasta.get_reference_length(fasta_contig):
                     left_mask, _ = masks_from_offsets(flank_allowed(
-                        codon_chrom, first, kw, known_positions, panel_alleles, called_alleles, sample_variants), kw)
+                        codon_chrom, first, kw, known_positions, panel_alleles, called_alleles, codon_variants), kw)
                     _, right_mask = masks_from_offsets(flank_allowed(
-                        codon_chrom, last, kw, known_positions, panel_alleles, called_alleles, sample_variants), kw)
+                        codon_chrom, last, kw, known_positions, panel_alleles, called_alleles, codon_variants), kw)
                     reference_context = (
                         fasta.fetch(fasta_contig, first - kw, first).upper(),
                         fasta.fetch(fasta_contig, last + 1, last + 1 + kw).upper(),
@@ -1406,13 +1621,14 @@ def main(argv=None) -> None:
 
             # Fix 3: a haplotype is made of accepted alleles or it is noise.
             # Accepted at each codon base: the panel ALTs the site calls
-            # accepted there, and sample variants from the flank check.
+            # accepted there, and sample variants and accepted linked
+            # neighbours from the flank check.
             panel_called = [
                 {alt for chrom, position, alt in called_alleles if chrom == codon_chrom and position == p}
                 for p in codon_positions
             ]
             accepted = [
-                panel_called[i] | set(sample_variants.get((codon_chrom, p), {}))
+                panel_called[i] | set(codon_variants.get((codon_chrom, p), {}))
                 for i, p in enumerate(codon_positions)
             ]
 
@@ -1531,6 +1747,12 @@ def main(argv=None) -> None:
         f"{chrom}:{position + 1}:{info['ref']}>{base}:{info['af'] * 100:.2f}%"
         for (chrom, position), bases in sorted(sample_variants.items()) for base, info in sorted(bases.items())
     ) or "none"
+    linked_text = ";".join(linked_header) or "none"
+    flank_line = (
+        f"# flank_variant_min_af={args.flank_variant_min_af} flank_sample_variants={sample_variant_text} "
+        f"linked_min_share={args.linked_min_share} linked_min_relative_baseq={args.linked_min_relative_baseq} "
+        f"linked_neighbours={linked_text}\n"
+    )
 
     # Output headers
     headers = [
@@ -1546,7 +1768,7 @@ def main(argv=None) -> None:
         "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib", "asciminib",
         "ad_ref_fwd", "ad_ref_rev", "ad_alt_fwd", "ad_alt_rev", "n_refskip", "n_deletion", "n_insertion",
         "depth_context_excluded", "ad_alt_context_excluded",
-        "flank_alleles_forgiven",
+        "flank_alleles_forgiven", "linked_neighbour",
         "depth_fusion", "ad_alt_fusion", "vaf_fusion_percent",
         "depth_nonfusion", "ad_alt_nonfusion", "vaf_nonfusion_percent",
     ]
@@ -1557,10 +1779,11 @@ def main(argv=None) -> None:
         handle.write(f"# sample={args.sample}\n")
         handle.write(f"# min_read_qs={args.min_read_qs:g} reads_dropped={len(read_filter.dropped)}\n")
         handle.write(f"# reads={read_set_text} fusion_region={fusion_text} fusion_read_fraction={fraction_text}\n")
-        handle.write(f"# flank_variant_min_af={args.flank_variant_min_af} flank_sample_variants={sample_variant_text}\n")
+        handle.write(flank_line)
         handle.write(f"# total_sites={len(all_results)}\n")
         handle.write(f"# detected_mutations={len([m for m in detected_mutations if m['status'] == 'DETECTED'])}\n")
         handle.write(f"# subclonal_mutations={len([m for m in detected_mutations if m['status'] == 'SUBCLONAL'])}\n")
+        handle.write(f"# review_sites={len([r for r in all_results if r['status'] == 'REVIEW'])}\n")
         handle.write(f"# panel_sites_expected={panel_sites_expected}\n")
         handle.write(f"# tki_profile_version={features.get('version', 'unspecified')}\n")
         handle.write("\t".join(headers) + "\n")
@@ -1581,7 +1804,7 @@ def main(argv=None) -> None:
         handle.write(f"# min_read_qs={args.min_read_qs:g} reads_dropped={len(read_filter.dropped)}\n")
         handle.write(f"# min_kmer_rate={args.min_kmer_rate} kmer_window={args.kmer_window}\n")
         handle.write(f"# reads={read_set_text} fusion_region={fusion_text} fusion_read_fraction={fraction_text}\n")
-        handle.write(f"# flank_variant_min_af={args.flank_variant_min_af} flank_sample_variants={sample_variant_text}\n")
+        handle.write(flank_line)
         handle.write(f"# tki_profile_source={features.get('version', 'unspecified')}\n")
         handle.write(f"# panel_sites_expected={panel_sites_expected}\n")
         handle.write("\t".join(headers) + "\n")
@@ -1603,6 +1826,7 @@ def main(argv=None) -> None:
             handle.write('##FILTER=<ID=PASS,Description="All quality filters passed">\n')
             handle.write('##FILTER=<ID=ARTIFACT,Description="Failed error baseline, strand bias, or base quality filters">\n')
             handle.write('##FILTER=<ID=CODON_CONTEXT_UNRESOLVED,Description="Insufficient evidence to resolve the complete codon">\n')
+            handle.write('##FILTER=<ID=REVIEW,Description="Called only with a flank allele that rides on its ALT reads, and one of the stricter haplotype checks failed; for manual review">\n')
             handle.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
             handle.write('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total depth">\n')
             handle.write('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths (REF, ALT)">\n')
@@ -1612,7 +1836,9 @@ def main(argv=None) -> None:
                 af_dec = rec["vaf_percent"] / 100.0
                 info_field = f"AA={rec['aa_change']};MUT={rec['mutation']};HGVS={rec['name']};SNR={rec['snr']};SOR={rec['sor']};BQ_ALT={rec['mean_baseq_alt']}"
                 gt = "0/1" if rec["status"] in ("DETECTED", "SUBCLONAL") else "./."
-                vcf_filter = "PASS" if rec["status"] in ("DETECTED", "SUBCLONAL") else "ARTIFACT"
+                vcf_filter = "PASS" if rec["status"] in ("DETECTED", "SUBCLONAL") else (
+                    "REVIEW" if rec["status"] == "REVIEW" else "ARTIFACT"
+                )
                 if rec.get("record_type") == "CODON_CONTEXT_UNRESOLVED":
                     gt, vcf_filter = "./.", "CODON_CONTEXT_UNRESOLVED"
                 format_val = f"{gt}:{rec['depth']}:{rec['ad_ref']},{rec['ad_alt']}:{af_dec:.4f}"
@@ -1657,6 +1883,8 @@ def snakemake_argv(smk) -> list:
     if known_variants:
         argv += ["--known-variants", known_variants[0]]
     argv += ["--flank-variant-min-af", p.flank_variant_min_af]
+    argv += ["--linked-min-share", p.linked_min_share]
+    argv += ["--linked-min-relative-baseq", p.linked_min_relative_baseq]
     if p.fusion_region:
         argv += ["--fusion-region", p.fusion_region]
     if p.fusion_reads_only:

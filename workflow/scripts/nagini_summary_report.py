@@ -11,8 +11,10 @@ try:
         active_resistance_mutations,
         calculate_bcr_abl_depth_cutoff,
         format_vaf,
+        describe_review,
         is_resistance_associated,
         panel_assessment,
+        review_mutations,
         summarize_phasing,
     )
 except ImportError:
@@ -20,8 +22,10 @@ except ImportError:
         active_resistance_mutations,
         calculate_bcr_abl_depth_cutoff,
         format_vaf,
+        describe_review,
         is_resistance_associated,
         panel_assessment,
+        review_mutations,
         summarize_phasing,
     )
 from datetime import datetime, timezone
@@ -431,6 +435,9 @@ def build_summary_report(
         mut_str = ", ".join(det_muts + [f"{m} (SUBCLONAL)" for m in subcl_muts]) if det_muts or subcl_muts else ("Resistance panel not assessed" if assessment["state"] == "NOT_ASSESSED" else "No resistance-associated variants detected")
         if unclassified:
             mut_str += f"; unclassified for review: {', '.join(r.get('mutation', '?') for r in unclassified)}"
+        review = review_mutations(mutation_rows)
+        if review:
+            mut_str += f"; for review, rare neighbour on the same reads: {describe_review(review)}"
 
         phase_str = summarize_phasing(phasing_rows) if phasing_rows else "NOT_ASSESSED"
         cis_pairs = [f"{r['mutation_1']}+{r['mutation_2']}" for r in phasing_rows if str(r.get("phase_state", "")).strip().upper() == "CIS (COMPOUND)"]
@@ -450,7 +457,7 @@ def build_summary_report(
         sample_status, sample_style = ("PASS", 5)
         if det_muts or cis_pairs:
             sample_status, sample_style = ("ACTION REQUIRED", 4)
-        elif not yield_gb or (raw_reads_num < 100):
+        elif review or not yield_gb or (raw_reads_num < 100):
             sample_status, sample_style = ("REVIEW", 6)
 
         overview_rows.append(
@@ -741,6 +748,9 @@ def build_summary_report(
                 mut_names = "Resistance panel not assessed"
             if unclassified:
                 mut_names += f"; unclassified for review: {', '.join(r.get('mutation', '?') for r in unclassified)}"
+            review = review_mutations(m_rows)
+            if review:
+                mut_names += f"; for review, rare neighbour on the same reads: {describe_review(review)}"
 
             all_active = det_m + subcl_m
             vaf_details = ", ".join(f"{r['mutation']}: {float(r.get('vaf_percent', r.get('vaf', 0.0))):.1f}% ({r.get('ad_alt', r.get('alt_reads', 0))}/{r.get('depth')})" for r in all_active) if all_active else "-"
@@ -752,6 +762,8 @@ def build_summary_report(
             clinical_note = "Resistance-associated variant detected" if det_m else ("Subclonal resistance-associated variant detected" if subcl_m else ("Resistance panel incomplete" if assessment["state"] == "INCOMPLETE" else ("Resistance panel not assessed" if assessment["state"] == "NOT_ASSESSED" else "No resistance-associated variant detected; sensitivity not inferred")))
             if unclassified:
                 clinical_note += "; unclassified variants require review"
+            if review:
+                clinical_note += "; a site requires review"
 
             all_cis_display = []
             for r in p_rows:
@@ -770,7 +782,7 @@ def build_summary_report(
                 (phase_state, 4 if (cis_pairs or coexist_pairs) else (6 if p_rows else 0)),
                 (", ".join(all_cis_display) if all_cis_display else "-", 4 if all_cis_display else 0),
                 (", ".join(trans_pairs) if trans_pairs else "-", 6 if trans_pairs else 0),
-                (clinical_note, 4 if det_m else (6 if subcl_m or unclassified or assessment["state"] != "ASSESSED" else 0)),
+                (clinical_note, 4 if det_m else (6 if subcl_m or unclassified or review or assessment["state"] != "ASSESSED" else 0)),
                 ("", 0), ("", 0), ("", 0),
             ])
 
