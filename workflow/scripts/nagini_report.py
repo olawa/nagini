@@ -882,8 +882,12 @@ def build_bcr_abl_sheet(sample, fusion_rows, mutation_rows, phasing_rows, exon_r
                     support_display = ", ".join(supporting)
                 elif mut_status in ("DETECTED", "SUBCLONAL"):
                     support_display = "Branford only"
+                elif mut_status == "REVIEW":
+                    support_display = "Branford only (review)"
             elif mut_status in ("DETECTED", "SUBCLONAL"):
                 support_display = "Branford"
+            elif mut_status == "REVIEW":
+                support_display = "Branford (review)"
 
             layout.append([
                 (r.get("mutation", ""), 8 if mut_status == "DETECTED" else (6 if mut_status in ("SUBCLONAL", "REVIEW") else 0)),

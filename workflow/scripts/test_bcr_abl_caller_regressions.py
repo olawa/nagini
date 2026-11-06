@@ -538,7 +538,10 @@ class NearbyVariants(unittest.TestCase):
 
     def test_the_neighbours_panel_alt_is_forgiven_only_when_it_is_called(self):
         """Compound in cis: both called. Same reads with the neighbour's ALT at
-        low base quality: the neighbour is an artefact, so it is not forgiven."""
+        low base quality: the neighbour is not called, so the two-round check
+        does not forgive it. It is then judged as a linked neighbour, and its
+        base quality fails one of the two haplotype checks: REVIEW, where it
+        used to disappear without a word."""
         bed = self.SITE + "chr9\t102\t103\tNM:c.(3C>G)\tC\tG\tp.Lys1Glu\n"
         rows = [self.read(i, [(100, "G"), (102, "G")]) for i in range(40)]
         rows += [self.read(1000 + i) for i in range(1960)]
@@ -551,9 +554,10 @@ class NearbyVariants(unittest.TestCase):
         audit, _, _ = self.call(rows, bed)
         self.assertEqual(audit[1]["status"], "ARTIFACT")
         self.assertIn("LOW_BASEQ", audit[1]["filter_reason"])
-        self.assertEqual(audit[0]["ad_alt"], "0")
-        self.assertEqual(audit[0]["ad_alt_context_excluded"], "40")
-        self.assertEqual(audit[0]["flank_alleles_forgiven"], "")
+        self.assertNotIn("(panel)", audit[0]["flank_alleles_forgiven"])
+        self.assertEqual(audit[0]["status"], "REVIEW")
+        self.assertTrue(audit[0]["filter_reason"].startswith("LINKED_NEIGHBOUR_REVIEW(BASEQ("), audit[0]["filter_reason"])
+        self.assertTrue(audit[0]["linked_neighbour"].startswith("103:C>G reads=40"), audit[0]["linked_neighbour"])
 
     def test_codon_noise_at_a_non_panel_base_is_not_a_haplotype(self):
         bed = ("chr9\t99\t100\tNM_005157.6:c.(763G>A)\tG\tA\tp.Glu255Lys\n"
@@ -639,6 +643,70 @@ class NearbyVariants(unittest.TestCase):
         self.assertEqual(audit[0]["status"], "DETECTED")
         self.assertEqual(audit[0]["linked_neighbour"], "")
         self.assertEqual([row["record_type"] for row in variants], ["SITE_VARIANT"])
+
+    def test_soft_clipped_bases_are_not_a_linked_neighbour(self):
+        """Review 2026-11-06, F1: read offsets reach past a 5' soft-clip into
+        the flank. The window is not gapless, so a clipped base that differs
+        is not a substitution and cannot carry the ALT reads."""
+        rows = [self.read(1000 + i) for i in range(3980)]
+        clipped = "A" if self.ref[98] != "A" else "C"
+        for i in range(20):
+            seq = list(self.ref[99:190])
+            seq[1] = "G"                                    # the ALT at 100
+            clip = self.ref[89:98] + clipped               # last clipped base reads as 'position 98'
+            rows.append({"name": f"c{i}", "seq": clip + "".join(seq), "start": 99,
+                         "cigar": [(4, 10), (0, 91)], "flag": 16 if i % 2 else 0})
+        audit, variants, _ = self.call(rows, self.SITE)
+        self.assertEqual(audit[0]["status"], "WILDTYPE")
+        self.assertEqual(audit[0]["ad_alt_context_excluded"], "20")
+        self.assertEqual(audit[0]["linked_neighbour"], "")
+        self.assertEqual(variants, [])
+
+    def test_a_review_pair_in_one_codon_is_reviewed_as_that_codon(self):
+        """F2: T315M (ACT>ATG) failing the base-quality check is REVIEW -- as
+        T315M, ACT>ATG at the codon start, not as T315I."""
+        self.ref = self.ref[:99] + "ACT" + self.ref[102:]
+        self.fasta.write_text(">chr9\n" + self.ref + "\n")
+        pysam.faidx(str(self.fasta))
+        bed = "chr9\t100\t101\tNM_005157.6:c.(944C>T)\tC\tT\tp.Thr315Ile\n"
+        rows = [self.read(i, [(100, "T"), (101, "G")], quals=[(100, 15), (101, 15)]) for i in range(20)]
+        rows += [self.read(1000 + i) for i in range(3980)]
+        audit, variants, vcf = self.call(rows, bed)
+        self.assertEqual((audit[0]["mutation"], audit[0]["status"]), ("T315I", "REVIEW"))   # the panel allele's audit
+        self.assertEqual(audit[0]["codon_context_status"], "LINKED_NEIGHBOUR_IN_CODON")
+        self.assertEqual([(v["record_type"], v["mutation"], v["aa_change"], v["ref"], v["alt"], v["status"]) for v in variants],
+                         [("CODON_HAPLOTYPE", "T315M", "p.Thr315Met", "ACT", "ATG", "REVIEW")])
+        record = [line.split("\t") for line in vcf.read_text().splitlines() if not line.startswith("#")]
+        self.assertEqual([r[1:7] for r in record], [["100", "T315M", "ACT", "ATG", ".", "REVIEW"]])
+
+    def test_an_uncalled_panel_alt_can_be_a_linked_neighbour(self):
+        """F3: A (c.4) and B (c.2, two bases upstream) are both panel ALTs, on
+        the same 20 reads. B fails on its own (noise on a third base at B), so
+        the two-round check does not forgive it -- and A used to lose all 20
+        reads. Judged as a linked neighbour, the pair passes."""
+        b_ref = self.ref[98]
+        b_alt = "A" if b_ref != "A" else "C"
+        noise = next(base for base in "ACGT" if base not in (b_ref, b_alt))
+        bed = (f"chr9\t98\t99\tNM_1:c.(2{b_ref}>{b_alt})\t{b_ref}\t{b_alt}\tp.Xaa1Yaa\n"
+               "chr9\t100\t101\tNM_1:c.(4A>G)\tA\tG\tp.Lys2Glu\n")
+        rows = [self.read(i, [(100, "G"), (98, b_alt)]) for i in range(20)]
+        rows += [self.read(500 + i, [(98, noise)]) for i in range(10)]
+        rows += [self.read(1000 + i) for i in range(3970)]
+        audit, variants, _ = self.call(rows, bed)
+        by_name = {row["mutation"]: row for row in audit}
+        self.assertEqual(by_name["Xaa1Yaa"]["status"], "ARTIFACT")
+        self.assertEqual(by_name["K2E"]["status"], "SUBCLONAL", by_name["K2E"]["filter_reason"])
+        self.assertEqual(by_name["K2E"]["ad_alt"], "20")
+        self.assertIn(f"99:{b_ref}>{b_alt}(linked,", by_name["K2E"]["flank_alleles_forgiven"])
+
+    def test_a_low_quality_flank_base_is_neither_allele_in_the_screen(self):
+        """F4: 36 reads carry T beside the site at full base quality and 500
+        at base quality 5. The 500 are neither T nor the reference there, so
+        the sample variant is 36 of 3500 (1.03 %), not 36 of 4000 (0.9 %)."""
+        rows = [self.read(i, [(102, "T")], quals=[(102, 5)] if i >= 36 else None) for i in range(536)]
+        rows += [self.read(1000 + i) for i in range(3464)]
+        audit, _, _ = self.call(rows, self.SITE)
+        self.assertIn("103:C>T(sample,1.03%)", audit[0]["flank_alleles_forgiven"])
 
     def test_fusion_reads_are_counted_separately_and_can_be_the_only_ones(self):
         sa = {"SA": "chr22,23632400,+,200M100S,60,0;"}

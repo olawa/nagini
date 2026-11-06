@@ -100,13 +100,20 @@ FLANKING CONTEXT (--kmer-window)
     the pair's strands must not depart from the reference's (SOR alone, or a
     one-sided minor strand alone, is enough to fail), and both bases need
     --linked-min-relative-baseq of the reference's base quality. A
-    basecalling error fails both; a real molecule passes both.
+    basecalling error fails both; a real molecule passes both. Only reads
+    whose window is one gapless aligned block count for the pair -- through
+    an indel or a soft-clip, read offsets show "differences" that are not
+    substitutions -- and a neighbouring panel ALT the two-round check did not
+    call is judged like any other neighbour.
     * both pass: the neighbour is forgiven for this site, as
       "(linked,AF)" in flank_alleles_forgiven, and the codon check treats it
       as an accepted allele.
     * exactly one fails: status REVIEW (filter LINKED_NEIGHBOUR_REVIEW),
       counted as if forgiven so the reviewer sees the would-be VAF, and kept
-      in the mutations TSV and the VCF (FILTER=REVIEW, no genotype).
+      in the mutations TSV and the VCF (FILTER=REVIEW, no genotype). When the
+      neighbour is in the site's codon the row to review is that codon
+      (T315M as ACT>ATG, not T315I); the all-sites row stays the panel
+      allele's, marked LINKED_NEIGHBOUR_IN_CODON.
     * both fail, or the pair fails the ordinary checks: nothing changes.
     The linked_neighbour column records each candidate and its outcome.
 
@@ -583,15 +590,18 @@ class SiteEvidence:
     which differences to forgive can be applied afterwards without reading the
     BAM again. A signature of None means the flank could not be checked (no
     reference, or the read ends inside the window); () means it is clean.
-    Each entry is [reads, base-quality sum at the site, base-quality sums at
-    the signature's flank differences, in signature order].
+    The key also says whether the window is one gapless aligned block: only
+    then is a flank difference a substitution rather than an indel or a
+    soft-clip seen through read offsets. Each entry is [reads, base-quality
+    sum at the site, base-quality sums at the signature's flank differences,
+    in signature order].
     """
 
     __slots__ = ("alleles", "refskip", "deletion", "insertion", "low_baseq", "unfiltered",
-                 "flank_reads", "flank_alt", "flank_alt_bq")
+                 "flank_reads", "flank_alt", "flank_alt_bq", "flank_masked")
 
     def __init__(self) -> None:
-        self.alleles: Dict[Tuple[str, str, Optional[Tuple]], List[int]] = {}
+        self.alleles: Dict[Tuple[str, str, Optional[Tuple], bool], List[Any]] = {}
         self.refskip = 0
         self.deletion = 0
         self.insertion = 0
@@ -604,6 +614,10 @@ class SiteEvidence:
         self.flank_reads = {"fwd": 0, "rev": 0}
         self.flank_alt: Dict[Tuple[int, str, str], int] = {}
         self.flank_alt_bq: Dict[Tuple[int, str], int] = {}
+        # Gapless reads whose flank difference at an offset is below
+        # --min-base-quality or not ACGT: neither that allele nor the
+        # reference there, so they leave that offset's depth.
+        self.flank_masked: Dict[Tuple[int, str], int] = {}
 
 
 def empty_counts() -> Dict[str, Any]:
@@ -771,13 +785,16 @@ def scan_positions(
                             key = (offset, flank_base, strand)
                             site.flank_alt[key] = site.flank_alt.get(key, 0) + 1
                             site.flank_alt_bq[(offset, flank_base)] = site.flank_alt_bq.get((offset, flank_base), 0) + flank_bq
+                        else:
+                            site.flank_masked[(offset, strand)] = site.flank_masked.get((offset, strand), 0) + 1
         bq = qualities[qpos] if qualities is not None else 30
         if min_baseq > 0 and bq < min_baseq:
             site.low_baseq += 1
             return
-        slot = site.alleles.get((base, strand, signature))
+        key = (base, strand, signature, bool(gapless))
+        slot = site.alleles.get(key)
         if slot is None:
-            slot = site.alleles[(base, strand, signature)] = [0, 0, [0] * len(signature or ())]
+            slot = site.alleles[key] = [0, 0, [0] * len(signature or ())]
         slot[0] += 1
         slot[1] += bq
         # Base quality at each flank difference, for judging a neighbour that
@@ -822,7 +839,7 @@ def materialise_counts(evidence: List[SiteEvidence], allowed: Dict[int, MaskEntr
         counts["low_baseq"] += site.low_baseq
         for base in BASES:
             counts["unfiltered"][base] += site.unfiltered[base]
-        for (base, strand, signature), (number, bq_sum, _) in site.alleles.items():
+        for (base, strand, signature, _), (number, bq_sum, _) in site.alleles.items():
             if signature is not None:
                 counts["kmer_total_count"][base] += number
                 if not all(forgives(allowed.get(offset, NO_BASE), flank_base) for offset, flank_base in signature):
@@ -898,7 +915,9 @@ def screen_flank_variants(
     called allele must pass, is a real allele -- a germline SNV on the fusion
     allele, or a change in cis with a panel mutation -- not a context error.
     Panel ALTs are left out: whether they are forgiven depends on whether they
-    are called (fix 2).
+    are called (fix 2). A read whose flank difference at an offset is below
+    --min-base-quality (or not ACGT) is neither that allele nor the reference
+    there, and leaves that offset's depth and reference strand counts.
     """
 
     found: Dict[Tuple[str, int], Dict[str, Dict[str, Any]]] = {}
@@ -916,25 +935,32 @@ def screen_flank_variants(
             continue
         alt: Dict[Tuple[int, str, str], int] = {}
         alt_bq: Dict[Tuple[int, str], int] = {}
+        masked: Dict[Tuple[int, str], int] = {}
         for name in read_sets:
             for item, number in groups[name].flank_alt.items():
                 alt[item] = alt.get(item, 0) + number
             for item, total in groups[name].flank_alt_bq.items():
                 alt_bq[item] = alt_bq.get(item, 0) + total
+            for item, number in groups[name].flank_masked.items():
+                masked[item] = masked.get(item, 0) + number
         for offset in flank_offsets(k):
             ref_base = ref_left[offset + k] if offset < 0 else ref_right[offset - 1]
             if ref_base not in BASES:
                 continue
             genomic = position + offset
             mismatched = {
-                strand: sum(alt.get((offset, base, strand), 0) for base in BASES) for strand in ("fwd", "rev")
+                strand: sum(alt.get((offset, base, strand), 0) for base in BASES) + masked.get((offset, strand), 0)
+                for strand in ("fwd", "rev")
             }
+            callable_depth = depth - masked.get((offset, "fwd"), 0) - masked.get((offset, "rev"), 0)
+            if callable_depth <= 0:
+                continue
             for base in BASES:
                 if base == ref_base or base in panel_alleles.get((chrom, genomic), ()):
                     continue
                 alt_fwd, alt_rev = alt.get((offset, base, "fwd"), 0), alt.get((offset, base, "rev"), 0)
                 number = alt_fwd + alt_rev
-                fraction = number / depth
+                fraction = number / callable_depth
                 if number < args.min_alt_reads or fraction < args.flank_variant_min_af:
                     continue
                 _, failures = allele_quality(
@@ -946,7 +972,7 @@ def screen_flank_variants(
                 previous = found.get((chrom, genomic), {}).get(base)
                 if previous is None or fraction > previous["af"]:
                     found.setdefault((chrom, genomic), {})[base] = {
-                        "ref": ref_base, "af": fraction, "alt_reads": number, "depth": depth,
+                        "ref": ref_base, "af": fraction, "alt_reads": number, "depth": callable_depth,
                     }
     return found
 
@@ -1027,7 +1053,6 @@ def find_linked_neighbour(
     alt: str,
     allowed: Dict[int, MaskEntry],
     flanks: Optional[Tuple[str, str]],
-    panel_bases: Dict[int, set],
 ) -> Optional[Dict[str, Any]]:
     """The one unforgiven flank allele that the site's ALT reads carry most often.
 
@@ -1036,8 +1061,12 @@ def find_linked_neighbour(
     haplotype the linked-neighbour check judges. ``share`` is their fraction of
     all the site's checkable ALT reads -- near 1 when the neighbour sits on the
     same molecules (in cis), near the neighbour's own frequency when the two
-    are independent. Panel ALTs are left to the two-round check (fix 2), and a
-    reference base that is not ACGT cannot be judged.
+    are independent. Only reads whose window is one gapless aligned block
+    count for a neighbour: elsewhere a "difference" can be an indel or
+    soft-clipped bases seen through read offsets. A neighbouring panel ALT that
+    the two-round check did not call is judged like any other neighbour (one
+    it called is forgiven already), and a reference base that is not ACGT
+    cannot be judged.
     """
 
     if not flanks:
@@ -1047,10 +1076,12 @@ def find_linked_neighbour(
     checkable = 0
     candidates: Dict[Tuple[int, str], Dict[str, int]] = {}
     for site in evidence:
-        for (base, strand, signature), (number, bq_sum, flank_bq) in site.alleles.items():
+        for (base, strand, signature, gapless), (number, bq_sum, flank_bq) in site.alleles.items():
             if base != alt or signature is None:
                 continue
             checkable += number
+            if not gapless:
+                continue
             residual = [
                 (index, offset, flank_base) for index, (offset, flank_base) in enumerate(signature)
                 if not forgives(allowed.get(offset, NO_BASE), flank_base)
@@ -1059,7 +1090,7 @@ def find_linked_neighbour(
                 continue
             index, offset, flank_base = residual[0]
             ref_base = ref_left[offset + k] if offset < 0 else ref_right[offset - 1]
-            if flank_base not in BASES or ref_base not in BASES or flank_base in panel_bases.get(offset, ()):
+            if flank_base not in BASES or ref_base not in BASES:
                 continue
             item = candidates.setdefault((offset, flank_base), {"fwd": 0, "rev": 0, "bq_sum": 0, "flank_bq_sum": 0})
             item[strand] += number
@@ -1127,6 +1158,69 @@ def describe_linked(position: int, candidate: Optional[Dict[str, Any]]) -> str:
     if "sor" in candidate:
         text += f" sor={candidate['sor']:.2f}"
     return f"{text} {candidate['outcome']}"
+
+
+def tki_columns(profile: Dict[str, str]) -> Dict[str, str]:
+    return {drug.lower(): profile.get(drug, "Unknown")
+            for drug in ("Imatinib", "Dasatinib", "Nilotinib", "Bosutinib", "Ponatinib", "Asciminib")}
+
+
+def review_codon_record(
+    record: Dict[str, Any],
+    site: Dict[str, Any],
+    linked: Dict[str, Any],
+    flanks: Optional[Tuple[str, str]],
+    tki_profiles: Dict[str, Dict[str, str]],
+) -> Optional[Dict[str, Any]]:
+    """A REVIEW site whose linked neighbour is in the same codon, as the codon it reads.
+
+    T315I's c.944C>T with c.945T>G on the same reads is ATG, Met: the row a
+    person reviews has to say T315M. An accepted pair gets there through the
+    codon check; a REVIEW pair is not called, so the codon is never resolved,
+    and the site's own annotation would name the wrong amino acid. Counts stay
+    the site's, with the neighbour forgiven. Returns None when the neighbour
+    lies outside the codon or the codon cannot be read from the flanks.
+    """
+
+    cdna = site.get("cdna_pos")
+    if cdna is None or not flanks:
+        return None
+    ref_left, ref_right = flanks
+    k = len(ref_left)
+    index = (cdna - 1) % 3
+    neighbour = index + linked["offset"]
+    if not 0 <= neighbour <= 2:
+        return None
+    bases = []
+    for codon_index in range(3):
+        offset = codon_index - index
+        if offset == 0:
+            bases.append(site["ref"])
+        elif -k <= offset < 0:
+            bases.append(ref_left[offset + k])
+        elif 0 < offset <= k:
+            bases.append(ref_right[offset - 1])
+        else:
+            return None
+    ref_codon = "".join(bases)
+    bases[index], bases[neighbour] = site["alt"], linked["base"]
+    alt_codon = "".join(bases)
+    ref_aa, alt_aa = CODON_TABLE.get(ref_codon), CODON_TABLE.get(alt_codon)
+    if not ref_aa or not alt_aa:
+        return None
+    codon_number = (cdna - 1) // 3
+    three = lambda one: next((name for name, letter in AA3_TO_AA1.items() if letter == one), one)  # noqa: E731
+    aa_mut = f"{ref_aa}{codon_number + 1}{alt_aa}"
+    profile = tki_profiles.get(aa_mut, {})
+    consequence, resistance_class = variant_classification(aa_mut, profile)
+    return {
+        **record, **tki_columns(profile),
+        "record_type": "CODON_HAPLOTYPE", "pos": site["pos"] - index, "ref": ref_codon, "alt": alt_codon,
+        "mutation": aa_mut, "aa_change": f"p.{three(ref_aa)}{codon_number + 1}{three(alt_aa)}",
+        "name": f"NM_005157.6:c.({codon_number * 3 + 1}_{codon_number * 3 + 3}{ref_codon}>{alt_codon})",
+        "consequence": consequence, "resistance_class": resistance_class,
+        "codon_context_status": "LINKED_NEIGHBOUR_IN_CODON",
+    }
 
 
 def evaluate_site(
@@ -1441,9 +1535,7 @@ def main(argv=None) -> None:
             candidate = None
             if key in evidence:
                 candidate = find_linked_neighbour(
-                    [evidence[key][name] for name in read_sets], site["alt"], allowed,
-                    reference_flanks.get(key),
-                    {offset: panel_alleles.get((site["chrom"], key[1] + offset), set()) for offset in flank_offsets(kw)},
+                    [evidence[key][name] for name in read_sets], site["alt"], allowed, reference_flanks.get(key),
                 )
                 if candidate and (candidate["reads"] < args.min_alt_reads or candidate["share"] < args.linked_min_share):
                     candidate = None
@@ -1496,7 +1588,16 @@ def main(argv=None) -> None:
                 })
             all_results.append(record)
 
-            if record["status"] in ("DETECTED", "SUBCLONAL", "REVIEW"):
+            review_codon = (
+                review_codon_record(record, site, linked, reference_flanks.get(key), tki_profiles)
+                if record["status"] == "REVIEW" and linked else None
+            )
+            if review_codon:
+                # The audit row stays the panel allele's; the row to review
+                # names the codon the reads carry.
+                record["codon_context_status"] = "LINKED_NEIGHBOUR_IN_CODON"
+                detected_mutations.append(review_codon)
+            elif record["status"] in ("DETECTED", "SUBCLONAL", "REVIEW"):
                 # Keep SITE_AUDIT in all-sites.tsv for nucleotide-level
                 # traceability, but give downstream variant consumers a
                 # distinct record type. REVIEW rows go with them: they are

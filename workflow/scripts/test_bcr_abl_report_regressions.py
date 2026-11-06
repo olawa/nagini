@@ -73,6 +73,7 @@ class BcrAblReportRegressionTests(unittest.TestCase):
             self.assertIn("REVIEW", text)
             self.assertNotIn("PANEL ASSESSED", text)
             self.assertNotIn("ACTION REQUIRED", text)
+            self.assertIn("Branford (review)", self._sheet_text(out, "BCR-ABL1"))
 
             summ = root / "summary.xlsx"
             summary.build_summary_report(str(summ), "RUN", "hg19", [{
