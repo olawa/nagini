@@ -484,22 +484,6 @@ def get_sample_source_bams(wildcards):
     return bams
 
 
-def get_barcode_unit_alignment(wildcards):
-    """Return the per-unit alignment for one preserved barcode."""
-
-    barcode = str(wildcards.barcode).strip()
-    if "barcode_name" not in units.columns:
-        raise WorkflowError("units.tsv has no barcode_name column.")
-    rows = _unit_rows(wildcards.sample, wildcards.type)
-    rows = rows[rows["barcode_name"].astype(str).str.strip() == barcode]
-    if len(rows) != 1:
-        raise WorkflowError(
-            "Expected exactly one unit for "
-            f"{wildcards.sample}/{wildcards.type}/{barcode}; found {len(rows)}."
-        )
-    return get_unit_alignment_path(rows.iloc[0])
-
-
 def get_unit_dorado_bam(wildcards):
     """Return the pipeline-owned demultiplexed BAM for a Dorado unit."""
 
@@ -886,16 +870,6 @@ def sample_has_assay_module(sample, module):
     """Whether an assay-specific analysis module runs for this sample."""
 
     return _routing_call(nagini_routing.sample_has_module, units, sample, assays, module)
-
-
-def samples_with_assay_module(module):
-    """Every sample whose assay declares this module."""
-
-    return [
-        str(sample).strip()
-        for sample in get_samples(samples)
-        if sample_has_assay_module(str(sample).strip(), module)
-    ]
 
 
 def get_resolved_design_bed():

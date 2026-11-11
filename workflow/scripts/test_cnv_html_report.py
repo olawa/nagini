@@ -2,7 +2,6 @@ import json
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from cnv_html_report import create_report
 

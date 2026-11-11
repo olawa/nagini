@@ -4,7 +4,6 @@
 import argparse
 import collections
 import os
-import sys
 
 
 def pad_and_merge_intervals(intervals, padding_bp=25000):

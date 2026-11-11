@@ -7,7 +7,6 @@ import collections
 import gzip
 import json
 import os
-import sys
 
 
 def _open_text(path):

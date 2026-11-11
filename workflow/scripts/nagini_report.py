@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict
 
 try:
     from bcr_abl_report_utils import (

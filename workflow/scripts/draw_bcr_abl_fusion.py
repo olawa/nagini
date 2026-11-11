@@ -2,9 +2,8 @@
 
 import argparse
 import os
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 # Set writable MPLCONFIGDIR before importing matplotlib
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib_nagini")

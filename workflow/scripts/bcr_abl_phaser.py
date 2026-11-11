@@ -110,56 +110,6 @@ def _is_legacy_synonymous(value: str) -> bool:
     return ref == alt
 
 
-def get_base_at_pos(read: pysam.AlignedSegment, target_1based: int) -> Optional[str]:
-    """Return the base in query sequence at a 1-based reference position, or None if skipped/del/out of bounds.
-    
-    Uses direct CIGAR stepping for maximum performance without allocating pair tuples.
-    """
-    target_0based = target_1based - 1
-
-    # Quick bounding box check
-    if target_0based < read.reference_start or target_0based >= read.reference_end:
-        return None
-
-    cigartuples = read.cigartuples
-    if not cigartuples:
-        return None
-
-    seq = read.query_sequence
-    if not seq:
-        return None
-
-    ref_cur = read.reference_start
-    query_cur = 0
-
-    for op, length in cigartuples:
-        if op in (0, 7, 8):  # Match (M), Equal (=), Diff (X)
-            if ref_cur <= target_0based < ref_cur + length:
-                offset = target_0based - ref_cur
-                return seq[query_cur + offset].upper()
-            ref_cur += length
-            query_cur += length
-        elif op == 1:  # Insertion (I)
-            query_cur += length
-        elif op == 2:  # Deletion (D)
-            if ref_cur <= target_0based < ref_cur + length:
-                return "DEL"
-            ref_cur += length
-        elif op == 3:  # RefSkip (N - intron skip)
-            if ref_cur <= target_0based < ref_cur + length:
-                return "REFSKIP"
-            ref_cur += length
-        elif op == 4:  # Soft clip (S)
-            query_cur += length
-        elif op in (5, 6):  # Hard clip (H), Pad (P)
-            pass
-
-        if ref_cur > target_0based:
-            break
-
-    return None
-
-
 def phase_mutation_pair(
     bam: pysam.AlignmentFile,
     mut1: Dict[str, Any],

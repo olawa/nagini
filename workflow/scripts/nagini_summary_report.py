@@ -1,6 +1,5 @@
 """Create a multi-sample XLSX summary report for a Nagini run."""
 
-import argparse
 import os
 import re
 import sys
@@ -29,8 +28,7 @@ except ImportError:
     )
 from datetime import datetime, timezone
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 try:
     import xlsxwriter
@@ -41,7 +39,6 @@ except ImportError:
 try:
     from nagini_report import (
         LAYOUT,
-        STYLE_SPECS,
         TABLE,
         _find_metric,
         _is_pathogenic_clinvar,
@@ -58,7 +55,6 @@ except ImportError:
     sys.path.insert(0, os.path.dirname(__file__))
     from nagini_report import (
         LAYOUT,
-        STYLE_SPECS,
         TABLE,
         _find_metric,
         _is_pathogenic_clinvar,

@@ -7,7 +7,6 @@ from pathlib import Path
 import pysam
 import sys
 from typing import Dict, List, Union
-import statistics
 import gzip
 import base64
 

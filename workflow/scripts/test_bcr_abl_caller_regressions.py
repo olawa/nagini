@@ -291,7 +291,7 @@ class CallerRegressions(unittest.TestCase):
             rows.append({"name": "supp_only", "seq": "N" * 49 + "A" + "N" * 100, "flag": 2048})
             bam = tmp / "reads.bam"; write_bam(bam, rows)
             with pysam.AlignmentFile(str(bam), "rb") as handle:
-                counts = caller.count_position(handle, "chr9", 50, 1000, 12, 1)
+                counts = caller.count_positions_batch(handle, "chr9", {49}, 1000, 12, 1)[49]
             self.assertEqual(counts["A_fwd"], 2)
 
     def test_explicit_reference_ref_mismatch_fails(self):

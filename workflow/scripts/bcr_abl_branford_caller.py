@@ -317,23 +317,6 @@ def forgives(entry: MaskEntry, base: str) -> bool:
     return base in entry
 
 
-def flank_masks(
-    chrom: str, pos0: int, window: int, allowed: Dict[str, Any]
-) -> Tuple[Tuple[MaskEntry, ...], Tuple[MaskEntry, ...]]:
-    """The mask entries for the ``window`` bases either side of ``pos0``.
-
-    ``allowed`` maps a contig to {position: entry}. A plain set of positions
-    (the form before D25) forgives any base at them.
-    """
-
-    sites = allowed.get(chrom, {})
-    if isinstance(sites, (set, frozenset)):
-        sites = {position: True for position in sites}
-    left = tuple(sites.get(pos0 - window + i, NO_BASE) for i in range(window))
-    right = tuple(sites.get(pos0 + 1 + i, NO_BASE) for i in range(window))
-    return left, right
-
-
 def context_is_clean(
     read_seq: str, ref_seq: str, mask: Tuple[MaskEntry, ...]
 ) -> bool:
@@ -881,23 +864,6 @@ def count_positions_batch(
         position: materialise_counts(list(groups.values()), allowed.get(position, {}))
         for position, groups in evidence.items()
     }
-
-
-def count_position(
-    bam: pysam.AlignmentFile,
-    chrom: str,
-    pos_1based: int,
-    max_depth: int,
-    min_baseq: int,
-    min_mapq: int,
-    read_filter: Optional[ReadQualityFilter] = None,
-) -> Dict[str, Any]:
-    """Extract forward/reverse base counts at a single coordinate (wrapper for count_positions_batch)."""
-    target_0based = pos_1based - 1
-    batch_res = count_positions_batch(
-        bam, chrom, {target_0based}, max_depth, min_baseq, min_mapq, read_filter=read_filter
-    )
-    return batch_res.get(target_0based, {f"{b}_{s}": 0 for b in BASES for s in ("fwd", "rev")})
 
 
 def screen_flank_variants(

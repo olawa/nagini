@@ -1,4 +1,3 @@
-import gzip
 import importlib.util
 import json
 import tempfile
