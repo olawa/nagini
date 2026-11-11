@@ -33,8 +33,6 @@ rule stage_aligned_bam:
         time=config.get("stage_aligned_bam", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("stage_aligned_bam", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: add sample metadata and sort/index an existing aligned BAM; no realignment is performed"
     shell:

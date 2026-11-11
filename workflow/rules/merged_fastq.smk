@@ -34,8 +34,6 @@ rule merged_fastq:
         time=config.get("samtools_fastq", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("samtools_fastq", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: extract one FASTQ for {wildcards.sample}_{wildcards.type} from its source BAMs"
     shell:

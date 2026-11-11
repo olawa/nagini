@@ -28,8 +28,6 @@ rule pad_target_bed:
         time=config.get("pad_target_bed", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("pad_target_bed", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: pad design BED intervals by +/-25kb for target region BAM extraction"
     script:
@@ -63,8 +61,6 @@ rule extract_target_bam:
         time=config.get("extract_target_bam", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("extract_target_bam", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: extract target region BAM (+/-25kb) for {wildcards.sample}_{wildcards.type}"
     shell:

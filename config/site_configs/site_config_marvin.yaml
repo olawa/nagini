@@ -7,6 +7,7 @@ SITE_ID: marvin
 REFERENCE_ROOT: /beegfs-storage/data/ref_genomes
 CONTAINER_DIR: /projects/cgu/library/containers
 HYDRA_LOCAL_PATH: vendor
+hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
 RESOURCES_FILE: config/resources/resources_marvin.yaml
 # SLURM allocates each job from resources_marvin.yaml; do not rescale threads.
 scale_threads_to_cores: false

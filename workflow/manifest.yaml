@@ -1,0 +1,100 @@
+---
+# Validated against shared/schemas/pipeline_manifest.schema.yaml
+pipeline:
+  id: wp2_ont
+  name: nagini
+  assay: nanopore_hematology
+  genome_build: GRCh38
+
+entrypoints:
+  analysis: workflow/Snakefile
+  references: null
+
+layout:
+  local_rules_dir: workflow/rules
+  local_scripts_dir: workflow/scripts
+  schemas_dir: workflow/schemas
+  report: null
+  output_spec: config/output_files.yaml
+  container_manifest: containers/manifest.yaml
+
+site:
+  sites:
+    - marvin
+    - miarka
+    - local
+    - workstation
+  site_config_pattern: config/site_configs/site_config_{site}.yaml
+  reference_files_pattern: config/reference_files/reference_files_{site}.yaml
+  profile_pattern: profiles/{site}
+
+rule_groups:
+  common: workflow/rules/common.smk
+  stage_aligned_bam: workflow/rules/stage_aligned_bam.smk
+  dorado: workflow/rules/dorado.smk
+  align_dorado_bam: workflow/rules/align_dorado_bam.smk
+  read_filter: workflow/rules/read_filter.smk
+  merged_fastq: workflow/rules/merged_fastq.smk
+  target_bam: workflow/rules/target_bam.smk
+  sv_summary: workflow/rules/sv_summary.smk
+  cnv: workflow/rules/cnv.smk
+  cnvkit: workflow/rules/cnvkit.smk
+  cnv_html_report: workflow/rules/cnv_html_report.smk
+  snv_postprocess: workflow/rules/snv_postprocess.smk
+  bcr_abl: workflow/rules/bcr_abl.smk
+  excel_report: workflow/rules/excel_report.smk
+  copy_results: workflow/rules/copy_results.smk
+
+hydra_modules:
+  source: config.modules
+  loader: hydra_genetics.utils.misc.get_module_snakefile
+  local_module_root_config_key: hydra_local_path
+  modules:
+    - alignment
+    - annotation
+    - cnv_sv
+    - qc
+    - snv_indels
+
+scripts:
+  pipeline_specific:
+    - workflow/scripts/bcr_abl_annotations.py
+    - workflow/scripts/bcr_abl_branford_caller.py
+    - workflow/scripts/bcr_abl_draw_fusions.py
+    - workflow/scripts/bcr_abl_draw_fusions.sh
+    - workflow/scripts/bcr_abl_exon_coverage.py
+    - workflow/scripts/bcr_abl_fusion_counter.py
+    - workflow/scripts/bcr_abl_phaser.py
+    - workflow/scripts/bcr_abl_read_quality.py
+    - workflow/scripts/bcr_abl_report_utils.py
+    - workflow/scripts/centromeres_from_cytoband.py
+    - workflow/scripts/cnv_html_report.py
+    - workflow/scripts/cnv_summary.py
+    - workflow/scripts/dorado_demux_collect.py
+    - workflow/scripts/dorado_demux_summary.py
+    - workflow/scripts/draw_bcr_abl_fusion.py
+    - workflow/scripts/draw_fusions.r
+    - workflow/scripts/merge_cnv_json.py
+    - workflow/scripts/nagini_report.py
+    - workflow/scripts/nagini_routing.py
+    - workflow/scripts/nagini_summary_report.py
+    - workflow/scripts/pad_bed.py
+    - workflow/scripts/run_rindels.py
+    - workflow/scripts/snakemake_cli.py
+    - workflow/scripts/sv_summary.py
+
+launch:
+  profile: profiles/{SITE}
+  snakefile: workflow/Snakefile
+  copy:
+    - {from: config, to: config}
+  snakemake:
+    configfiles:
+      - config/config.yaml
+      - "config/reference_files/reference_files_{SITE}.yaml"
+      - "config/site_configs/site_config_{SITE}.yaml"
+    args: [-p]
+    wrapper_prefix: true
+  runs:
+    - name: default
+  preflight: offline

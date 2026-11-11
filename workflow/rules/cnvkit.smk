@@ -93,10 +93,10 @@ rule cnvkit_batch:
         target_avg_size=config.get("cnvkit_batch", {}).get("target_avg_size", 50000),
         extra=config.get("cnvkit_batch", {}).get("extra", "--count-reads"),
     log:
-        "cnv/cnvkit/{sample}_{type}.cnvkit_batch.log",
+        "logs/cnvkit_batch/{sample}_{type}.log",
     benchmark:
         repeat(
-            "cnv/cnvkit/{sample}_{type}.cnvkit_batch.benchmark.tsv",
+            "benchmarks/cnvkit_batch/{sample}_{type}.tsv",
             config.get("cnvkit_batch", {}).get("benchmark_repeats", 1),
         )
     threads: config.get("cnvkit_batch", {}).get("threads", config["default_resources"]["threads"])

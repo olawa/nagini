@@ -63,8 +63,6 @@ rule nagini_excel_report:
         time=config.get("nagini_excel_report", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("nagini_excel_report", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: compile Excel report for {wildcards.sample}_{wildcards.type}"
     script:
@@ -148,8 +146,6 @@ rule nagini_summary_excel_report:
         time=config.get("nagini_excel_report", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("nagini_excel_report", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: compile multi-sample Excel summary report"
     script:

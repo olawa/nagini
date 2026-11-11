@@ -64,6 +64,8 @@ rule cnv_rindels:
         partition=config.get("cnv_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
         threads=config.get("cnv_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
         time=config.get("cnv_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
+    container:
+        config.get("cnv_rindels", {}).get("container", config.get("rindels", {}).get("container", None))
     message:
         "{rule}: call whole-genome copy number variations with Rindels for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -111,8 +113,6 @@ rule cnv_summary:
         time=config.get("cnv_summary", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("cnv_summary", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: summarise copy number alterations for {wildcards.sample}_{wildcards.type}"
     script:
@@ -147,8 +147,6 @@ rule cytoband_centromeres:
         time=config.get("cytoband_centromeres", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("cytoband_centromeres", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     wildcard_constraints:
         build=r"[A-Za-z0-9._-]+",
     message:
@@ -201,6 +199,8 @@ rule cnv_rindels_ideogram:
         partition=config.get("rindels_ideogram", {}).get("partition", config["default_resources"]["partition"]),
         threads=1,
         time=config.get("rindels_ideogram", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("rindels_ideogram", {}).get("container", config.get("rindels", {}).get("container", None))
     message:
         "{rule}: draw the whole-genome ideogram for {wildcards.sample}_{wildcards.type}"
     shell:

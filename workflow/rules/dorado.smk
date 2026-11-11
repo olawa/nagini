@@ -1,32 +1,9 @@
 __author__ = "Ola Wallerman"
 __copyright__ = "Copyright 2026, Ola Wallerman"
+__email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
 """Containerised Dorado basecalling and barcode-level raw-data export."""
-
-
-_dorado_img = config.get("dorado", {}).get("container")
-if _dorado_img in ("", None, "none", "None", False, "local"):
-    _dorado_img = None
-
-_dorado_exe = config.get("dorado", {}).get("binary", "")
-_dorado_exe = os.path.expanduser(str(_dorado_exe)) if _dorado_exe else "dorado"
-
-_dorado_output_format = str(
-    config.get("dorado", {}).get("demux_output_format", "fastq")
-).lower()
-_dorado_keep_bam = _dorado_output_format in ("bam", "both")
-_dorado_keep_fastq = _dorado_output_format in ("fastq", "both")
-_dorado_barcode_bam = "basecalling/dorado_demux/{dorado_barcode}.bam"
-_dorado_barcode_bam_output = (
-    _dorado_barcode_bam if _dorado_keep_bam else temp(_dorado_barcode_bam)
-)
-_dorado_barcode_fastq = "basecalling/dorado_fastq/{dorado_barcode}.fastq.gz"
-_dorado_barcode_fastq_output = (
-    _dorado_barcode_fastq
-    if _dorado_keep_fastq
-    else temp(_dorado_barcode_fastq)
-)
 
 
 rule dorado_basecaller:

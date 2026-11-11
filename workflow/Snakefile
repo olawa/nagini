@@ -854,10 +854,10 @@ use rule cramino from qc as qc_cramino_target with:
         txt="qc/cramino_target/{sample}_{type}.txt",
         arrow="qc/cramino_target/{sample}_{type}.arrow",
     log:
-        "qc/cramino_target/{sample}_{type}.output.log",
+        "logs/cramino_target/{sample}_{type}.log",
     benchmark:
         repeat(
-            "qc/cramino_target/{sample}_{type}.output.benchmark.tsv",
+            "benchmarks/cramino_target/{sample}_{type}.tsv",
             config.get("cramino", {}).get("benchmark_repeats", 1),
         )
 

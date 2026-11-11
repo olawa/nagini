@@ -16,13 +16,6 @@ __license__ = "GPL-3"
 #
 # The {caller} wildcard in cnvkit_json is always "cnvkit" for Nagini.
 
-import os
-
-_REPORTS_TEMPLATES = os.path.join(
-    workflow.basedir, "..", "vendor", "hydra-genetics", "reports",
-    "workflow", "templates"
-)
-
 
 rule decompress_cytoband:
     """Decompress cytobands if compressed, because merge_cnv_json expects plain text."""
@@ -33,7 +26,7 @@ rule decompress_cytoband:
     params:
         extra=config.get("decompress_cytoband", {}).get("extra", ""),
     log:
-        "reports/cnv_html_report/cytobands_{build}.log",
+        "logs/decompress_cytoband/cytobands_{build}.log",
     benchmark:
         repeat(
             "benchmarks/decompress_cytoband/{build}.tsv",
@@ -73,10 +66,10 @@ rule cnvkit_json:
     wildcard_constraints:
         caller="cnvkit",
     log:
-        "reports/cnv_html_report/{sample}_{type}.{caller}.json.log",
+        "logs/cnvkit_json/{sample}_{type}.{caller}.log",
     benchmark:
         repeat(
-            "reports/cnv_html_report/{sample}_{type}.{caller}.json.benchmark.tsv",
+            "benchmarks/cnvkit_json/{sample}_{type}.{caller}.tsv",
             config.get("cnv_json", {}).get("benchmark_repeats", 1),
         )
     threads: config.get("cnv_json", {}).get("threads", config["default_resources"]["threads"])
@@ -91,7 +84,7 @@ rule cnvkit_json:
     message:
         "{rule}: Building CNVkit JSON for {wildcards.sample}_{wildcards.type}"
     script:
-        "../../vendor/hydra-genetics/reports/workflow/scripts/cnv_json.py"
+        _REPORTS_CNV_JSON_SCRIPT
 
 
 rule merge_cnvkit_json:
@@ -117,10 +110,10 @@ rule merge_cnvkit_json:
         skip_chromosomes=config["references"][config.get("reference_build", "hg38")].get("skip_chrs", []),
         cytobands=config.get("cnv_html_report", {}).get("cytobands", False),
     log:
-        "reports/cnv_html_report/{sample}_{type}.merged.json.log",
+        "logs/merge_cnvkit_json/{sample}_{type}.log",
     benchmark:
         repeat(
-            "reports/cnv_html_report/{sample}_{type}.merged.json.benchmark.tsv",
+            "benchmarks/merge_cnvkit_json/{sample}_{type}.tsv",
             config.get("merge_cnv_json", {}).get("benchmark_repeats", 1),
         )
     threads: config.get("merge_cnv_json", {}).get("threads", config["default_resources"]["threads"])
@@ -146,19 +139,9 @@ rule compile_cnv_html_report:
     """
     input:
         json="reports/cnv_html_report/{sample}_{type}.merged.json",
-        html_template=os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "index.html"),
-        js_files=[
-            os.path.join(_REPORTS_TEMPLATES, "assets", "js", "d3.v7.min.js"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "01-chromosome-plot.js"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "02-genome-plot.js"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "03-results-table.js"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "04-window-summary.js"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "05-main.js"),
-        ],
-        css_files=[
-            os.path.join(_REPORTS_TEMPLATES, "assets", "css", "icons.css"),
-            os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "style.css"),
-        ],
+        html_template=_CNV_HTML_TEMPLATE,
+        js_files=_CNV_HTML_JS_FILES,
+        css_files=_CNV_HTML_CSS_FILES,
     output:
         html="reports/cnv_html_report/{sample}_{type}.cnv_report.html",
     params:
@@ -169,10 +152,10 @@ rule compile_cnv_html_report:
         tc_method="tumor-only",
         wide_plot_width=config.get("cnv_html_report", {}).get("wide_plot_width", False),
     log:
-        "reports/cnv_html_report/{sample}_{type}.cnv_report.html.log",
+        "logs/compile_cnv_html_report/{sample}_{type}.log",
     benchmark:
         repeat(
-            "reports/cnv_html_report/{sample}_{type}.cnv_report.html.benchmark.tsv",
+            "benchmarks/compile_cnv_html_report/{sample}_{type}.tsv",
             config.get("cnv_html_report", {}).get("benchmark_repeats", 1),
         )
     threads: config.get("cnv_html_report", {}).get("threads", config["default_resources"]["threads"])

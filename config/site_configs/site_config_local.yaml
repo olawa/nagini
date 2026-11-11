@@ -7,6 +7,7 @@ SITE_ID: local
 REFERENCE_ROOT: references
 CONTAINER_DIR: "{{PIPELINE_ROOT}}/vendor/containers"
 HYDRA_LOCAL_PATH: vendor
+hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
 RESOURCES_FILE: config/resources/resources_local.yaml
 
 # The checkout-relative local profile does not ship an hs1/T2T bundle.

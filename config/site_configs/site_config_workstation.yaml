@@ -11,6 +11,7 @@ SITE_ID: workstation
 REFERENCE_ROOT: /data/references
 CONTAINER_DIR: /data/containers
 HYDRA_LOCAL_PATH: vendor
+hydra_local_path: "{{HYDRA_LOCAL_PATH}}"
 RESOURCES_FILE: config/resources/resources_workstation.yaml
 
 # The initial workstation test can run without VEP.  ClinVar is wired into

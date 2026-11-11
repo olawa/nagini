@@ -1,24 +1,9 @@
 __author__ = "Ola Wallerman"
 __copyright__ = "Copyright 2026, Ola Wallerman"
+__email__ = "ola.wallerman@scilifelab.uu.se"
 __license__ = "GPL-3"
 
 """Align pipeline-produced, demultiplexed Dorado BAMs per Hydra unit."""
-
-
-_dorado_aligner = str(
-    config.get("dorado_alignment", {}).get("aligner", "minimap2")
-).strip().lower()
-if _dorado_aligner not in ("minimap2", "dorado"):
-    raise WorkflowError(
-        "Unsupported dorado_alignment.aligner={!r}; use minimap2 or dorado.".format(
-            _dorado_aligner
-        )
-    )
-
-_dorado_alignment_raw = temp(
-    "alignment/units_unsorted/"
-    "{sample}_{type}_{processing_unit}_{barcode}.unsorted.bam"
-)
 
 
 if _dorado_aligner == "minimap2":
@@ -65,8 +50,6 @@ if _dorado_aligner == "minimap2":
                     "container", config["default_container"]
                 ),
             )
-        conda:
-            "../../envs/nagini.yaml"
         message:
             "{rule}: align Dorado barcode FASTQ {input.fastq} with minimap2"
         shell:
@@ -78,15 +61,6 @@ if _dorado_aligner == "minimap2":
 
 
 else:
-    _dorado_alignment_img = config.get("dorado", {}).get("container")
-    if _dorado_alignment_img in ("", None, "none", "None", False, "local"):
-        _dorado_alignment_img = None
-    _dorado_alignment_exe = config.get("dorado", {}).get("binary", "")
-    _dorado_alignment_exe = (
-        os.path.expanduser(str(_dorado_alignment_exe))
-        if _dorado_alignment_exe
-        else "dorado"
-    )
 
     rule align_dorado_bam_raw:
         """Align a demultiplexed BAM directly with Dorado aligner."""
@@ -96,7 +70,7 @@ else:
         output:
             bam=_dorado_alignment_raw,
         params:
-            dorado_bin=_dorado_alignment_exe,
+            dorado_bin=_dorado_exe,
             extra=config.get("dorado_alignment", {}).get("extra", ""),
         log:
             "logs/align_dorado_bam/{sample}_{type}_{processing_unit}_{barcode}.log",
@@ -124,7 +98,7 @@ else:
                 "time", config["default_resources"]["time"]
             ),
         container:
-            _dorado_alignment_img
+            _dorado_img
         message:
             "{rule}: align unaligned Dorado BAM {input.bam} with Dorado"
         shell:

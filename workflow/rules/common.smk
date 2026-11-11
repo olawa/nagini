@@ -39,6 +39,7 @@ from hydra_genetics.utils.misc import export_config_as_file
 from hydra_genetics.utils.misc import get_module_snakefile
 from hydra_genetics.utils.resources import load_resources
 from hydra_genetics.utils.samples import get_samples
+from hydra_genetics.utils.units import get_unit_types
 from hydra_genetics.utils.software_versions import add_software_version_to_config
 from hydra_genetics.utils.software_versions import add_version_files_to_multiqc
 from hydra_genetics.utils.software_versions import export_pipeline_version_as_file
@@ -311,12 +312,14 @@ samples = (
 )
 validate(samples, schema="../schemas/samples.schema.yaml")
 
-# Keep this dataframe flat.  Hydra's ONT modules index the same table in
-# their own namespace, while the custom input rules need input_type as well.
+# Index units on (sample, type, processing_unit, barcode) with drop=False so both
+# hydra_genetics.utils.units helpers and column-based lookups work.
 units = (
     pd.read_table(config["units"], dtype=str)
     .fillna("")
     .apply(lambda col: col.str.strip() if hasattr(col, "str") else col)
+    .set_index(["sample", "type", "processing_unit", "barcode"], drop=False)
+    .sort_index()
 )
 validate(units, schema="../schemas/units.schema.yaml")
 
@@ -1399,7 +1402,7 @@ def get_report_bcr_abl_bcftools_vcf(wildcards):
 
 
 def get_unit_types_for_sample(sample):
-    return sorted(set(units.loc[units["sample"] == sample, "type"]))
+    return sorted(get_unit_types(units, sample))
 
 
 # Conditions understood by `when:` in config/output_files.yaml.  Pipeline-level
@@ -1578,6 +1581,48 @@ def compile_output_file_list(wildcards):
 # top of the rule files; as in the hydra templates, rule files now hold rules
 # and the functions they call live here. One section per rule file.
 # ---------------------------------------------------------------------------
+
+
+# --- Dorado basecalling and alignment (dorado.smk / align_dorado_bam.smk) ---
+
+
+_dorado_img = config.get("dorado", {}).get("container")
+if _dorado_img in ("", None, "none", "None", False, "local"):
+    _dorado_img = None
+
+_dorado_exe = config.get("dorado", {}).get("binary", "")
+_dorado_exe = os.path.expanduser(str(_dorado_exe)) if _dorado_exe else "dorado"
+
+_dorado_output_format = str(
+    config.get("dorado", {}).get("demux_output_format", "fastq")
+).lower()
+_dorado_keep_bam = _dorado_output_format in ("bam", "both")
+_dorado_keep_fastq = _dorado_output_format in ("fastq", "both")
+_dorado_barcode_bam = "basecalling/dorado_demux/{dorado_barcode}.bam"
+_dorado_barcode_bam_output = (
+    _dorado_barcode_bam if _dorado_keep_bam else temp(_dorado_barcode_bam)
+)
+_dorado_barcode_fastq = "basecalling/dorado_fastq/{dorado_barcode}.fastq.gz"
+_dorado_barcode_fastq_output = (
+    _dorado_barcode_fastq
+    if _dorado_keep_fastq
+    else temp(_dorado_barcode_fastq)
+)
+
+_dorado_aligner = str(
+    config.get("dorado_alignment", {}).get("aligner", "minimap2")
+).strip().lower()
+if _dorado_aligner not in ("minimap2", "dorado"):
+    raise WorkflowError(
+        "Unsupported dorado_alignment.aligner={!r}; use minimap2 or dorado.".format(
+            _dorado_aligner
+        )
+    )
+
+_dorado_alignment_raw = temp(
+    "alignment/units_unsorted/"
+    "{sample}_{type}_{processing_unit}_{barcode}.unsorted.bam"
+)
 
 
 # --- read filtering (read_filter.smk) ---
@@ -1820,6 +1865,38 @@ def _bcr_abl_gtf():
 
 
 # --- CNVkit and the CNV HTML report (cnvkit.smk / cnv_html_report.smk) ---
+
+
+def _resolve_hydra_module_workflow_dir(module_name):
+    """Locate a vendored or locally installed hydra-genetics module workflow dir."""
+    hydra_root = str(config.get("hydra_local_path", "") or "vendor").strip()
+    if not os.path.isabs(hydra_root):
+        hydra_root = os.path.normpath(os.path.join(workflow.basedir, "..", hydra_root))
+    candidate = os.path.join(hydra_root, "hydra-genetics", module_name, "workflow")
+    if os.path.isdir(candidate):
+        return candidate
+    fallback = os.path.join(hydra_root, module_name, "workflow")
+    if os.path.isdir(fallback):
+        return fallback
+    return candidate
+
+
+_REPORTS_WORKFLOW_DIR = _resolve_hydra_module_workflow_dir("reports")
+_REPORTS_TEMPLATES = os.path.join(_REPORTS_WORKFLOW_DIR, "templates")
+_REPORTS_CNV_JSON_SCRIPT = os.path.join(_REPORTS_WORKFLOW_DIR, "scripts", "cnv_json.py")
+_CNV_HTML_TEMPLATE = os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "index.html")
+_CNV_HTML_JS_FILES = [
+    os.path.join(_REPORTS_TEMPLATES, "assets", "js", "d3.v7.min.js"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "01-chromosome-plot.js"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "02-genome-plot.js"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "03-results-table.js"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "04-window-summary.js"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "05-main.js"),
+]
+_CNV_HTML_CSS_FILES = [
+    os.path.join(_REPORTS_TEMPLATES, "assets", "css", "icons.css"),
+    os.path.join(_REPORTS_TEMPLATES, "cnv_html_report", "style.css"),
+]
 
 
 def _get_ref(key, config):

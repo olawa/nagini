@@ -36,8 +36,6 @@ rule read_filter_fastq:
     # if you want it containerised, with the binary at a path inside the image.
     container:
         config.get("read_filter", {}).get("container", None)
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: filter {input.fastq1} by quality and length"
     shell:
@@ -85,8 +83,6 @@ rule read_filter_unmapped_bam:
     # if you want it containerised, with the binary at a path inside the image.
     container:
         config.get("read_filter", {}).get("container", None)
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: filter {input.bam} by quality and length"
     shell:

@@ -258,6 +258,9 @@ properties:
       benchmark_repeats:
         type: integer
         description: number of times the benchmark should be repeated
+      container:
+        type: string
+        description: name or path to docker/singularity container
   bgzip:
     type: object
     description: settings for bgzip
@@ -338,6 +341,9 @@ properties:
       benchmark_repeats:
         type: integer
         description: number of times the benchmark should be repeated
+      container:
+        type: string
+        description: name or path to docker/singularity container
   cnv_summary:
     type: object
     description: settings for cnv_summary
@@ -795,6 +801,9 @@ properties:
       cnv_bin_size:
         type: integer
         description: 'cnv bin size (default: 50000)'
+      container:
+        type: string
+        description: name or path to docker/singularity container
       extra:
         type: string
         description: extra command-line arguments
@@ -811,6 +820,9 @@ properties:
       benchmark_repeats:
         type: integer
         description: number of times the benchmark should be repeated
+      container:
+        type: string
+        description: name or path to docker/singularity container
       extra:
         type: string
         description: extra command-line arguments

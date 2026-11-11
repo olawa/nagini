@@ -46,8 +46,6 @@ rule sv_summary:
         time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("sv_summary", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: summarise structural variants in {input.vcf}"
     script:
@@ -94,8 +92,6 @@ rule sv_summary_rindels:
         time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("sv_summary", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: summarise Rindels structural variants for {wildcards.sample}_{wildcards.type}"
     script:
@@ -136,8 +132,6 @@ rule sv_summary_savana:
         time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("sv_summary", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: summarise SAVANA somatic structural variants for {wildcards.sample}_{wildcards.type}"
     script:

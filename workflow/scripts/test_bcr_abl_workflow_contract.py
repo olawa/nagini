@@ -159,6 +159,51 @@ class ReadFilterContractTest(unittest.TestCase):
         self.assertIn("{params.selection}", bam_rule)
 
 
+class HydraStructureContractTest(unittest.TestCase):
+    """Ensure local Snakemake rules and configs adhere to Hydra-Genetics and CGU conventions."""
+
+    def test_rule_files_have_hydra_headers_and_no_inline_helpers_or_conda(self):
+        expected_header = ["__author__", "__copyright__", "__email__", "__license__"]
+        for smk_path in sorted((ROOT / "workflow/rules").glob("*.smk")):
+            lines = smk_path.read_text().splitlines()
+            header_keys = [line.split("=")[0].strip() for line in lines[:4] if "=" in line]
+            self.assertEqual(header_keys, expected_header, f"{smk_path.name} missing 4-line Hydra header")
+            if smk_path.name == "common.smk":
+                continue
+            for line in lines[4:]:
+                stripped = line.strip()
+                self.assertFalse(stripped.startswith("import "), f"{smk_path.name} has top-level import: {stripped}")
+                self.assertFalse(stripped.startswith("def "), f"{smk_path.name} has helper def: {stripped}")
+                self.assertNotEqual(stripped, "conda:", f"{smk_path.name} has residual conda: directive")
+
+    def test_every_local_rule_declares_container_and_standard_logs_and_benchmarks(self):
+        import re
+        for smk_path in sorted((ROOT / "workflow/rules").glob("*.smk")):
+            if smk_path.name == "common.smk":
+                continue
+            text = smk_path.read_text()
+            rule_blocks = re.split(r"(?m)^\s*rule\s+[A-Za-z0-9_]+\s*:", text)[1:]
+            self.assertGreater(len(rule_blocks), 0, f"{smk_path.name} has no rules")
+            for block in rule_blocks:
+                self.assertIn("container:", block, f"Rule in {smk_path.name} missing container: directive")
+                self.assertIn('"logs/', block, f"Rule in {smk_path.name} missing logs/ path")
+                self.assertIn('"benchmarks/', block, f"Rule in {smk_path.name} missing benchmarks/ path")
+
+    def test_site_configs_and_manifest_follow_cgu_offline_contract(self):
+        import yaml
+        for site_cfg in sorted((ROOT / "config/site_configs").glob("site_config_*.yaml")):
+            data = yaml.safe_load(site_cfg.read_text()) or {}
+            self.assertTrue(data.get("hydra_local_path"), f"{site_cfg.name} missing hydra_local_path")
+            self.assertTrue(data.get("CONTAINER_DIR"), f"{site_cfg.name} missing CONTAINER_DIR")
+
+        manifest_path = ROOT / "workflow/manifest.yaml"
+        self.assertTrue(manifest_path.is_file(), "workflow/manifest.yaml is missing")
+        manifest = yaml.safe_load(manifest_path.read_text())
+        declared_rules = {Path(p).name for p in manifest["rule_groups"].values()}
+        actual_rules = {p.name for p in (ROOT / "workflow/rules").glob("*.smk")}
+        self.assertEqual(declared_rules, actual_rules)
+
+
 def common_function(name):
     """One top-level function of common.smk, as source text."""
 

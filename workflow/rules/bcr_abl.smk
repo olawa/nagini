@@ -37,8 +37,6 @@ rule bcr_abl_fusion_counts:
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcr_abl", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: count BCR-ABL1 fusion-spanning reads for {wildcards.sample}_{wildcards.type}"
     script:
@@ -101,8 +99,6 @@ rule bcr_abl_branford_calling:
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcr_abl", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: force-call BCR-ABL1 kinase domain mutations for {wildcards.sample}_{wildcards.type}"
     script:
@@ -140,8 +136,6 @@ rule bcr_abl_phasing:
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcr_abl", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: phase BCR-ABL1 resistance mutations for {wildcards.sample}_{wildcards.type}"
     script:
@@ -175,8 +169,6 @@ rule bcr_abl_exon_coverage:
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcr_abl", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: measure coverage across BCR and ABL1 exons for {wildcards.sample}_{wildcards.type}"
     script:
@@ -219,8 +211,6 @@ rule bcr_abl_draw_fusions:
         time=config.get("arriba", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("arriba", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: draw the BCR-ABL1 fusion plots for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -275,8 +265,6 @@ rule bcr_abl_bcftools_pileup:
         time=config.get("bcr_abl", {}).get("time", config["default_resources"]["time"]),
     container:
         config.get("bcftools", {}).get("container", config["default_container"])
-    conda:
-        "../../envs/nagini.yaml"
     message:
         "{rule}: call BCR-ABL1 target exons with bcftools for {wildcards.sample}_{wildcards.type}"
     shell:
@@ -322,8 +310,8 @@ rule bcr_abl_rindels:
         partition=config.get("bcr_abl_rindels", {}).get("partition", config.get("rindels", {}).get("partition", config["default_resources"]["partition"])),
         threads=config.get("bcr_abl_rindels", {}).get("threads", config.get("rindels", {}).get("threads", 4)),
         time=config.get("bcr_abl_rindels", {}).get("time", config.get("rindels", {}).get("time", config["default_resources"]["time"])),
-    conda:
-        "../../envs/nagini.yaml"
+    container:
+        config.get("bcr_abl_rindels", {}).get("container", config.get("rindels", {}).get("container", None))
     message:
         "{rule}: run Rindels in BCR-ABL1 mode for {wildcards.sample}_{wildcards.type}"
     shell:
