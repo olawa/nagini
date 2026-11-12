@@ -87,6 +87,74 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             }
             self.assertEqual(PREPARE.missing_containers(config), [absent])
 
+    def container_config(self, tmpdir, **extra):
+        deepsomatic = str(Path(tmpdir) / "google__deepsomatic_1.10.0.sif")
+        config = {
+            "DEEPSOMATIC_CONTAINER": deepsomatic,
+            "deepsomatic_t_only": {"container": deepsomatic},
+            "small_variant_caller": "auto",
+        }
+        config.update(extra)
+        return deepsomatic, config
+
+    def test_an_image_only_a_setting_selects_is_not_required_until_selected(self):
+        """DeepSomatic is never picked by `auto`; its missing image stopped a
+        BCR-ABL1 run that had no use for it (D29)."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            deepsomatic, config = self.container_config(tmpdir)
+            self.assertEqual(PREPARE.missing_containers(config), [])
+
+            config["small_variant_caller"] = "deepsomatic"
+            self.assertEqual(PREPARE.missing_containers(config), [deepsomatic])
+
+            _, config = self.container_config(
+                tmpdir,
+                assays={"x": {"config_overrides": {"clairs_to_call": {"small_variant_caller": "DeepSomatic"}}}},
+            )
+            self.assertEqual(PREPARE.missing_containers(config), [deepsomatic])
+
+    def test_a_gated_image_is_still_required_where_something_else_uses_it(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            deepsomatic, config = self.container_config(tmpdir, other={"container": None})
+            config["other"]["container"] = deepsomatic
+            self.assertEqual(PREPARE.missing_containers(config), [deepsomatic])
+
+    def test_the_build_command_names_the_images_and_the_container_dir(self):
+        command = PREPARE.build_command(
+            Path("/opt/nagini"),
+            {"CONTAINER_DIR": "/data/containers"},
+            ["/data/containers/a.sif", "/data/containers/b.sif"],
+        )
+        self.assertEqual(
+            command,
+            "/opt/nagini/pipeline_start_scripts/build_containers.sh --dest /data/containers "
+            "--only a.sif --only b.sif",
+        )
+
+    def test_the_build_script_builds_only_what_it_is_told_to(self):
+        import subprocess
+
+        script = REPO / "pipeline_start_scripts/build_containers.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def run(*args):
+                return subprocess.run(
+                    ["bash", str(script), "--dest", tmpdir, "--dry-run", *args],
+                    capture_output=True, text=True,
+                )
+
+            only = run("--only", "google__deepsomatic_1.10.0.sif")
+            self.assertEqual(only.returncode, 0, only.stderr)
+            self.assertIn("building google__deepsomatic_1.10.0.sif", only.stdout)
+            self.assertIn("built: 1,", only.stdout)
+
+            (Path(tmpdir) / "google__deepsomatic_1.10.0.sif").write_text("")
+            self.assertIn("built: 0, already there: 1", run("--only", "google__deepsomatic_1.10.0.sif").stdout)
+
+            typo = run("--only", "no_such.sif")
+            self.assertNotEqual(typo.returncode, 0)
+            self.assertIn("Not in the manifest: no_such.sif", typo.stderr)
+
     def test_every_site_points_its_containers_at_its_container_dir(self):
         """D10: images come from CONTAINER_DIR, which only the site config sets."""
 

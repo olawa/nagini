@@ -8,8 +8,8 @@ RESOURCES_FILE: "config/resources/resources_local.yaml"
 DEFAULT_CONTAINER: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
 REFERENCE_ROOT: "references"
 # Where the .sif files listed in containers/manifest.yaml are installed (D10).
-# Nothing is pulled at run time; build them once with harmonized_pipelines'
-# tools/build_containers.sh <nagini> --dest <CONTAINER_DIR>. Relative to the
+# Nothing is pulled at run time; build them once with
+# pipeline_start_scripts/build_containers.sh --dest <CONTAINER_DIR>. Relative to the
 # checkout here, for direct runs from the repo root; each site config sets it.
 CONTAINER_DIR: "vendor/containers"
 

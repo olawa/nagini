@@ -1892,26 +1892,65 @@ def resolve_config_path(value: object, base_dir: Path) -> object:
     return str(path if path.is_absolute() else (base_dir / path).resolve())
 
 
+def build_command(pipeline_root: Path, config: Any, missing: list[str]) -> str:
+    """The command that installs exactly the images ``missing`` names."""
+
+    dest = str(config.get("CONTAINER_DIR") or "<CONTAINER_DIR>") if isinstance(config, dict) else "<CONTAINER_DIR>"
+    script = Path(pipeline_root) / "pipeline_start_scripts" / "build_containers.sh"
+    only = " ".join(f"--only {Path(path).name}" for path in missing)
+    return f"{script} --dest {dest} {only}".strip()
+
+
+def _caller_selected(config: Any, caller: str) -> bool:
+    """Whether any `small_variant_caller` in the config, global or in an assay's
+    overrides, names ``caller``. Looser than the per-sample routing on purpose:
+    it may say yes for an image no sample ends up using, never no for one that is."""
+
+    if isinstance(config, dict):
+        for key, value in config.items():
+            if key in ("small_variant_caller", "caller") and str(value).strip().lower() == caller:
+                return True
+            if _caller_selected(value, caller):
+                return True
+    elif isinstance(config, list):
+        return any(_caller_selected(item, caller) for item in config)
+    return False
+
+
+# Config sections whose image a run needs only under a setting. Everything else
+# is needed by some job in every DAG. A section's image is also checked when
+# it appears under a section that is not listed here.
+CONDITIONAL_CONTAINER_KEYS = {
+    "DEEPSOMATIC_CONTAINER": lambda config: _caller_selected(config, "deepsomatic"),
+    "deepsomatic_t_only": lambda config: _caller_selected(config, "deepsomatic"),
+}
+
+
 def missing_containers(config: Any) -> list[str]:
-    """Every .sif the config points at that does not exist.
+    """Every .sif the run can use that does not exist.
 
     Containers come from CONTAINER_DIR and are never pulled at run time (D10),
-    so a missing image would otherwise surface as a failed job mid-run.
+    so a missing image would otherwise surface as a failed job mid-run. An
+    image only a setting selects (DeepSomatic, which `auto` never picks) is
+    not required until that setting is on: it is a few GB that a BCR-ABL1 run
+    has no use for, and the check stopped such a run (D29).
     """
 
     found: set[str] = set()
 
-    def walk(value: Any) -> None:
+    def walk(value: Any, gated: bool) -> None:
         if isinstance(value, dict):
-            for item in value.values():
-                walk(item)
+            for key, item in value.items():
+                condition = CONDITIONAL_CONTAINER_KEYS.get(key) if isinstance(key, str) else None
+                walk(item, gated or (condition is not None and not condition(config)))
         elif isinstance(value, list):
             for item in value:
-                walk(item)
+                walk(item, gated)
         elif isinstance(value, str) and value.endswith(".sif") and not Path(value).is_file():
-            found.add(value)
+            if not gated:
+                found.add(value)
 
-    walk(config)
+    walk(config, False)
     return sorted(found)
 
 
@@ -2470,8 +2509,8 @@ def main() -> None:
         message = (
             f"{len(missing)} container image(s) named in {runtime_config} are not installed:\n  "
             + "\n  ".join(missing)
-            + "\nBuild them once with harmonized_pipelines/tools/build_containers.sh "
-            + f"{args.pipeline_root} --dest <CONTAINER_DIR>."
+            + "\nBuild them with network access (D29):\n  "
+            + build_command(args.pipeline_root, read_yaml(runtime_config), missing)
         )
         if not getattr(args, "allow_missing_containers", False):
             raise SystemExit(message)

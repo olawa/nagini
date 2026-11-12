@@ -203,14 +203,17 @@ Containrarna följer D10: config pekar på `{{CONTAINER_DIR}}/<sif>`, och
 sif byggs från. `CONTAINER_DIR` sätts per site i `config/site_configs/`
 (workstation `/data/containers`, Marvin och Miarka CGU-bibliotekets
 containerkatalog, lokalt `vendor/containers` i checkouten). Bygg dem en gång,
-med nätverk, med verktyget i `harmonized_pipelines`:
+med nätverk, med skriptet som följer med nagini (D29):
 
 ```bash
-harmonized_pipelines/tools/build_containers.sh nagini --dest /data/containers
+pipeline_start_scripts/build_containers.sh --dest /data/containers
 ```
 
-Startscriptet stoppar om någon sif som configen nämner saknas, och listar
-vilka; en `--dry-run` varnar bara. Ändras en container i config körs
+`--only <sif>` bygger bara den imagen, och en `--dry-run` visar vad som skulle
+byggas. Startscriptet stoppar om någon sif som körningen kan använda saknas,
+och skriver ut kommandot som bygger just de saknade; en `--dry-run` varnar
+bara. DeepSomatic-imagen krävs först när `small_variant_caller: deepsomatic`
+är satt, eftersom `auto` aldrig väljer den. Ändras en container i config körs
 `tools/gen_container_manifest.py nagini` och `tools/apply_container_dir.py nagini`
 om, och båda har en `--check` för CI.
 
