@@ -358,6 +358,7 @@ def extract_fusion_events(
 
     all_lengths: List[int] = []
     all_accuracies: List[float] = []
+    all_qs: List[float] = []
     on_target_lengths: List[int] = []
     on_target_accuracies: List[float] = []
 
@@ -366,6 +367,7 @@ def extract_fusion_events(
         acc = ((1.0 - 10.0 ** (-qs / 10.0)) * 100.0) if qs is not None else None
         if acc is not None:
             all_accuracies.append(acc)
+            all_qs.append(qs)
         if qname in on_target_read_names:
             on_target_lengths.append(qlen)
             if acc is not None:
@@ -381,7 +383,11 @@ def extract_fusion_events(
     read_stats = {
         "total_reads": len(all_lengths),
         "yield_gb": sum(all_lengths) / 1e9,
-        "mean_q": round(sum(all_accuracies) / len(all_accuracies), 2) if all_accuracies else 0.0,
+        # mean_qs is the mean of the basecaller's per-read Q, the value the
+        # read filter thresholds (qs >= 14). It used to be called mean_q but
+        # held mean_accuracy, so reports showed 98.83 as a Q.
+        "mean_qs": round(sum(all_qs) / len(all_qs), 2) if all_qs else 0.0,
+        "mean_accuracy": round(sum(all_accuracies) / len(all_accuracies), 2) if all_accuracies else 0.0,
         "n50_bp": compute_n50(all_lengths),
         "median_bp": round(float(statistics.median(all_lengths)), 2) if all_lengths else 0.0,
         "on_target_reads": len(on_target_lengths),
@@ -531,7 +537,7 @@ def write_outputs(
         handle.write(f"# total_fusion_reads={total_fusion_reads}\n")
         if read_stats:
             for k in (
-                "total_reads", "yield_gb", "mean_q", "n50_bp", "median_bp",
+                "total_reads", "yield_gb", "mean_qs", "mean_accuracy", "n50_bp", "median_bp",
                 "on_target_reads", "on_target_accuracy", "on_target_n50_bp", "on_target_median_bp"
             ):
                 if k in read_stats:

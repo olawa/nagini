@@ -1,5 +1,6 @@
 """Create a multi-sample XLSX summary report for a Nagini run."""
 
+import json
 import os
 import re
 import sys
@@ -290,9 +291,12 @@ def build_summary_report(
         # hundred bases the pore rejected, so the mean describes neither
         # population.
         identity_keys = ("Median identity", "Mean identity", "Identity")
-        mean_q = _find_metric(cramino_dict, *quality_keys) or _find_metric(
-            cramino_dict, *identity_keys
-        )
+        mean_q = _find_metric(cramino_dict, *quality_keys)
+        if not mean_q:
+            # cramino reports alignment identity, not a Q. Shown in a Q column
+            # it needs its unit, or 98.5 reads as an impossible quality.
+            identity = _find_metric(cramino_dict, *identity_keys)
+            mean_q = f"{identity} %" if identity else ""
         n50_bp = _find_metric(cramino_dict, "Read length N50", "N50", "N50 read length")
         median_len = _find_metric(cramino_dict, "Median read length", "Median length", "Median")
 
@@ -365,8 +369,9 @@ def build_summary_report(
                     yield_gb = f"{float(bcr_read_stats['yield_gb']):.2f}"
                 if "total_reads" in bcr_read_stats and bcr_read_stats["total_reads"] is not None:
                     total_reads_str = f"{int(float(bcr_read_stats['total_reads'])):,}"
-                if "mean_q" in bcr_read_stats and bcr_read_stats["mean_q"] is not None:
-                    mean_q = f"{float(bcr_read_stats['mean_q']):.2f}"
+                # mean_qs, not the old mean_q, which held an accuracy in %.
+                if bcr_read_stats.get("mean_qs") not in (None, ""):
+                    mean_q = f"{float(bcr_read_stats['mean_qs']):.2f}"
                 if "n50_bp" in bcr_read_stats and bcr_read_stats["n50_bp"] is not None:
                     n50_bp = str(int(float(bcr_read_stats["n50_bp"])))
                 if "median_bp" in bcr_read_stats and bcr_read_stats["median_bp"] is not None:

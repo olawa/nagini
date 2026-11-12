@@ -28,6 +28,9 @@ class SummaryReportTest(unittest.TestCase):
             cramino.write_text("Yield [Gb]\t0.15\nNumber of reads\t50000\nMean quality\t18.5\nRead length N50\t1400\nMedian read length\t700\n")
 
             fusion_tsv = tmp / "sample1.fusion.tsv"
+            (tmp / "sample1.fusion.json").write_text(
+                '{"read_stats": {"total_reads": 50000, "mean_qs": 17.42, "mean_accuracy": 98.83}}'
+            )
             fusion_tsv.write_text("sample\tfusion_isoform\tread_count\tfraction_percent\tstatus\nsample1\te14a2\t1200\t80.0\tPRIMARY\nsample1\te13a2\t300\t20.0\tSECONDARY\n")
 
             mut_tsv = tmp / "sample1.mut.tsv"
@@ -72,6 +75,9 @@ class SummaryReportTest(unittest.TestCase):
             # drops the genome-depth ones it has nothing to put in.
             text = _shared_strings(out_xlsx)
             self.assertIn("BCR-ABL1 Fusion Reads", text)
+            # Mean Q is the mean per-read Q, never the accuracy in percent.
+            self.assertIn("17.42", text)
+            self.assertNotIn("98.83", text)
             for column in ("Mean ABL1 Panel-site Depth", "Mean WGS Depth", "Fold Enrichment"):
                 self.assertNotIn(column, text)
 

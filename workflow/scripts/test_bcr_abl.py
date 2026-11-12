@@ -731,6 +731,12 @@ class TestBcrAblFusionCounter(unittest.TestCase):
             self.assertEqual(stats["median_bp"], 1500.0)
             self.assertEqual(stats["n50_bp"], 1500)
             self.assertAlmostEqual(stats["yield_gb"], 4500 / 1e9, places=6)
+            # A Q, not an accuracy: mean_q used to hold 99.85 here and the
+            # reports showed it as Mean Q.
+            self.assertAlmostEqual(stats["mean_qs"], 30.0, places=1)
+            self.assertNotIn("mean_q", stats)
+            expected_accuracy = sum(100 * (1 - 10 ** (-q / 10)) for q in (25, 30, 35)) / 3
+            self.assertAlmostEqual(stats["mean_accuracy"], expected_accuracy, places=1)
 
 
 

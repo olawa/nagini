@@ -1373,10 +1373,12 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
             yield_gb = f"{float(bcr_read_stats['yield_gb']):.2f}"
         if "total_reads" in bcr_read_stats and bcr_read_stats["total_reads"] is not None:
             total_reads = str(bcr_read_stats["total_reads"])
-        if "mean_q" in bcr_read_stats and bcr_read_stats["mean_q"] is not None:
-            mean_q = f"{float(bcr_read_stats['mean_q']):.2f}"
-            read_accuracy_label = "Mean Read Accuracy [%]"
-            read_accuracy_hint = "Accuracy derived from mean read quality (qs)"
+        # mean_qs, not the old mean_q: that held an accuracy in percent, which
+        # was shown as a Q and checked against Q thresholds.
+        if bcr_read_stats.get("mean_qs") not in (None, ""):
+            mean_q = f"{float(bcr_read_stats['mean_qs']):.2f}"
+            read_accuracy_label = "Mean Read Quality (Q)"
+            read_accuracy_hint = "Mean of the basecaller's per-read Q (qs tag)"
         if "n50_bp" in bcr_read_stats and bcr_read_stats["n50_bp"] is not None:
             n50_bp = str(int(float(bcr_read_stats["n50_bp"])))
         if "median_bp" in bcr_read_stats and bcr_read_stats["median_bp"] is not None:
