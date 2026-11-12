@@ -39,7 +39,11 @@ referensen räknas inte — varken som referens eller som variant — om inte
 avvikelsen själv är en verklig allel: en substitution som provet bär på ≥ 1 %,
 en anropad variant på en grannposition i panelen, eller en ovanligare ändring
 som sitter på variantens egna läsningar och tillsammans med den klarar skärpta
-sträng- och baskvalitetskrav som en molekyl. bcftools körs
+sträng- och baskvalitetskrav som en molekyl. Utan det sista undantaget
+förlorade en compound-subklon mellan 0,2 och 1 %, som T315M (ACT>ATG), alla
+sina läsningar. Ett par som klarar bara det ena av de två kraven rapporteras
+som REVIEW: det visas med sin allelfraktion men varken anropas eller
+passerar som negativt. bcftools körs
 alltid som ortogonal caller över alla ABL1-exoner, så att även varianter utanför
 den kurerade listan syns — men bara på klonal nivå eller som stora subkloner:
 som diploid caller anropade den inget under ~20 % i jämförelsen mot MiSeq.
@@ -71,12 +75,13 @@ CGU-pipelines, med VCF, TSV och JSON bredvid för vidare bearbetning.
 | **Kurerad TKI-profil** | 38 av de 73 varianterna |
 | **Räknade läsningar** | bara BCR::ABL1-läsningar (alignar även i BCR) |
 | **Detektionsgräns** | AF ≥ 1 %; subklonalt ≥ 0,2 % |
+| **Status per position** | DETECTED, SUBCLONAL, REVIEW, WILDTYPE; ARTIFACT (filter föll), LOW_DEPTH |
 | **Täckningskrav** | djup ≥ 50, ≥ 5 alt-läsningar |
 | **Fasning** | läsbaserad cis/trans, ≥ 10 spännande läsningar |
 
 ### Artefaktfilter i resistenskallningen
 
-Varje kandidat måste passera samtliga. Kontextfiltret verkar på läsningsnivå, före räkningen:
+Varje kandidat måste passera samtliga; det sista gäller bara när en granne är länkad. Kontextfiltret verkar på läsningsnivå, före räkningen:
 
 | filter | tröskel | fångar |
 |---|---|---|
@@ -85,18 +90,45 @@ Varje kandidat måste passera samtliga. Kontextfiltret verkar på läsningsnivå
 | Medelbaskvalitet, alt | ≥ 14,0 | lågkvalitativa anrop |
 | Flankerande kontext | läsningar som avviker ±3 bp från positionen räknas inte, varken som ref eller alt; verkliga alleler undantas (se nedan) | kontextfel, t.ex. K357E-paret c.1068G>A + c.1069A>G (på 0,2–0,4 % av läsningarna → 0,06–0,11 %, inte anropat) |
 | Mappningskvalitet | ≥ 1 | multimappning |
+| Länkad granne (< 1 %, på ≥ 50 % av alt-läsningarna) | paret: minorsträngandel ≥ 0,05 och SOR ≤ 3,0, där **var och en** ensam räcker för att underkänna; baskvalitet ≥ 0,8 × referensens, på båda baserna. Ett krav faller → REVIEW | basanropsfel i par; K357E-paret faller på båda i alla tio bibliotek |
 
 Strängbias kräver **båda** signalerna: SOR ensamt flaggar äkta varianter på
-strängsneda amplikon.
+strängsneda amplikon. För ett länkat par räcker den ena.
 
 Kontextfiltret undantar verkliga alleler: en substitution som provet bär på
-≥ 1 %, och en grannposition i panelen vars variant själv är anropad. En
-ovanligare granne som de flesta av variantens läsningar bär bedöms ihop med
-varianten som en molekyl, och där är kraven skärpta: en av strängsignalerna
-räcker för att underkänna paret, och båda baserna behöver 0,8 av referensens
-baskvalitet. Ett basanropsfel är ensidigt och anropat med låg säkerhet; en
-verklig molekyl är ingetdera. Faller exakt ett av de två kraven rapporteras
-positionen som REVIEW i stället för att anropas.
+≥ 1 %, och en grannposition i panelen vars variant själv är anropad. Under
+1 % kan en granne fortfarande vara verklig. En subklon som bär en
+panelmutation och en andra ändring inom 3 bp har båda på subklonens
+allelfraktion, så mellan 0,2 och 1 % — hela det subklonala intervallet —
+slängdes alla alt-läsningar och positionen lästes som vildtyp. Att sänka
+gränsen på 1 % fungerar inte: på 0,2 % anropades K357E-felparet som subklonalt
+i 2 av 10 bibliotek.
+
+I stället bedöms en granne som minst hälften av variantens läsningar bär ihop
+med varianten som en molekyl, och där är kraven skärpta. Ett basanropsfel är
+ensidigt och anropat med låg säkerhet; en verklig molekyl är ingetdera. I
+spädningsserien hade verkliga alleler 0,88–1,05 av referensens baskvalitet och
+artefakter median 0,47. Bara läsningar vars fönster på ±3 bp är ett enda
+gapfritt alignerat block räknas för paret, så att en indel eller mjukklippta
+baser inte kan se ut som en substitution. Ett par inom samma kodon rapporteras
+som kodonet: T315M (ACT>ATG), inte T315I.
+
+Faller exakt ett av de två kraven rapporteras positionen som **REVIEW**. Den
+får den allelfraktion den skulle ha haft, märks "for review" i
+arbetsboken och körningssammanfattningen och skrivs till VCF:en med
+FILTER=REVIEW och utan genotyp. Provet flaggas REVIEW i stället för att
+passera som negativt.
+
+I spädningsserien ändrar länkade grannar inget anrop, och ingen position blir
+REVIEW. Därför planterades fall in i ett bibliotek utan varianter, med
+verkliga fusionsläsningar som behåller sin egen baskvalitet:
+
+| inplanterat | utan länkade grannar | med |
+|---|---|---|
+| H396R + C>T 2 bp bort, 0,5 % av läsningarna | WILDTYPE (252 alt-läsningar utslängda) | SUBCLONAL 0,44 % |
+| samma, 0,25 % | WILDTYPE | SUBCLONAL 0,23 % |
+| T315M (ACT>ATG), 0,5 % | WILDTYPE | T315M 0,44 % (kodonhaplotyp) |
+| H396R-paret med baskvalitet 15 på båda baserna | WILDTYPE | REVIEW (baskvalitet) |
 
 ---
 
@@ -114,6 +146,9 @@ Att utelämna dem gör postern svagare, inte starkare.
   compound-mutation på 1 % med 0,3 % positionsfel klassas därför som
   `COEXISTING (Compound + Polyclonal)` — och på 5 % gör den det med 1,4 % fel.
   Nära detektionsgränsen ska en polyklonal tolkning inte tas för given.
+- **Gränserna för länkade grannar är bara prövade på inplanterade läsningar.**
+  Spädningsserien innehåller inget verkligt länkat par; 50 % och 0,8 är satta
+  från dess artefakter. En REVIEW-position kräver att en människa avgör den.
 - **Ingen UMI.** Fraktionerna är rålästräkningar; PCR-duplikat går inte att
   skilja från oberoende molekyler.
 

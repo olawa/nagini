@@ -41,7 +41,11 @@ the site differ from the reference are not counted, as reference or as variant �
 unless the difference is itself a real allele: a substitution the sample
 carries at ≥ 1 %, a called variant at a neighbouring panel position, or a rarer
 change that rides on the variant's own reads and passes, together with it,
-stricter strand and base-quality checks as one molecule.
+stricter strand and base-quality checks as one molecule. Without that last
+exemption a compound subclone between 0.2 and 1 %, such as T315M (ACT>ATG),
+lost all of its reads. A pair that passes only one of the two checks is
+reported as REVIEW: shown with its allele fraction, neither called nor
+passed as negative.
 bcftools runs alongside as an orthogonal caller over every ABL1 exon, so variants
 outside the curated list are seen as well -- at clonal and major-subclone levels
 only: as a diploid caller it called nothing below ~20 % in the MiSeq comparison.
@@ -74,12 +78,13 @@ downstream use.
 | **Curated TKI profile** | 38 of the 73 variants |
 | **Reads counted** | BCR::ABL1 reads only (also aligned in BCR) |
 | **Limit of detection** | AF ≥ 1 %; subclonal ≥ 0.2 % |
+| **Site status** | DETECTED, SUBCLONAL, REVIEW, WILDTYPE; ARTIFACT (filter failed), LOW_DEPTH |
 | **Coverage required** | depth ≥ 50, ≥ 5 alternate reads |
 | **Phasing** | read-backed cis/trans, ≥ 10 spanning reads |
 
 ### Artefact filters in the resistance caller
 
-Every candidate must clear all of them. The context filter acts on reads, before counting:
+Every candidate must clear all of them; the last applies only when a neighbour is linked. The context filter acts on reads, before counting:
 
 | filter | threshold | catches |
 |---|---|---|
@@ -88,18 +93,44 @@ Every candidate must clear all of them. The context filter acts on reads, before
 | Mean base quality, alt | ≥ 14.0 | low-quality calls |
 | Flanking context | reads that differ from the reference within ±3 bp are not counted, as reference or alternate; real alleles are exempt (below) | context errors, e.g. the K357E pair c.1068G>A + c.1069A>G (on 0.2–0.4 % of reads → 0.06–0.11 %, not called) |
 | Mapping quality | ≥ 1 | multi-mapping |
+| Linked neighbour (< 1 %, on ≥ 50 % of the alt reads) | the pair: minor strand ≥ 0.05 and SOR ≤ 3.0, **each** alone enough to fail; base quality ≥ 0.8 × the reference's, on both bases. One check failing → REVIEW | basecalling-error pairs; the K357E pair fails both in all ten libraries |
 
 Strand bias requires **both** signals: SOR alone flags true variants on
-strand-skewed amplicons.
+strand-skewed amplicons. For a linked pair either signal alone is enough.
 
 The context filter exempts real alleles: a substitution the sample carries at
-≥ 1 %, and a neighbouring panel position whose variant is itself called. A
-rarer neighbour that most of the variant's reads carry is judged with the
-variant as one molecule, and there the checks are stricter: either strand
-signal alone fails the pair, and both bases need 0.8 of the reference's base
-quality. A basecalling error is one-sided and called with low confidence; a
-real molecule is neither. If exactly one of the two checks fails, the site is
-reported as REVIEW rather than called.
+≥ 1 %, and a neighbouring panel position whose variant is itself called. Below
+1 % a neighbour can still be real. A subclone that carries a panel mutation
+and a second change within 3 bp has both at the subclone's allele fraction, so
+between 0.2 and 1 % — the whole subclonal range — every alternate read was
+discarded and the site read as wild type. Lowering the 1 % limit is not the
+answer: at 0.2 % the K357E error pair was called subclonal in 2 of 10
+libraries.
+
+Instead, a neighbour that at least half of the variant's reads carry is judged
+with the variant as one molecule, and there the checks are stricter. A
+basecalling error is one-sided and called with low confidence; a real molecule
+is neither. In the dilution series real alleles had 0.88–1.05 of the
+reference's base quality and artefacts a median of 0.47. Only reads whose
+±3 bp window is one gapless aligned block count for the pair, so an indel or a
+soft clip cannot pose as a substitution. A pair within one codon is reported
+as that codon: T315M (ACT>ATG), not T315I.
+
+If exactly one of the two checks fails, the site is reported as **REVIEW**. It
+carries the allele fraction it would have had, is marked "for review" in the
+workbook and the run summary, and goes into the VCF with FILTER=REVIEW and no
+genotype. The sample is flagged REVIEW instead of passing as negative.
+
+In the dilution series linked neighbours change no call, and no site becomes
+REVIEW. Cases were therefore spiked into a library without variants, using
+real fusion reads with their own base quality:
+
+| spiked in | without linked neighbours | with |
+|---|---|---|
+| H396R + C>T 2 bp away, 0.5 % of reads | WILDTYPE (252 alt reads discarded) | SUBCLONAL 0.44 % |
+| the same, 0.25 % | WILDTYPE | SUBCLONAL 0.23 % |
+| T315M (ACT>ATG), 0.5 % | WILDTYPE | T315M 0.44 % (codon haplotype) |
+| the H396R pair with base quality 15 on both bases | WILDTYPE | REVIEW (base quality) |
 
 ---
 
@@ -120,6 +151,9 @@ Leaving them out makes the poster weaker, not stronger.
   error is therefore classified `COEXISTING (Compound + Polyclonal)` — and at
   5 % it is with 1.4 % error. Near the detection limit a polyclonal reading
   should not be taken at face value.
+- **The linked-neighbour limits are tested only on spiked-in reads.** The
+  dilution series holds no real linked pair; 50 % and 0.8 are set from its
+  artefacts. A REVIEW site needs a person to decide it.
 - **No UMI.** Fractions are raw read counts; PCR duplicates cannot be
   distinguished from independent molecules.
 
