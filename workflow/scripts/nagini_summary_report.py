@@ -153,15 +153,21 @@ def build_summary_report(
     # header is built. An adaptive-sampling run carries no fusion, isoform,
     # resistance or phasing data, and five columns of "-" per sample invite
     # the reader to look for a result that was never part of the assay.
-    run_has_bcr_abl = any(
-        str(record.get("assay", "")).strip().lower() == "bcr_abl"
-        or record.get("bcr_abl_fusion")
-        or record.get("bcr_abl_mutations")
-        or record.get("bcr_abl_phasing")
-        or record.get("bcr_abl_exon_coverage")
-        or record.get("bcr_abl_all_sites")
-        for record in sample_records
-    )
+    def record_is_bcr_abl(record):
+        return bool(
+            str(record.get("assay", "")).strip().lower() == "bcr_abl"
+            or record.get("bcr_abl_fusion")
+            or record.get("bcr_abl_mutations")
+            or record.get("bcr_abl_phasing")
+            or record.get("bcr_abl_exon_coverage")
+            or record.get("bcr_abl_all_sites")
+        )
+
+    run_has_bcr_abl = any(record_is_bcr_abl(record) for record in sample_records)
+    # Target depth, WGS depth and their ratio describe a genome or an adaptive
+    # panel. An amplicon run has no genome-wide coverage to compare with, so
+    # in a run of BCR-ABL1 samples only they are left out.
+    show_depth_columns = not sample_records or not all(record_is_bcr_abl(record) for record in sample_records)
 
     # -----------------------------------------------------------------------
     # 1. OVERVIEW SHEET
@@ -205,9 +211,17 @@ def build_summary_report(
             ("Mean Q", 1),
             ("N50 [bp]", 1),
             ("Median [bp]", 1),
+        ]
+        + (
+            [
                 ("Mean ABL1 Panel-site Depth" if run_has_bcr_abl else "Mean Target Depth", 1),
-            ("Mean WGS Depth", 1),
-            ("Fold Enrichment", 1),
+                ("Mean WGS Depth", 1),
+                ("Fold Enrichment", 1),
+            ]
+            if show_depth_columns
+            else []
+        )
+        + [
             ("On-Target Accuracy", 1),
             ("On-Target N50 [bp]", 1),
             ("On-Target Median [bp]", 1),
@@ -467,9 +481,17 @@ def build_summary_report(
                 (mean_q or "-", 0),
                 (n50_bp or "-", 0),
                 (median_len or "-", 0),
-                (kd_depth_str, 0),
-                (wgs_depth_str, 0),
-                (fold_enrich_str, 0),
+            ]
+            + (
+                [
+                    (kd_depth_str, 0),
+                    (wgs_depth_str, 0),
+                    (fold_enrich_str, 0),
+                ]
+                if show_depth_columns
+                else []
+            )
+            + [
                 (on_target_accuracy or "-", 0),
                 (on_target_n50 or "-", 0),
                 (on_target_median or "-", 0),

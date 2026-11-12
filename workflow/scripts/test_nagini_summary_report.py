@@ -68,10 +68,30 @@ class SummaryReportTest(unittest.TestCase):
                 self.assertIn("Overview", wb_xml)
                 self.assertIn("BCR-ABL1 Overview", wb_xml)
                 self.assertIn("BCR-ABL (sample1)", wb_xml)
-            # A bcr_abl run keeps the columns an adaptive run drops.
+            # A bcr_abl run keeps the columns an adaptive run drops, and
+            # drops the genome-depth ones it has nothing to put in.
             text = _shared_strings(out_xlsx)
             self.assertIn("BCR-ABL1 Fusion Reads", text)
-            self.assertIn("Mean ABL1 Panel-site Depth", text)
+            for column in ("Mean ABL1 Panel-site Depth", "Mean WGS Depth", "Fold Enrichment"):
+                self.assertNotIn(column, text)
+
+            # With a WGS sample in the run the depth columns come back.
+            wgs_cramino = tmp / "wgs.cramino.txt"
+            wgs_cramino.write_text("Yield [Gb]\t90\nNumber of reads\t5000000\n")
+            mixed = sample_records + [{
+                "sample": "wgs1", "type": "N", "barcode": "barcode02", "assay": "wgs",
+                "cramino": str(wgs_cramino), "wgs_coverage": "", "snv_vcf": "",
+                "bcr_abl_fusion": "", "bcr_abl_mutations": "", "bcr_abl_phasing": "",
+                "bcr_abl_exon_coverage": "",
+            }]
+            mixed_xlsx = str(tmp / "mixed.xlsx")
+            build_summary_report(
+                output_path=mixed_xlsx, sequence_id="TestRun",
+                reference_build="hg19", sample_records=mixed,
+            )
+            mixed_text = _shared_strings(mixed_xlsx)
+            for column in ("Mean ABL1 Panel-site Depth", "Mean WGS Depth", "Fold Enrichment"):
+                self.assertIn(column, mixed_text)
 
 
     def test_a_run_without_small_variant_calling_says_so(self):

@@ -250,5 +250,25 @@ class SummaryNameTest(unittest.TestCase):
         self.assertNotIn("nagini_summary_report.xlsx", (ROOT / "config/output_files.yaml").read_text())
 
 
+class BarcodeDisplayTest(unittest.TestCase):
+    """The reports show the barcode, never the launcher's placeholder."""
+
+    def barcode(self, rows):
+        import pandas as pd
+        scope = {"pd": pd, "_unit_rows": lambda sample, sample_type: pd.DataFrame(rows)}
+        exec(compile(common_function("get_sample_barcode_name_str"), "common.smk", "exec"), scope)
+        return scope["get_sample_barcode_name_str"]("s", "T")
+
+    def test_barcode_name_wins(self):
+        self.assertEqual(self.barcode([{"barcode": "BC", "barcode_name": "barcode02"}]), "barcode02")
+
+    def test_placeholders_are_not_barcodes(self):
+        self.assertEqual(self.barcode([{"barcode": "NB", "barcode_name": ""}]), "")
+        self.assertEqual(self.barcode([{"barcode": "BC"}]), "")
+
+    def test_a_real_barcode_column_is_still_used(self):
+        self.assertEqual(self.barcode([{"barcode": "barcode07"}]), "barcode07")
+
+
 if __name__ == "__main__":
     unittest.main()

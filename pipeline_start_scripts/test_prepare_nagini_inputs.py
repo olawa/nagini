@@ -962,6 +962,48 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             config = yaml.safe_load(runtime.read_text())
             self.assertEqual(config["cores"], 96)
 
+    def test_a_bam_named_after_its_sample_keeps_its_barcode(self):
+        """The reports showed NB for ratio0.1-andel1_T.bam, whose read group
+        still said barcode02."""
+
+        def write_bam(path, header):
+            import struct
+            text = header.encode()
+            with gzip.open(path, "wb") as handle:
+                handle.write(b"BAM\1" + struct.pack("<i", len(text)) + text + struct.pack("<i", 0))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inbox = Path(tmpdir) / "bams"
+            inbox.mkdir()
+            write_bam(inbox / "ratio0.1-andel1_T.bam",
+                      "@HD\tVN:1.6\n@RG\tID:ratio0.1-andel1_T_barcode02_merged_BC\tSM:ratio0.1-andel1_T\tPL:ONT\n")
+            write_bam(inbox / "plain_T.bam", "@HD\tVN:1.6\n@RG\tID:plain_T\tSM:plain_T\n")
+            write_bam(inbox / "mixed_T.bam",
+                      "@RG\tID:run_sup_barcode01\n@RG\tID:run_sup_barcode05\n")
+
+            self.assertEqual(PREPARE.barcode_from_bam_header(inbox / "ratio0.1-andel1_T.bam"), "barcode02")
+            self.assertEqual(PREPARE.barcode_from_bam_header(inbox / "plain_T.bam"), "")
+            self.assertEqual(PREPARE.barcode_from_bam_header(inbox / "mixed_T.bam"), "")
+
+            args = type("Args", (), {})()
+            args.input_dir = inbox
+            args.sample_regex = ""
+            args.sample_type = "T"
+            args.input_type = "aligned_bam"
+            args.sequence_id = "bams"
+            args.run_id = ""
+            args.barcode = "NB"
+            args.methylation = "No"
+            args.basecalling_model = "sup"
+            args.library_type = "wgs"
+            args.assay = "bcr_abl"
+            _samples, units = PREPARE.make_bam_tables(args)
+
+        by_sample = {row["sample"]: row for row in units}
+        self.assertEqual(by_sample["ratio0.1-andel1"]["barcode_name"], "barcode02")
+        self.assertNotIn("barcode_name", by_sample["plain"])
+        self.assertNotIn("barcode_name", by_sample["mixed"])
+
     def test_the_run_is_named_after_its_inbox(self):
         """The summary was nagini_summary_report.xlsx for every run (D26)."""
 

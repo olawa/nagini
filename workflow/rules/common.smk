@@ -1363,10 +1363,12 @@ def get_sample_barcode_name_str(sample, sample_type):
         ]
         if barcodes:
             return barcodes[0]
+        # NB and BC are the launcher's placeholders for "no barcode" and
+        # "barcode in barcode_name"; neither is a barcode to report.
         bc = [
             str(b).strip()
             for b in rows.get("barcode", pd.Series(dtype=str)).tolist()
-            if str(b).strip()
+            if str(b).strip() and str(b).strip().upper() not in ("NB", "BC")
         ]
         if bc:
             return bc[0]

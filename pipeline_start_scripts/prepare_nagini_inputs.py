@@ -1332,6 +1332,32 @@ def bam_is_aligned(path: Path) -> bool:
         return False
 
 
+def barcode_from_bam_header(path: Path) -> str:
+    """The barcode a BAM's read groups name, or "" if they name none or several.
+
+    Dorado ends a read group ID in the barcode (<run>_<model>_barcode02), and
+    nagini's own merged BAMs carry it in theirs (<sample>_<type>_barcode02_...).
+    A BAM renamed after its sample keeps it there when the file name has lost it."""
+
+    import struct
+
+    try:
+        with gzip.open(path, "rb") as handle:
+            if handle.read(4) != b"BAM\1":
+                return ""
+            (l_text,) = struct.unpack("<i", handle.read(4))
+            text = handle.read(l_text).decode("utf-8", "replace")
+    except (OSError, EOFError, struct.error):
+        return ""
+    found = {
+        normalize_barcode(token)
+        for line in text.splitlines()
+        if line.startswith("@RG")
+        for token in re.findall(r"(?i)(?<![a-z0-9])barcode\d+(?![0-9])", line)
+    }
+    return found.pop() if len(found) == 1 else ""
+
+
 def bam_aligned_flag(path: Path, input_type: str) -> str:
     """"yes" for an unmapped_bam unit whose file holds alignments.
 
@@ -1700,6 +1726,10 @@ def make_bam_tables(args: argparse.Namespace) -> tuple[list[dict[str, str]], lis
 
         sample = str(sample).strip()
         sample_type = str(sample_type).strip()
+        if not barcode_name:
+            # The reports showed the placeholder barcode (NB) for a BAM named
+            # after its sample, though the BAM itself still names its barcode.
+            barcode_name = _barcode_from_path(path, args.input_dir.resolve()) or barcode_from_bam_header(path)
         counters[sample] += 1
         run_id = args.run_id or args.sequence_id or args.input_dir.name
         samples_by_name.setdefault(sample, {"sample": sample})
