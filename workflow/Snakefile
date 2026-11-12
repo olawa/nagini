@@ -263,6 +263,60 @@ use rule tabix from cnv_sv as cnv_sv_sniffles2_tabix with:
         )
 
 
+# Sniffles2 2.2 has --mosaic but not --mosaic-include-germline (that came with
+# 2.7), so mosaic mode replaces the germline call set instead of adding to it.
+# It is therefore a second run with its own outputs: the ordinary call above
+# keeps the clonal SVs, and this one adds the low-allele-fraction ones a
+# subclone produces.
+use rule sniffles2_call from cnv_sv as cnv_sv_sniffles2_mosaic_call with:
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+    output:
+        vcf=temp("cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf"),
+        snf=temp("cnv_sv/sniffles2_mosaic/{sample}_{type}.snf"),
+    params:
+        sample_id=lambda wildcards, output: "{}_{}".format(wildcards.sample, wildcards.type),
+        tandem_repeats=lambda wildcards: get_sniffles2_tandem_repeats_arg(),
+        extra=config.get("sniffles2_mosaic_call", {}).get("extra", "--mosaic"),
+    log:
+        "logs/sniffles2_mosaic_call/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/sniffles2_mosaic_call/{sample}_{type}.tsv",
+            config.get("sniffles2_call", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bgzip from cnv_sv as cnv_sv_sniffles2_mosaic_bgzip with:
+    input:
+        vcf="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf",
+    output:
+        gz="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz",
+    log:
+        "logs/sniffles2_mosaic_bgzip/{sample}_{type}.vcf.gz.log",
+    benchmark:
+        repeat(
+            "benchmarks/sniffles2_mosaic_bgzip/{sample}_{type}.vcf.gz.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from cnv_sv as cnv_sv_sniffles2_mosaic_tabix with:
+    input:
+        gz="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz",
+    output:
+        tbi="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz.tbi",
+    log:
+        "logs/sniffles2_mosaic_tabix/{sample}_{type}.vcf.gz.tbi.log",
+    benchmark:
+        repeat(
+            "benchmarks/sniffles2_mosaic_tabix/{sample}_{type}.vcf.gz.tbi.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
 use rule savana_ont_to from cnv_sv as cnv_sv_savana_ont_to with:
     input:
         bam="alignment/merged/{sample}_{type}.bam",
@@ -819,6 +873,106 @@ use rule tabix from snv_indels as snv_indels_deepvariant_vep_tabix with:
         )
 
 
+# DeepSomatic, tumour-only. Selected with small_variant_caller: deepsomatic;
+# "auto" and "both" never pick it. The Hydra rule always passes --regions, so a
+# sample that is not confined to a design gets the whole-genome contig BED.
+# DeepSomatic writes the index itself, so it is declared here rather than made
+# by a tabix rule that would find it already there.
+use rule deepsomatic_t_only from snv_indels as snv_indels_deepsomatic_t_only with:
+    input:
+        bam="alignment/merged/{sample}_{type}.bam",
+        bai="alignment/merged/{sample}_{type}.bam.bai",
+        ref=config["reference"]["fasta"],
+        bed=get_deepsomatic_regions_bed,
+    output:
+        tmpdir=temp(directory("snv_indels/deepsomatic/{sample}_{type}.tmp")),
+        vcf="snv_indels/deepsomatic/{sample}_{type}.vcf.gz",
+        tbi="snv_indels/deepsomatic/{sample}_{type}.vcf.gz.tbi",
+    params:
+        extra=config.get("deepsomatic_t_only", {}).get("extra", ""),
+        model=config.get("deepsomatic_t_only", {}).get("model", "ONT_TUMOR_ONLY"),
+        name=lambda wildcards: f"{wildcards.sample}_{wildcards.type}",
+        pon=lambda wildcards: get_deepsomatic_pon_arg(),
+    log:
+        # run_deepsomatic takes a logging *directory*.
+        directory("logs/deepsomatic/{sample}_{type}"),
+    benchmark:
+        repeat(
+            "benchmarks/deepsomatic/{sample}_{type}.tsv",
+            config.get("deepsomatic_t_only", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bcftools_norm from snv_indels as snv_indels_bcftools_norm_deepsomatic with:
+    input:
+        vcf="snv_indels/deepsomatic/{sample}_{type}.vcf.gz",
+        tbi="snv_indels/deepsomatic/{sample}_{type}.vcf.gz.tbi",
+        ref=config["reference"]["fasta"],
+        fai=config["reference"]["fai"],
+    output:
+        vcf="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    params:
+        extra=config.get("bcftools_norm_deepsomatic", {}).get("extra", "--multiallelics -both --check-ref w"),
+    log:
+        "logs/bcftools_norm_deepsomatic/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcftools_norm_deepsomatic/{sample}_{type}.tsv",
+            config.get("bcftools_norm_deepsomatic", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("bcftools_norm_deepsomatic", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("bcftools_norm_deepsomatic", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("bcftools_norm_deepsomatic", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("bcftools_norm_deepsomatic", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("bcftools_norm_deepsomatic", {}).get("threads", 1),
+        time=config.get("bcftools_norm_deepsomatic", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("bcftools_norm_deepsomatic", {}).get("container", config["default_container"])
+
+
+use rule tabix from snv_indels as snv_indels_bcftools_norm_deepsomatic_tabix with:
+    input:
+        gz="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    output:
+        tbi="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+    log:
+        "logs/bcftools_norm_deepsomatic_tabix/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/bcftools_norm_deepsomatic_tabix/{sample}_{type}.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule bgzip from snv_indels as snv_indels_deepsomatic_vep_bgzip with:
+    input:
+        vcf="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf",
+    output:
+        gz="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    log:
+        "logs/deepsomatic_vep_bgzip/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepsomatic_vep_bgzip/{sample}_{type}.tsv",
+            config.get("bgzip", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule tabix from snv_indels as snv_indels_deepsomatic_vep_tabix with:
+    input:
+        gz="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz",
+    output:
+        tbi="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi",
+    log:
+        "logs/deepsomatic_vep_tabix/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/deepsomatic_vep_tabix/{sample}_{type}.tsv",
+            config.get("tabix", {}).get("benchmark_repeats", 1),
+        )
+
+
 # ===========================================================================
 # HYDRA-GENETICS MODULE: qc
 # ===========================================================================
@@ -1074,5 +1228,34 @@ use rule vep from annotation as annotation_vep_deepvariant with:
     benchmark:
         repeat(
             "benchmarks/vep_annotate_deepvariant/{sample}_{type}.tsv",
+            config.get("vep", {}).get("benchmark_repeats", 1),
+        )
+
+
+use rule vep from annotation as annotation_vep_deepsomatic with:
+    input:
+        cache=config.get("vep", {}).get("vep_cache", ""),
+        fasta=config["reference"]["fasta"],
+        tabix="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi",
+        vcf="snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz",
+    output:
+        vcf=temp("snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf"),
+    params:
+        # Hydra's shell has no slot for custom annotations, so ClinVar rides in
+        # extra, as for the other callers.
+        extra=lambda wildcards: " ".join(
+            part
+            for part in (
+                get_vep_custom_annotations(wildcards),
+                config.get("vep", {}).get("extra", "--assembly GRCh38 --check_existing --pick --symbol --hgvs"),
+            )
+            if part
+        ),
+        mode=config.get("vep", {}).get("mode", "--offline --cache"),
+    log:
+        "logs/vep_annotate_deepsomatic/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/vep_annotate_deepsomatic/{sample}_{type}.tsv",
             config.get("vep", {}).get("benchmark_repeats", 1),
         )

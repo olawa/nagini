@@ -653,8 +653,16 @@ def build_summary_report(
     # run. The TSVs already lead with a sample column, so a finding can be read
     # across five samples in one place instead of by opening five files.
     for sheet_name, keys in (
-        ("SVs", ("sv_tsv", "rindels_sv_tsv", "savana_sv_tsv")),
-        ("Translocations", ("translocations_tsv", "rindels_translocations_tsv", "savana_translocations_tsv")),
+        ("SVs", ("sv_tsv", "sniffles2_mosaic_sv_tsv", "rindels_sv_tsv", "savana_sv_tsv")),
+        (
+            "Translocations",
+            (
+                "translocations_tsv",
+                "sniffles2_mosaic_translocations_tsv",
+                "rindels_translocations_tsv",
+                "savana_translocations_tsv",
+            ),
+        ),
         ("CNVs", ("cnv_tsv",)),
     ):
         stacked = stack_sample_tables(sample_records, keys)
@@ -830,6 +838,8 @@ def run_from_snakemake(snakemake):
     rindels_trans_tsvs = list(getattr(snakemake.params, "rindels_translocation_tsv_paths", []))
     savana_sv_tsvs = list(getattr(snakemake.params, "savana_sv_tsv_paths", []))
     savana_trans_tsvs = list(getattr(snakemake.params, "savana_translocation_tsv_paths", []))
+    mosaic_sv_tsvs = list(getattr(snakemake.params, "sniffles2_mosaic_sv_tsv_paths", []))
+    mosaic_trans_tsvs = list(getattr(snakemake.params, "sniffles2_mosaic_translocation_tsv_paths", []))
     cnv_tsvs = list(getattr(snakemake.params, "cnv_tsv_paths", []))
     snv_vcfs = list(getattr(snakemake.params, "snv_vcf_paths", []))
     bcr_fusions = list(getattr(snakemake.params, "bcr_abl_fusion_paths", []))
@@ -866,6 +876,10 @@ def run_from_snakemake(snakemake):
             "savana_sv_tsv": savana_sv_tsvs[i] if i < len(savana_sv_tsvs) else "",
             "savana_translocations_tsv": (
                 savana_trans_tsvs[i] if i < len(savana_trans_tsvs) else ""
+            ),
+            "sniffles2_mosaic_sv_tsv": mosaic_sv_tsvs[i] if i < len(mosaic_sv_tsvs) else "",
+            "sniffles2_mosaic_translocations_tsv": (
+                mosaic_trans_tsvs[i] if i < len(mosaic_trans_tsvs) else ""
             ),
             "cnv_tsv": cnv_tsvs[i] if i < len(cnv_tsvs) else "",
             "snv_vcf": snv_vcfs[i] if i < len(snv_vcfs) else "",

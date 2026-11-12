@@ -59,6 +59,7 @@ SIMPLE_SV_FUSION_PAIRS: ""
 # the caller. v0.4.4 is what :latest resolved to on 2026-05-11.
 CLAIRS_TO_CONTAINER: "{{CONTAINER_DIR}}/hkubal__clairs-to_v0.4.4.sif"
 DEEPVARIANT_CONTAINER: "{{CONTAINER_DIR}}/google__deepvariant_1.6.0.sif"
+DEEPSOMATIC_CONTAINER: "{{CONTAINER_DIR}}/google__deepsomatic_1.10.0.sif"
 ARRIBA_CONTAINER: "{{CONTAINER_DIR}}/uhrigs__arriba_2.4.0.sif"
 
 
@@ -220,6 +221,13 @@ sniffles2_call:
   tandem_repeats: ""
   extra: ""
 
+# A second Sniffles2 run in mosaic mode, for subclonal SVs. Sniffles2 2.2 has
+# no --mosaic-include-germline (added in 2.7), so --mosaic replaces the
+# germline call set rather than adding to it; hence a run of its own, reported
+# with caller "Sniffles2-mosaic". Follows sv_engine: off when Sniffles2 is.
+sniffles2_mosaic: true
+sniffles2_mosaic_call:
+  extra: "--mosaic"
 savana_ont_to:
   container: "{{CONTAINER_DIR}}/hydragenetics__savana_1.3.5.sif"
   genome_version: ""  # empty for auto-resolution to 1000g_hg38 / 1000g_t2t / 1000g_hg19
@@ -282,6 +290,9 @@ cramino:
   container: "{{CONTAINER_DIR}}/hydragenetics__cramino_0.14.5.sif"
   extra: ""
 
+# auto | clairs_to | deepvariant | deepsomatic | mutect2 | both
+# auto: ClairS-TO for tumour (T) and cDNA, DeepVariant for normal (N).
+# both: ClairS-TO and Mutect2.
 small_variant_caller: "auto"
 
 clairs_to_call:
@@ -315,6 +326,20 @@ deepvariant:
   extra: ""
   output_gvcf: false
 
+# DeepSomatic, tumour-only. Runs only with small_variant_caller: deepsomatic;
+# "auto" never selects it. The image is not in the offline cache until it has
+# been built from containers/manifest.yaml.
+deepsomatic_t_only:
+  container: "{{DEEPSOMATIC_CONTAINER}}"
+  model: "ONT_TUMOR_ONLY"
+  # Panel-of-normals filtering. Leave `pon` out to get DeepSomatic's built-in
+  # PoN (dbSNP, gnomAD, 1000 Genomes; GRCh38) on hg38 and none on other builds.
+  # Set it to "" to turn the filtering off, or to another argument string.
+  threads: 8
+  extra: ""
+bcftools_norm_deepsomatic:
+  container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
+  extra: "--multiallelics -both --check-ref w"
 bcftools_norm_deepvariant:
   container: "{{CONTAINER_DIR}}/hydragenetics__common_3.1.1.sif"
   extra: "--multiallelics -both --check-ref w"

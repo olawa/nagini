@@ -145,7 +145,9 @@ Options:
 
   --bed-file PATH               Custom target region BED file (aliases: --bed, --design-bed).
                                 (If omitted, any single *.bed in inbox is auto-detected).
-  --small-variant-caller CALLER clairs_to, mutect2, or both (default: clairs_to).
+  --small-variant-caller CALLER auto, clairs_to, deepvariant, deepsomatic, mutect2, or both
+                                (default: auto = ClairS-TO for T, DeepVariant for N;
+                                both = ClairS-TO + Mutect2).
   --enable-all-callers          Enable all orthogonal callers (Branford, Rindels, bcftools) for BCR-ABL1.
   --enable-rindels              Enable Rindels caller for BCR-ABL1.
   --enable-bcftools-pileup      bcftools mpileup over the BCR-ABL1 target exons (on by default).

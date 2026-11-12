@@ -94,6 +94,22 @@ files:
     input: "reports/sv_summary/{sample}_{type}.json"
     output: "results/reports/sv_summary/{sample}_{type}.json"
     when: sniffles2_enabled
+  - name: Sniffles2 mosaic structural variant VCF
+    input: "cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz"
+    output: "results/cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz"
+    when: sniffles2_mosaic_enabled
+  - name: Sniffles2 mosaic structural variant index
+    input: "cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz.tbi"
+    output: "results/cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz.tbi"
+    when: sniffles2_mosaic_enabled
+  - name: Sniffles2 mosaic structural variant summary
+    input: "reports/sv_summary_sniffles2_mosaic/{sample}_{type}.tsv"
+    output: "results/reports/sv_summary_sniffles2_mosaic/{sample}_{type}.tsv"
+    when: sniffles2_mosaic_enabled
+  - name: Sniffles2 mosaic translocation summary
+    input: "reports/sv_summary_sniffles2_mosaic/{sample}_{type}.translocations.tsv"
+    output: "results/reports/sv_summary_sniffles2_mosaic/{sample}_{type}.translocations.tsv"
+    when: sniffles2_mosaic_enabled
   - name: SAVANA somatic structural variant VCF
     input: "cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz"
     output: "results/cnv_sv/savana_ont_to/{sample}_{type}/{sample}_{type}.classified.somatic.vcf.gz"
@@ -218,6 +234,30 @@ files:
     input: "snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     output: "results/snv_indels/deepvariant_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
     when: deepvariant_vep_enabled
+  - name: DeepSomatic VCF
+    input: "snv_indels/deepsomatic/{sample}_{type}.vcf.gz"
+    output: "results/snv_indels/deepsomatic/{sample}_{type}.vcf.gz"
+    when: deepsomatic_enabled
+  - name: DeepSomatic VCF index
+    input: "snv_indels/deepsomatic/{sample}_{type}.vcf.gz.tbi"
+    output: "results/snv_indels/deepsomatic/{sample}_{type}.vcf.gz.tbi"
+    when: deepsomatic_enabled
+  - name: DeepSomatic normalized VCF
+    input: "snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    output: "results/snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz"
+    when: deepsomatic_enabled
+  - name: DeepSomatic normalized VCF index
+    input: "snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    output: "results/snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vcf.gz.tbi"
+    when: deepsomatic_enabled
+  - name: DeepSomatic VEP annotation
+    input: "snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    output: "results/snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz"
+    when: deepsomatic_vep_enabled
+  - name: DeepSomatic VEP annotation index
+    input: "snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    output: "results/snv_indels/deepsomatic_postprocess/{sample}_{type}.filtered.norm.vep.vcf.gz.tbi"
+    when: deepsomatic_vep_enabled
   - name: Mutect2 merged unfiltered VCF
     input: "snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"
     output: "results/snv_indels/bcftools_concat/{sample}_{type}.unfiltered.vcf.gz"

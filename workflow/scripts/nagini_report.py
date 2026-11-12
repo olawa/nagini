@@ -199,6 +199,8 @@ def parse_small_variant_vcf(path, default_caller=""):
         detected_caller = "Rindels"
     elif "bcftools" in path_str:
         detected_caller = "bcftools"
+    elif "deepsomatic" in path_str:
+        detected_caller = "DeepSomatic"
     elif "deepvariant" in path_str:
         detected_caller = "DeepVariant"
     elif "clairs" in path_str:
@@ -228,8 +230,12 @@ def parse_small_variant_vcf(path, default_caller=""):
                     detected_caller = "Rindels"
                 elif "bcftools" in line_lower:
                     detected_caller = "bcftools"
+                elif "deepsomatic" in line_lower:
+                    detected_caller = "DeepSomatic"
                 elif "deepvariant" in line_lower:
-                    detected_caller = "DeepVariant"
+                    # DeepSomatic writes a DeepVariant version line too.
+                    if detected_caller != "DeepSomatic":
+                        detected_caller = "DeepVariant"
                 elif "clairs-to" in line_lower or "clairs_to" in line_lower or "source=clairs-to" in line_lower:
                     detected_caller = "ClairS-TO"
                 elif "gatkcommandline=mutect2" in line_lower or "mutect2" in line_lower:
@@ -1040,6 +1046,7 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
                     bcr_abl_exon_coverage="", bcr_abl_all_sites="", bcr_abl_plot_png="", cnv_tsv="",
                     rindels_sv_tsv="", rindels_translocations_tsv="",
                     savana_sv_tsv="", savana_translocations_tsv="",
+                    sniffles2_mosaic_sv_tsv="", sniffles2_mosaic_translocations_tsv="",
                     target_cramino="",
                     dna_number="",
                     cnv_ideogram="",
@@ -1107,13 +1114,25 @@ def generate_report(output, sample, sample_type, reference_build, annotation, sn
     savana_trans_columns, savana_translocations = annotate_sv_rows(
         savana_trans_columns, savana_translocations, cytobands
     )
+    # The mosaic-mode Sniffles2 run reports low-allele-fraction SVs only, so
+    # its rows add to the ordinary Sniffles2 rows rather than repeat them.
+    mosaic_sv_columns, mosaic_svs = parse_tsv(sniffles2_mosaic_sv_tsv)
+    mosaic_sv_columns, mosaic_svs = annotate_sv_rows(
+        mosaic_sv_columns, mosaic_svs, cytobands
+    )
+    mosaic_trans_columns, mosaic_translocations = parse_tsv(sniffles2_mosaic_translocations_tsv)
+    mosaic_trans_columns, mosaic_translocations = annotate_sv_rows(
+        mosaic_trans_columns, mosaic_translocations, cytobands
+    )
     sv_columns, svs = merge_caller_rows(
         (sv_columns, svs, "Sniffles2"),
+        (mosaic_sv_columns, mosaic_svs, "Sniffles2-mosaic"),
         (rindels_sv_columns, rindels_svs, "Rindels"),
         (savana_sv_columns, savana_svs, "SAVANA"),
     )
     translocation_columns, translocations = merge_caller_rows(
         (translocation_columns, translocations, "Sniffles2"),
+        (mosaic_trans_columns, mosaic_translocations, "Sniffles2-mosaic"),
         (rindels_trans_columns, rindels_translocations, "Rindels"),
         (savana_trans_columns, savana_translocations, "SAVANA"),
     )
@@ -1855,6 +1874,10 @@ def run_from_snakemake(snakemake):
         savana_translocations_tsv=_first_or_str(
             getattr(snakemake.input, "savana_translocations", "")
         ),
+        sniffles2_mosaic_sv_tsv=_first_or_str(getattr(snakemake.input, "sniffles2_mosaic_sv", "")),
+        sniffles2_mosaic_translocations_tsv=_first_or_str(
+            getattr(snakemake.input, "sniffles2_mosaic_translocations", "")
+        ),
         wgs_coverage=_first_or_str(getattr(snakemake.input, "wgs_coverage", "")),
         target_coverage=_first_or_str(getattr(snakemake.input, "target_coverage", "")),
         cramino=_first_or_str(getattr(snakemake.input, "cramino", "")),
@@ -1898,6 +1921,8 @@ def main():
     parser.add_argument("--rindels-translocations-tsv", default="")
     parser.add_argument("--savana-sv-tsv", default="")
     parser.add_argument("--savana-translocations-tsv", default="")
+    parser.add_argument("--sniffles2-mosaic-sv-tsv", default="")
+    parser.add_argument("--sniffles2-mosaic-translocations-tsv", default="")
     parser.add_argument("--wgs-coverage", default="")
     parser.add_argument("--target-coverage", default="")
     parser.add_argument("--cramino", required=True)
@@ -1943,6 +1968,8 @@ def main():
         rindels_translocations_tsv=args.rindels_translocations_tsv,
         savana_sv_tsv=args.savana_sv_tsv,
         savana_translocations_tsv=args.savana_translocations_tsv,
+        sniffles2_mosaic_sv_tsv=args.sniffles2_mosaic_sv_tsv,
+        sniffles2_mosaic_translocations_tsv=args.sniffles2_mosaic_translocations_tsv,
         bcr_abl_min_relative_depth=args.bcr_abl_min_relative_depth,
         bcr_abl_min_depth=args.bcr_abl_min_depth,
     )

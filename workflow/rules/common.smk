@@ -812,6 +812,22 @@ def sniffles2_enabled(sample):
     return config.get("sv_engine", "both") != "savana_only"
 
 
+def sniffles2_mosaic_enabled(sample):
+    """Whether the second, mosaic-mode Sniffles2 run is made for this sample.
+
+    On by default wherever Sniffles2 runs; sniffles2_mosaic: false turns it off.
+    """
+
+    return sniffles2_enabled(sample) and bool(config.get("sniffles2_mosaic", True))
+
+
+def get_sniffles2_tandem_repeats_arg():
+    """The same --tandem-repeats argument the ordinary Sniffles2 run gets."""
+
+    tr_bed = str(config.get("sniffles2_call", {}).get("tandem_repeats", "") or "")
+    return f"--tandem-repeats {tr_bed}" if tr_bed else ""
+
+
 def savana_enabled(sample):
     """Whether SAVANA SV calling runs for this sample.
 
@@ -1033,6 +1049,38 @@ def mutect2_enabled(sample=None, unit_type=None):
     return caller in ("mutect2", "both")
 
 
+def deepsomatic_enabled(sample=None, unit_type=None):
+    """DeepSomatic runs only when it is named: "auto" and "both" never pick it."""
+    return get_small_variant_caller(sample, unit_type) == "deepsomatic"
+
+
+def get_deepsomatic_regions_bed(wildcards):
+    """The regions DeepSomatic is confined to.
+
+    The Hydra rule always passes --regions, so a sample outside a design gets
+    the whole-genome contig BED instead of an empty argument.
+    """
+
+    if sample_calls_within_design(wildcards.sample):
+        return get_resolved_design_bed()
+    return "references/genome_contigs.bed"
+
+
+def get_deepsomatic_pon_arg():
+    """The panel-of-normals argument for tumour-only DeepSomatic.
+
+    DeepSomatic's built-in PoN is GRCh38, so it is switched on by default on
+    hg38 only. deepsomatic_t_only.pon overrides it on any build, including
+    with an empty string to turn the filtering off.
+    """
+
+    section = config.get("deepsomatic_t_only", {}) or {}
+    if "pon" in section:
+        return str(section.get("pon") or "")
+    build = str(config.get("reference", {}).get("build", config.get("reference_build", "hg38")))
+    return "--use_default_pon_filtering=true" if build == "hg38" else ""
+
+
 def get_clairs_to_bed(wildcards):
     """Return the design BED for target-restricted samples if configured, otherwise whole-genome contigs BED."""
     if sample_is_target_restricted(wildcards.sample):
@@ -1140,6 +1188,8 @@ def get_small_variant_report_vcf(wildcards):
     caller = get_small_variant_caller(wildcards.sample, wildcards.type)
     if caller == "deepvariant":
         caller_dir = "snv_indels/deepvariant_postprocess"
+    elif caller == "deepsomatic":
+        caller_dir = "snv_indels/deepsomatic_postprocess"
     elif caller == "mutect2":
         caller_dir = "snv_indels/mutect2_postprocess"
     else:
@@ -1210,6 +1260,20 @@ def get_report_rindels_translocations_tsv(wildcards):
     if sample_has_rindels_sv(wildcards.sample):
         return get_sample_type_path(
             wildcards, "reports/sv_summary_rindels", ".translocations.tsv"
+        )
+    return []
+
+
+def get_report_sniffles2_mosaic_sv_tsv(wildcards):
+    if sniffles2_mosaic_enabled(wildcards.sample):
+        return get_sample_type_path(wildcards, "reports/sv_summary_sniffles2_mosaic", ".tsv")
+    return []
+
+
+def get_report_sniffles2_mosaic_translocations_tsv(wildcards):
+    if sniffles2_mosaic_enabled(wildcards.sample):
+        return get_sample_type_path(
+            wildcards, "reports/sv_summary_sniffles2_mosaic", ".translocations.tsv"
         )
     return []
 
@@ -1415,8 +1479,8 @@ _PIPELINE_CONDITIONS = {
     "clairs_to_vep_enabled": lambda: clairs_to_enabled() and vep_enabled(),
     "deepvariant_enabled": lambda: deepvariant_enabled(),
     "deepvariant_vep_enabled": lambda: deepvariant_enabled() and vep_enabled(),
-    "deepsomatic_enabled": lambda: get_small_variant_caller() in ("deepsomatic", "both", "auto"),
-    "deepsomatic_vep_enabled": lambda: get_small_variant_caller() in ("deepsomatic", "both", "auto") and vep_enabled(),
+    "deepsomatic_enabled": lambda: deepsomatic_enabled(),
+    "deepsomatic_vep_enabled": lambda: deepsomatic_enabled() and vep_enabled(),
     "mutect2_enabled": lambda: mutect2_enabled(),
     "mutect2_vep_enabled": lambda: mutect2_enabled() and vep_enabled(),
     "annotate_small_variants": lambda: bool(config.get("annotate_small_variants", False)),
@@ -1438,6 +1502,7 @@ _PIPELINE_CONDITIONS = {
     "cnvkit_enabled": lambda: any(cnvkit_enabled(s) for s in get_samples(samples)),
     "sniffles2_enabled": lambda: any(sniffles2_enabled(s) for s in get_samples(samples)),
     "savana_enabled": lambda: any(savana_enabled(s) for s in get_samples(samples)),
+    "sniffles2_mosaic_enabled": lambda: any(sniffles2_mosaic_enabled(s) for s in get_samples(samples)),
     "enable_all_callers": lambda: all_callers_enabled(),
     "enable_bcftools_pileup": lambda: bcr_abl_bcftools_enabled(),
     "enable_rindels": lambda: bcr_abl_rindels_enabled(),
@@ -1449,8 +1514,8 @@ _SAMPLE_CONDITIONS = {
     "clairs_to_vep_enabled": lambda s: clairs_to_enabled(s) and sample_needs_dna_variant_calling(s),
     "deepvariant_enabled": lambda s: deepvariant_enabled(s) and sample_needs_dna_variant_calling(s),
     "deepvariant_vep_enabled": lambda s: deepvariant_enabled(s) and sample_needs_dna_variant_calling(s),
-    "deepsomatic_enabled": lambda s: sample_needs_dna_variant_calling(s),
-    "deepsomatic_vep_enabled": lambda s: sample_needs_dna_variant_calling(s),
+    "deepsomatic_enabled": lambda s: deepsomatic_enabled(s) and sample_needs_dna_variant_calling(s),
+    "deepsomatic_vep_enabled": lambda s: deepsomatic_enabled(s) and sample_needs_dna_variant_calling(s),
     "mutect2_enabled": lambda s: mutect2_enabled(s) and sample_needs_dna_variant_calling(s),
     "mutect2_vep_enabled": lambda s: mutect2_enabled(s) and sample_needs_dna_variant_calling(s),
     "annotate_small_variants": sample_needs_dna_variant_calling,
@@ -1461,6 +1526,7 @@ _SAMPLE_CONDITIONS = {
     "sample_needs_sv_calling": sample_needs_sv_calling,
     "sniffles2_enabled": sniffles2_enabled,
     "savana_enabled": savana_enabled,
+    "sniffles2_mosaic_enabled": sniffles2_mosaic_enabled,
     "cnv_calling": sample_needs_cnv_calling,
     "sample_needs_cnv_calling": sample_needs_cnv_calling,
     "cnvkit_enabled": cnvkit_enabled,
@@ -1959,6 +2025,8 @@ _SUMMARY_OPTIONAL_KEYS = (
     "rindels_translocation_tsvs",
     "savana_sv_tsvs",
     "savana_translocation_tsvs",
+    "sniffles2_mosaic_sv_tsvs",
+    "sniffles2_mosaic_translocation_tsvs",
     "cnv_tsvs",
     "snv_vcfs",
     "bcr_abl_fusions",
@@ -1993,6 +2061,8 @@ def summary_report_files():
                 caller = get_small_variant_caller(s, t)
                 if caller == "deepvariant":
                     caller_dir = "snv_indels/deepvariant_postprocess"
+                elif caller == "deepsomatic":
+                    caller_dir = "snv_indels/deepsomatic_postprocess"
                 elif caller == "mutect2":
                     caller_dir = "snv_indels/mutect2_postprocess"
                 else:
@@ -2044,6 +2114,16 @@ def summary_report_files():
                     "savana_translocation_tsvs": (
                         clean_report_path(f"reports/sv_summary_savana/{s}_{t}.translocations.tsv")
                         if savana_enabled(s)
+                        else ""
+                    ),
+                    "sniffles2_mosaic_sv_tsvs": (
+                        clean_report_path(f"reports/sv_summary_sniffles2_mosaic/{s}_{t}.tsv")
+                        if sniffles2_mosaic_enabled(s)
+                        else ""
+                    ),
+                    "sniffles2_mosaic_translocation_tsvs": (
+                        clean_report_path(f"reports/sv_summary_sniffles2_mosaic/{s}_{t}.translocations.tsv")
+                        if sniffles2_mosaic_enabled(s)
                         else ""
                     ),
                     "cnv_tsvs": (

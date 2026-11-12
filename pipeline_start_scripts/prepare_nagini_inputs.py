@@ -246,9 +246,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--small-variant-caller",
-        choices=("clairs_to", "mutect2", "both"),
+        choices=("auto", "clairs_to", "deepvariant", "deepsomatic", "mutect2", "both"),
         default="",
-        help="Somatic small-variant caller to execute and report (default: clairs_to from config).",
+        help="Small-variant caller to execute and report (default: auto from config).",
     )
     parser.add_argument(
         "--clairs-to-platform",

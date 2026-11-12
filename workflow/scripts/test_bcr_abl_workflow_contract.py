@@ -48,7 +48,7 @@ class WorkflowContractTest(unittest.TestCase):
             "sample_has_assay_module": lambda sample, module: sample == "bcr_sample" and module == "bcr_abl",
         }
         for name in ("sample_has_target_metrics", "sniffles2_enabled", "sample_has_rindels_sv",
-                     "savana_enabled", "sample_needs_cnv_calling",
+                     "savana_enabled", "sniffles2_mosaic_enabled", "sample_needs_cnv_calling",
                      "bcr_abl_vardictrust_enabled", "bcr_abl_rindels_enabled", "bcr_abl_bcftools_enabled"):
             scope[name] = lambda sample: False
         exec(compile(source, "common.smk", "exec"), scope)

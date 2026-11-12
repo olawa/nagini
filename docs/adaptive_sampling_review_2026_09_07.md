@@ -7,6 +7,15 @@
 **Scope:** Adaptive sampling pipeline evaluation, BED file routing verification, whole-genome read-count CNV strategy (Rindels vs Hydra modules), and Excel report restructuring (SNPs, CNVs, SVs, Translocations).  
 **Validation:** Unit test suites (94 tests in `workflow/scripts` + 44 tests in `pipeline_start_scripts` passing).
 
+> **Rättelser 2026-11-12.** Granskningen beskriver läget 2026-09-07 och är inte uppdaterad i övrigt.
+> - Design-BED:en `dic_9_20_iamp21` innehåller fyra block (chr9 från 37,98 Mb, chr20, chr21, chr22).
+>   *PAX5* och *CDKN2A* ligger **utanför** den, tvärtemot avsnitt 2.
+> - Helgenoms-CNV (avsnitt 4) finns nu: Rindels och CNVkit, båda på läsantal per bin. Eftersom
+>   adaptive sampling anrikar i baser och inte i antal läsningar behövs ingen maskning av målregionerna
+>   (avsnitt 4.1 antog bastäckning).
+> - SV kallas av Sniffles2 (vanlig och mosaic), SAVANA och Rindels; småvarianter av ClairS-TO,
+>   DeepVariant, DeepSomatic eller Mutect2. Aktuell beskrivning finns i `README.md`.
+
 ---
 
 ## 1. Executive Summary

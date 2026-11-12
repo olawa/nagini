@@ -16,6 +16,8 @@ rule nagini_excel_report:
         rindels_translocations=get_report_rindels_translocations_tsv,
         savana_sv=get_report_savana_sv_tsv,
         savana_translocations=get_report_savana_translocations_tsv,
+        sniffles2_mosaic_sv=get_report_sniffles2_mosaic_sv_tsv,
+        sniffles2_mosaic_translocations=get_report_sniffles2_mosaic_translocations_tsv,
         cnv=get_report_cnv_tsv,
         wgs_coverage="qc/mosdepth/{sample}_{type}.mosdepth.summary.txt",
         target_coverage=get_report_target_coverage,
@@ -115,6 +117,12 @@ rule nagini_summary_excel_report:
         savana_sv_tsv_paths=lambda wildcards: get_summary_report_paths("savana_sv_tsvs"),
         savana_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
             "savana_translocation_tsvs"
+        ),
+        sniffles2_mosaic_sv_tsv_paths=lambda wildcards: get_summary_report_paths(
+            "sniffles2_mosaic_sv_tsvs"
+        ),
+        sniffles2_mosaic_translocation_tsv_paths=lambda wildcards: get_summary_report_paths(
+            "sniffles2_mosaic_translocation_tsvs"
         ),
         cnv_tsv_paths=lambda wildcards: get_summary_report_paths("cnv_tsvs"),
         design_bed=lambda wildcards: get_resolved_design_bed(),

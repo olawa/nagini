@@ -81,22 +81,49 @@ For each sample, Nagini performs:
 - **Alignment & BAM staging:** Minimap2 alignment with `@RG` sample tags and samtools sorting/indexing.
 - **Coverage QC:** Mosdepth whole-genome and target-region (BED) coverage analysis.
 - **Read & Yield QC:** Cramino read-length, N50, and Q-score statistics.
-- **Somatic Small Variant Calling:**
-  - **ClairS-TO** (default): Deep-learning somatic SNV and small-indel caller optimized for ONT R10.4.1 data with automatic platform model selection (e.g. `ont_r10_dorado_hac_4khz`, `ont_r10_dorado_sup_5khz_ssrs`) and target BED restriction.
-  - **GATK Mutect2**: Somatic small-variant calling with merged statistics, filtering, and left-normalization.
-  - Caller selection is configurable via `--small-variant-caller clairs_to|mutect2|both`.
-- **Structural Variant Calling:** Sniffles2 SV calling with tandem-repeat annotations, translocation/BND extraction, cytogenetic band notation (ISCN-style), and target BED overlap.
+- **Small Variant Calling:** chosen with `--small-variant-caller auto|clairs_to|deepvariant|deepsomatic|mutect2|both`.
+  - **auto** (default): ClairS-TO for tumour (`T`) and cDNA samples, DeepVariant for normal (`N`) samples.
+  - **ClairS-TO**: Tumour-only somatic SNV and small-indel caller for ONT R10.4.1, with the platform model derived from the basecalling model. Tags non-somatic variants against its built-in panels of normals (gnomAD, dbSNP, 1000 Genomes, CoLoRSdb).
+  - **DeepVariant**: Germline calling with the `ONT_R104` model.
+  - **DeepSomatic**: Tumour-only calling with the `ONT_TUMOR_ONLY` model; its built-in panel of normals is applied on hg38. Only runs when selected by name.
+  - **GATK Mutect2**: Retained on request; experimental for ONT. `both` runs ClairS-TO and Mutect2.
+- **Structural Variant Calling**, genome-wide, with one row per caller in the report:
+  - **Sniffles2**, plus a second run in `--mosaic` mode for low-allele-fraction (subclonal) SVs, reported as `Sniffles2-mosaic`.
+  - **SAVANA** in tumour-only mode.
+  - **Rindels** `--sv-lite` (DEL/DUP/INV/TRA from pair and clip evidence).
+  - Translocation/BND extraction, cytogenetic band notation (ISCN-style) and target BED overlap for each. `sv_engine` restricts the set.
+- **Copy Number Calling**, genome-wide from binned read counts (50 kb): **Rindels** (ASCAT-style segmentation with BAF, purity and ploidy) and **CNVkit** (`wgs`, read counts, flat reference), with an ideogram and an interactive HTML report.
 - **Annotation:** Optional VEP annotation with ClinVar pathogenicity fields and SnpEff.
 - **Reporting & Aggregation:** Fluffy-style consolidated multi-tab Excel reports and MultiQC HTML dashboard.
+
+## Assays
+
+What runs for a sample is set by its `assay` (`--assay`, or the `assay` column of the barcode map):
+
+| assay | small variants | SV | CNV | confined to the design BED |
+|---|---|---|---|---|
+| `wgs` | yes | yes | yes | no |
+| `adaptive` | yes | yes | yes | small variants and target QC |
+| `adaptive_cnv_sv` | no | yes | yes | target QC |
+| `cdna` | no | no | no | – |
+| `bcr_abl` | BCR-ABL1 module | no | no | yes |
+
+New assays are declared under `assays:` in the config; see `DEVELOPMENT.md`.
 
 ## Target Region & Adaptive Sampling Support
 
 Target BED files (e.g. for ReadUntil or targeted panels) can be provided with `--bed-file /path/to/panel.bed` or placed directly in the input directory where they are automatically discovered.
 
-When a target BED is configured:
-- **ClairS-TO** and **Mutect2** restrict variant calling strictly to the target regions (`--bed_fn` / `-L`).
-- **Mosdepth** computes on-target coverage distributions and threshold fractions (10x, 20x, 30x, 50x, 100x).
-- **SV Summaries & Excel Reports** annotate and highlight structural variants and translocations overlapping the target genes/regions.
+The default design is `dic_9_20_iamp21` (hg38 and T2T): four blocks on chr9, chr20, chr21 and chr22, about 110 Mb.
+
+For a target-restricted assay with a design BED:
+- **Small-variant callers** are confined to the design, and only the chromosomes it touches are run.
+- **Mosdepth** computes on-target coverage distributions and threshold fractions (10x, 20x, 30x, 50x, 100x), and the report gives fold enrichment over the genome.
+- **Cramino** is also run on the target BAM, since genome-wide read statistics on an adaptive run mostly describe rejected reads.
+- A **target BAM** (design ±25 kb) is written for IGV.
+- **SV and CNV calling stay genome-wide**, so a partner breakpoint outside the design is not lost. CNV is called from read counts per bin, not from base coverage. Segments and SVs are annotated with the design regions they overlap.
+
+Modified-base tags (`MM`/`ML`) are carried through alignment into the BAM for viewing in IGV; no methylation calling is done.
 
 ## Resource Scaling
 
@@ -109,12 +136,14 @@ The workflow produces:
 - **Alignments:** Sorted, indexed BAM files under `alignment/merged/`;
 - **Quality Control:** Cramino read metrics, Mosdepth WGS/target coverage under `qc/`, and an aggregated `qc/multiqc/multiqc_nanopore.html` dashboard;
 - **Small Variants:** Filtered, normalized VCFs under `snv_indels/`;
-- **Structural Variants:** Sniffles2 VCFs, SV summaries, and translocation tables under `cnv_sv/` and `reports/sv_summary/`;
+- **Structural Variants:** Sniffles2 (ordinary and mosaic), SAVANA and Rindels VCFs under `cnv_sv/` and `cnv/rindels/`, with SV summaries and translocation tables under `reports/sv_summary*/`;
+- **Copy Number:** Rindels segments and PDF under `cnv/rindels/`, CNVkit `.cnr`/`.cns` under `cnv/cnvkit/`, and the summary, ideogram and HTML report under `reports/`;
 - **Excel Report:** One consolidated Excel workbook per sample under `reports/{sample}_{type}.nagini_report.xlsx` containing:
   - **Overview:** Sample metadata, caller provenance, sequencing QC KPIs, and variant summary;
   - **SNVs and indels:** Annotated small variants with VAF, depth, Gene, Consequence, and ClinVar significance;
-  - **SVs:** Structural variants with cytogenetic band notation and target gene overlaps;
-  - **Translocations:** Breakends and translocations with cytoband ISCN notation;
+  - **CNVs** and **Ideogram:** Copy-number segments with cytobands and design overlap, and the whole-genome picture;
+  - **SVs:** Structural variants from every caller, with cytogenetic band notation and target overlaps;
+  - **Translocations:** Breakends and translocations from every caller, with cytoband ISCN notation;
   - **WGS coverage & Target coverage:** Mosdepth coverage tables;
   - **Cramino QC:** Detailed read yield and quality metrics.
 

@@ -18,6 +18,9 @@ containers:
   cramino:
     source: docker://hydragenetics/cramino:0.14.5
     sif: hydragenetics__cramino_0.14.5.sif
+  deepsomatic:
+    source: docker://google/deepsomatic:1.10.0
+    sif: google__deepsomatic_1.10.0.sif
   deepvariant:
     source: docker://google/deepvariant:1.6.0
     sif: google__deepvariant_1.6.0.sif

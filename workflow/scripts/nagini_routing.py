@@ -445,6 +445,7 @@ PIPELINE_CONDITION_NAMES = {
     "cnvkit_enabled",
     "sniffles2_enabled",
     "savana_enabled",
+    "sniffles2_mosaic_enabled",
     "rindels_sv",
     "dorado_demux",
     "dorado_demux_bam",
@@ -475,6 +476,7 @@ SAMPLE_CONDITION_NAMES = {
     "cnvkit_enabled",
     "sniffles2_enabled",
     "savana_enabled",
+    "sniffles2_mosaic_enabled",
     "rindels_sv",
 }
 

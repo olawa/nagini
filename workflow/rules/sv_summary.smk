@@ -137,3 +137,43 @@ rule sv_summary_savana:
     script:
         "../scripts/sv_summary.py"
 
+
+rule sv_summary_sniffles2_mosaic:
+    """Summarise the mosaic-mode Sniffles2 run: low-allele-fraction SVs only."""
+    input:
+        vcf="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz",
+        tbi="cnv_sv/sniffles2_mosaic/{sample}_{type}.vcf.gz.tbi",
+        annotation_bed=lambda wildcards: (
+            config.get("reference", {}).get("sv_annotation_bed", "")
+            or get_sample_design_bed(wildcards.sample)
+            or []
+        ),
+        cytoband=lambda wildcards: get_cytoband_file(wildcards) or [],
+    output:
+        tsv="reports/sv_summary_sniffles2_mosaic/{sample}_{type}.tsv",
+        translocations="reports/sv_summary_sniffles2_mosaic/{sample}_{type}.translocations.tsv",
+        json="reports/sv_summary_sniffles2_mosaic/{sample}_{type}.json",
+    params:
+        extra=config.get("sv_summary", {}).get("extra", ""),
+        caller="Sniffles2-mosaic",
+    log:
+        "logs/sv_summary_sniffles2_mosaic/{sample}_{type}.log",
+    benchmark:
+        repeat(
+            "benchmarks/sv_summary_sniffles2_mosaic/{sample}_{type}.tsv",
+            config.get("sv_summary", {}).get("benchmark_repeats", 1),
+        )
+    threads: config.get("sv_summary", {}).get("threads", 1)
+    resources:
+        mem_mb=config.get("sv_summary", {}).get("mem_mb", config["default_resources"]["mem_mb"]),
+        mem_per_cpu=config.get("sv_summary", {}).get("mem_per_cpu", config["default_resources"]["mem_per_cpu"]),
+        partition=config.get("sv_summary", {}).get("partition", config["default_resources"]["partition"]),
+        threads=config.get("sv_summary", {}).get("threads", 1),
+        time=config.get("sv_summary", {}).get("time", config["default_resources"]["time"]),
+    container:
+        config.get("sv_summary", {}).get("container", config["default_container"])
+    message:
+        "{rule}: summarise mosaic Sniffles2 structural variants for {wildcards.sample}_{wildcards.type}"
+    script:
+        "../scripts/sv_summary.py"
+
