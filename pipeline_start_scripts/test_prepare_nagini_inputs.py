@@ -962,6 +962,39 @@ class PrepareNaginiInputsTest(unittest.TestCase):
             config = yaml.safe_load(runtime.read_text())
             self.assertEqual(config["cores"], 96)
 
+    def test_the_run_is_named_after_its_inbox(self):
+        """The summary was nagini_summary_report.xlsx for every run (D26)."""
+
+        inbox = Path("/inbox/20261105_1307_P2S_PBE84335_b84b698e")
+        # start_nagini.sh passes the inbox name as the default sequence id.
+        self.assertEqual(PREPARE.run_name(inbox.name, inbox), inbox.name)
+        self.assertEqual(PREPARE.run_name("", inbox), inbox.name)
+        self.assertEqual(PREPARE.run_name("BCR-2026-11", inbox), "BCR-2026-11")
+        self.assertEqual(PREPARE.run_name("run-1", None), "run-1")
+
+    def test_minknow_subfolders_do_not_name_the_run(self):
+        inbox = Path("/inbox/20261105_1307_P2S_PBE84335_b84b698e")
+        for leaf in ("bam_pass", "fastq_pass", "fastq_fail", "pod5", "pod5_skip", "bam_pass/barcode05"):
+            with self.subTest(leaf=leaf):
+                path = inbox / leaf
+                self.assertEqual(PREPARE.run_name(path.name, path), inbox.name)
+
+    def test_runtime_config_records_the_run_name(self):
+        pipeline_root = Path(__file__).parents[1]
+        args = type("Args", (), {})()
+        args.base_config = pipeline_root / "config/config.yaml"
+        args.site_config = pipeline_root / "config/site_configs/site_config_local.yaml"
+        args.reference_files = pipeline_root / "config/reference_files/reference_files_local.yaml"
+        args.library_root = None
+        args.pipeline_root = pipeline_root
+        args.input_dir = Path("/inbox/20261105_1307_P2S_PBE84335_b84b698e/bam_pass")
+        args.sequence_id = "bam_pass"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = PREPARE.make_runtime_config(args, Path(tmpdir))
+            config = yaml.safe_load(runtime.read_text())
+        self.assertEqual(config["run_name"], "20261105_1307_P2S_PBE84335_b84b698e")
+
     def test_runtime_config_auto_enables_read_filter(self):
         pipeline_root = Path(__file__).parents[1]
         args = type("Args", (), {})()

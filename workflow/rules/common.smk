@@ -1547,6 +1547,18 @@ if _unknown_conditions:
     )
 
 
+def get_run_name():
+    """Name of the run's own deliverables, such as the summary workbook (D26).
+
+    The launcher sets config["run_name"] from the inbox directory. Without it,
+    for instance in a run started by hand, the analysis directory names the
+    run, as it already names the analysis.
+    """
+
+    name = str(config.get("run_name") or "").strip() or os.path.basename(os.getcwd())
+    return re.sub(r"[^\w.-]", "_", name) or "nagini"
+
+
 def compile_output_file_list(wildcards):
     outdir = pathlib.Path(output_spec.get("directory", "./"))
     output_files = []
@@ -1557,7 +1569,7 @@ def compile_output_file_list(wildcards):
         if not _pipeline_condition_met(condition):
             continue
 
-        template = str(file_definition["output"]).strip()
+        template = str(file_definition["output"]).strip().replace("{run}", get_run_name())
         if "{sample}" in template:
             for sample in get_samples(samples):
                 clean_sample = clean_report_path(sample)
@@ -1875,6 +1887,13 @@ def get_vep_custom_annotations(wildcards):
 
 
 # --- summary Excel report (excel_report.smk) ---
+
+
+def get_summary_report_path():
+    """One file per run, named after it, so that two runs' summaries can be
+    told apart and opened side by side."""
+
+    return f"reports/{get_run_name()}_summary.xlsx"
 
 
 # Keys whose file exists only for some assays. Everything that reads them has

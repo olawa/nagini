@@ -1,10 +1,13 @@
 """Exercise resource selection and report dependencies from the actual rules."""
 
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -154,6 +157,52 @@ class ReadFilterContractTest(unittest.TestCase):
         bam_rule = rules[rules.index("rule read_filter_unmapped_bam:"):]
         self.assertIn("--unaligned", bam_rule)
         self.assertIn("{params.selection}", bam_rule)
+
+
+def common_function(name):
+    """One top-level function of common.smk, as source text."""
+
+    source = (ROOT / "workflow/rules/common.smk").read_text()
+    start = source.index(f"\ndef {name}(")
+    return source[start:source.index("\n\n\n", start + 1)]
+
+
+class SummaryNameTest(unittest.TestCase):
+    """The summary is named after the run, not nagini_summary_report.xlsx (D26)."""
+
+    def summary_path(self, config, cwd="/analyses/run_dir"):
+        scope = {
+            "config": config,
+            "re": re,
+            "os": SimpleNamespace(path=os.path, getcwd=lambda: cwd),
+        }
+        exec(compile(common_function("get_run_name"), "common.smk", "exec"), scope)
+        exec(compile(common_function("get_summary_report_path"), "common.smk", "exec"), scope)
+        return scope["get_summary_report_path"]()
+
+    def test_the_run_name_names_the_summary(self):
+        self.assertEqual(
+            self.summary_path({"run_name": "20261105_1307_P2S_PBE84335_b84b698e"}),
+            "reports/20261105_1307_P2S_PBE84335_b84b698e_summary.xlsx",
+        )
+
+    def test_without_a_run_name_the_analysis_directory_names_it(self):
+        self.assertEqual(self.summary_path({}), "reports/run_dir_summary.xlsx")
+        self.assertEqual(self.summary_path({"run_name": "  "}), "reports/run_dir_summary.xlsx")
+
+    def test_the_name_is_safe_as_a_file_name(self):
+        self.assertEqual(self.summary_path({"run_name": "run 1/a{b}"}), "reports/run_1_a_b__summary.xlsx")
+
+    def test_the_rule_and_the_delivery_agree(self):
+        rule = (ROOT / "workflow/rules/excel_report.smk").read_text()
+        rule = rule[rule.index("rule nagini_summary_excel_report:"):]
+        self.assertIn("xlsx=get_summary_report_path(),", rule)
+
+        spec = yaml.safe_load((ROOT / "config/output_files.yaml").read_text())
+        entry = next(e for e in spec["files"] if e["name"] == "Nagini multi-sample summary Excel report")
+        self.assertEqual(entry["input"], "reports/{run}_summary.xlsx")
+        self.assertEqual(entry["output"], "results/" + entry["input"])
+        self.assertNotIn("nagini_summary_report.xlsx", (ROOT / "config/output_files.yaml").read_text())
 
 
 if __name__ == "__main__":

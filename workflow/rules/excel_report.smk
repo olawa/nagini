@@ -76,7 +76,7 @@ rule nagini_summary_excel_report:
     input:
         unpack(get_summary_report_inputs),
     output:
-        xlsx="reports/nagini_summary_report.xlsx",
+        xlsx=get_summary_report_path(),
     params:
         sample_names=lambda wildcards: [
             clean_report_path(s)

@@ -115,6 +115,7 @@ Options:
                                 for --assay bcr_abl (default: whatever config.yaml says,
                                 normally hg38). One run uses one build for every sample.
   --sequenceid ID               Run identifier; defaults to inbox directory name.
+                                Also names the summary, <ID>_summary.xlsx.
   --sample-regex REGEX          Regex for FASTQ sample extraction (named group: sample).
   --barcode-map PATH            CSV/TSV barcode-to-sample map for barcode-demultiplexed FASTQ/BAM.
                                 sample_sheet*.csv/tsv is auto-detected for existing FASTQ when omitted.
@@ -822,13 +823,14 @@ fi
 cd "$analysis_dir"
 "${snakemake_cmd[@]}"
 
-analysis_name="$(basename "$analysis_dir")"
+# Named after the run (D26). Should the directory hold more than one, after a
+# re-run under another name, the newest is this run's.
 summary_file=""
-if [[ -f "$analysis_dir/reports/${analysis_name}_summary_report.xlsx" ]]; then
-    summary_file="$analysis_dir/reports/${analysis_name}_summary_report.xlsx"
-elif [[ -f "$analysis_dir/reports/nagini_summary_report.xlsx" ]]; then
-    summary_file="$analysis_dir/reports/nagini_summary_report.xlsx"
-fi
+for candidate in "$analysis_dir"/reports/*_summary.xlsx; do
+    if [[ -f "$candidate" && ( -z "$summary_file" || "$candidate" -nt "$summary_file" ) ]]; then
+        summary_file="$candidate"
+    fi
+done
 
 if [[ -n "$summary_file" ]]; then
     echo ""

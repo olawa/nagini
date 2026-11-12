@@ -802,7 +802,7 @@ properties:
         properties:
           xlsx:
             type: string
-            description: reports/nagini_summary_report.xlsx
+            description: reports/<run_name>_summary.xlsx
   pad_target_bed:
     type: object
     description: input and output parameters for pad_target_bed

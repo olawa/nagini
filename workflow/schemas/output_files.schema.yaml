@@ -19,7 +19,8 @@ properties:
           type: string
           description: >-
             Path of the deliverable. {sample} and {type} expand per sample and
-            unit type, {barcode} per Dorado barcode.
+            unit type, {barcode} per Dorado barcode, {run} to the run name
+            (config run_name, else the analysis directory).
         types:
           type: array
           items:

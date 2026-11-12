@@ -710,6 +710,12 @@ properties:
   output_directory:
     type: string
     description: directory the run writes into
+  run_name:
+    type: string
+    description: >-
+      Names the run's own deliverables, such as reports/<run_name>_summary.xlsx.
+      Set by the launcher from --sequence-id, else the inbox directory. Without
+      it the analysis directory's name is used.
   pad_target_bed:
     type: object
     description: settings for pad_target_bed

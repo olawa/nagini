@@ -330,7 +330,7 @@ files:
     input: "reports/{sample}_{type}.nagini_report.xlsx"
     output: "results/reports/{sample}_{type}.nagini_report.xlsx"
   - name: Nagini multi-sample summary Excel report
-    input: "reports/nagini_summary_report.xlsx"
-    output: "results/reports/nagini_summary_report.xlsx"
+    input: "reports/{run}_summary.xlsx"
+    output: "results/reports/{run}_summary.xlsx"
 
 

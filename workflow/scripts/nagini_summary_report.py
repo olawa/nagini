@@ -3,7 +3,6 @@
 import argparse
 import os
 import re
-import shutil
 import sys
 
 try:
@@ -804,19 +803,9 @@ def build_summary_report(
             )
             sheets.append((sheet_title, sample_bcr_rows, LAYOUT))
 
+    # The output itself is named after the run (D26), so no copy is needed
+    # to open two runs' summaries side by side.
     write_xlsx(output_path, sheets)
-
-
-    # Also create unique, analysis-folder named copy so multiple summaries can be opened in Excel simultaneously
-    clean_id = clean_analysis_name if (clean_analysis_name and clean_analysis_name.lower() not in {"run", "default", "reports"}) else re.sub(r"[^\w\.-]", "_", display_id)
-
-    try:
-        named_file = os.path.join(out_dir, f"{clean_id}_summary_report.xlsx")
-        if os.path.abspath(named_file) != os.path.abspath(output_path):
-            shutil.copyfile(output_path, named_file)
-            sys.stderr.write(f"[Nagini] Created analysis-named summary workbook: {named_file}\n")
-    except Exception as exc:
-        sys.stderr.write(f"Warning: could not create analysis-named summary copy in {out_dir}: {exc}\n")
 
 
 

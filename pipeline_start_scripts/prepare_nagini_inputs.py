@@ -1886,6 +1886,30 @@ def missing_containers(config: Any) -> list[str]:
     return sorted(found)
 
 
+# MinKNOW's own subfolders. An inbox given as one of them names nothing: every
+# run pointed at .../bam_pass would get a summary called bam_pass.
+MINKNOW_SUBFOLDER = re.compile(r"(?:bam|fastq|pod5)(?:_(?:pass|fail|skip))?|barcode\d+|unclassified", re.IGNORECASE)
+
+
+def run_name(sequence_id: str, input_dir: Path | None) -> str:
+    """Name of the run's own deliverables, such as the summary workbook (D26).
+
+    An explicit --sequence-id wins. Otherwise it is the inbox directory's name,
+    stepping up past MinKNOW's subfolders.
+    """
+
+    sequence_id = str(sequence_id or "").strip()
+    if input_dir is None:
+        return sequence_id
+    input_dir = Path(input_dir)
+    if sequence_id and sequence_id != input_dir.name:
+        return sequence_id
+    for folder in (input_dir, *input_dir.parents):
+        if folder.name and not MINKNOW_SUBFOLDER.fullmatch(folder.name):
+            return folder.name
+    return sequence_id
+
+
 def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
     base_config = args.base_config.resolve()
     config = read_yaml(base_config)
@@ -2162,6 +2186,10 @@ def make_runtime_config(args: argparse.Namespace, analysis_dir: Path) -> Path:
 
     if getattr(args, "cores", None):
         config["cores"] = int(args.cores)
+
+    name = run_name(getattr(args, "sequence_id", ""), getattr(args, "input_dir", None))
+    if name:
+        config["run_name"] = name
 
     if getattr(args, "merged_fastq", None) is not None:
         config["merged_fastq"] = bool(args.merged_fastq)
